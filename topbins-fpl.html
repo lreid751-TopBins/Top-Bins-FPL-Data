@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Top Bins — FPL Data Room</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --pitch:#08170E; --panel:#0C2013; --panel-2:#0F2A19; --raise:#123521;
+  --line:#1C4230; --line-soft:#14301E;
+  --chalk:#EAF3EC; --muted:#7E9F8B; --muted-2:#5C7A67;
+  --gold:#E7C15E; --gold-2:#F3D888; --gold-deep:#B58F35;
+  --pos:#5FD3A2; --neg:#EA8A6A; --cool:#74B8C9;
+  --shadow:0 18px 40px -20px rgba(0,0,0,.7);
+  --r:14px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--pitch);color:var(--chalk);
+  font-family:"Archivo",system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+body{
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(231,193,94,.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(95,211,162,.05), transparent 55%),
+    var(--pitch);
+  min-height:100vh;
+}
+.mono{font-family:"JetBrains Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums;}
+.anton{font-family:"Anton",sans-serif;font-weight:400;letter-spacing:.02em;}
+h1,h2,h3{margin:0}
+button{font-family:inherit;cursor:pointer}
+a{color:var(--gold)}
+
+/* ---------- Masthead ---------- */
+.mast{position:sticky;top:0;z-index:40;
+  background:linear-gradient(180deg, rgba(9,25,15,.96), rgba(9,25,15,.82));
+  backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);}
+.mast-inner{max-width:1160px;margin:0 auto;padding:12px 16px;
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.crest{width:40px;height:40px;flex:0 0 auto}
+.brand{display:flex;flex-direction:column;line-height:1;gap:3px}
+.brand .wm{font-family:"Anton";font-size:22px;letter-spacing:.04em;color:var(--chalk);text-transform:uppercase}
+.brand .wm b{color:var(--gold)}
+.brand .sub{font-size:9.5px;letter-spacing:.34em;color:var(--muted);text-transform:uppercase}
+.mast-spacer{flex:1 1 auto}
+.season-pick{display:flex;align-items:center;gap:8px}
+.season-pick label{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
+select,input,.btn{color:var(--chalk);background:var(--panel-2);border:1px solid var(--line);
+  border-radius:9px;padding:8px 11px;font-size:13px;font-family:inherit}
+select{appearance:none;-webkit-appearance:none;padding-right:28px;
+  background-image:linear-gradient(45deg,transparent 50%,var(--gold) 50%),linear-gradient(135deg,var(--gold) 50%,transparent 50%);
+  background-position:calc(100% - 15px) 55%,calc(100% - 10px) 55%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;}
+input:focus,select:focus,.btn:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.status{font-size:10.5px;letter-spacing:.12em;color:var(--muted);text-transform:uppercase;
+  display:flex;align-items:center;gap:7px;width:100%;margin-top:2px}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--muted-2)}
+.dot.live{background:var(--pos);box-shadow:0 0 0 3px rgba(95,211,162,.15)}
+
+/* ---------- Tabs ---------- */
+.tabs{max-width:1160px;margin:0 auto;padding:14px 16px 0;display:flex;gap:6px}
+.tab{background:transparent;border:1px solid transparent;border-bottom:none;color:var(--muted);
+  padding:11px 16px;border-radius:11px 11px 0 0;font-size:13px;font-weight:600;letter-spacing:.02em;
+  display:flex;align-items:center;gap:8px}
+.tab .k{font-family:"Anton";font-size:12px;color:var(--muted-2)}
+.tab[aria-selected="true"]{color:var(--chalk);background:var(--panel);border-color:var(--line);
+  box-shadow:inset 0 2px 0 var(--gold)}
+.tab[aria-selected="true"] .k{color:var(--gold)}
+
+/* ---------- Shell ---------- */
+.wrap{max-width:1160px;margin:0 auto;padding:0 16px 80px}
+.board{background:var(--panel);border:1px solid var(--line);border-top:none;
+  border-radius:0 0 var(--r) var(--r);padding:18px;box-shadow:var(--shadow)}
+.eyebrow{font-family:"Anton";text-transform:uppercase;letter-spacing:.16em;font-size:12px;color:var(--gold);
+  display:flex;align-items:center;gap:10px}
+.eyebrow::before{content:"";width:22px;height:2px;background:var(--gold);display:inline-block}
+.section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.section-head h2{font-family:"Anton";font-size:26px;letter-spacing:.01em;text-transform:uppercase;margin-top:6px}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:3px}
+.seg button{background:transparent;border:none;color:var(--muted);padding:7px 12px;border-radius:7px;font-size:12px;font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--raise);color:var(--gold)}
+.hint{font-size:11px;color:var(--muted)}
+
+/* ---------- Leader cards ---------- */
+.leaders{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:16px}
+.lead{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);
+  border-radius:12px;padding:12px 13px;position:relative;overflow:hidden}
+.lead::after{content:"";position:absolute;right:-14px;top:-14px;width:52px;height:52px;
+  border:2px solid var(--line);border-left-color:var(--gold);border-top-color:var(--gold);border-radius:4px;transform:rotate(0);opacity:.4}
+.lead .lab{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.lead .who{font-weight:700;font-size:15px;margin:6px 0 2px}
+.lead .val{font-family:"Anton";font-size:26px;color:var(--gold);line-height:1}
+.lead .val small{font-size:11px;color:var(--muted);font-family:"JetBrains Mono";margin-left:4px}
+
+/* ---------- Tables ---------- */
+.twrap{overflow:auto;border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:13px}
+thead th{position:sticky;top:0;background:var(--panel-2);color:var(--muted);text-align:right;
+  font-weight:600;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;
+  padding:11px 10px;border-bottom:1px solid var(--line);white-space:nowrap;cursor:pointer;user-select:none}
+thead th:first-child,tbody td:first-child{text-align:left;position:sticky;left:0;z-index:1;background:var(--panel-2)}
+tbody td:first-child{background:var(--panel)}
+thead th.up::after{content:" ▲";color:var(--gold)}
+thead th.down::after{content:" ▼";color:var(--gold)}
+tbody td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line-soft);
+  font-family:"JetBrains Mono";font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover td{background:var(--panel-2)}
+tbody tr:hover td:first-child{background:var(--raise)}
+.name{font-family:"Archivo";font-weight:600;font-size:13.5px}
+.sub-t{color:var(--muted);font-size:11px;font-family:"Archivo"}
+.pos-chip{display:inline-block;font-family:"JetBrains Mono";font-size:9.5px;padding:1px 5px;border-radius:4px;margin-left:6px;border:1px solid var(--line)}
+.pos-GK{color:#e7c15e} .pos-DEF{color:#74b8c9} .pos-MID{color:#5fd3a2} .pos-FWD{color:#ea8a6a}
+.pos-cell{color:var(--muted)}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.pill{display:inline-block;padding:1px 7px;border-radius:20px;font-size:11px;border:1px solid var(--line);background:var(--panel-2)}
+.bar{height:5px;border-radius:3px;background:var(--line);position:relative;min-width:44px;display:inline-block;vertical-align:middle;width:56px}
+.bar>i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:linear-gradient(90deg,var(--gold-deep),var(--gold))}
+
+/* ---------- Filters ---------- */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.filters input[type=search]{min-width:180px}
+.range{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+input[type=range]{accent-color:var(--gold)}
+
+/* ---------- Decision Log ---------- */
+.pnl{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:18px}
+.pnl .card{background:linear-gradient(180deg,var(--panel-2),var(--panel));border:1px solid var(--line);border-radius:12px;padding:14px 15px}
+.pnl .lab{font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted)}
+.pnl .big{font-family:"Anton";font-size:34px;line-height:1;margin-top:6px}
+.form{background:var(--panel-2);border:1px dashed var(--line);border-radius:14px;padding:16px;margin-bottom:18px}
+.form h3{font-family:"Anton";text-transform:uppercase;letter-spacing:.06em;font-size:15px;margin-bottom:12px;color:var(--gold)}
+.frow{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.field input,.field select{min-width:120px}
+.cand-search{position:relative;flex:1 1 220px}
+.cand-drop{position:absolute;z-index:20;left:0;right:0;top:calc(100% + 4px);background:var(--panel);
+  border:1px solid var(--line);border-radius:10px;max-height:220px;overflow:auto;box-shadow:var(--shadow)}
+.cand-drop button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:transparent;
+  border:none;border-bottom:1px solid var(--line-soft);color:var(--chalk);padding:9px 11px;font-size:13px}
+.cand-drop button:hover{background:var(--raise)}
+.cand-drop .m{font-family:"JetBrains Mono";color:var(--muted);font-size:11px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip{display:flex;align-items:center;gap:8px;background:var(--raise);border:1px solid var(--line);
+  border-radius:22px;padding:6px 6px 6px 12px;font-size:13px}
+.chip .pick{font-size:10px;letter-spacing:.1em;text-transform:uppercase;border:1px solid var(--line);
+  background:transparent;color:var(--muted);border-radius:14px;padding:3px 8px}
+.chip .pick.on{background:var(--gold);color:#1a1200;border-color:var(--gold);font-weight:700}
+.chip .x{background:transparent;border:none;color:var(--muted);font-size:16px;line-height:1;padding:0 4px}
+.btn.primary{background:var(--gold);color:#1a1200;border-color:var(--gold);font-weight:700}
+.btn.ghost{background:transparent}
+.dcard{border:1px solid var(--line);border-radius:14px;padding:0;margin-bottom:12px;overflow:hidden;background:var(--panel)}
+.dcard .top{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:13px 15px;
+  background:var(--panel-2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.dcard .title{font-weight:700;font-size:15px}
+.dcard .meta{font-size:11px;color:var(--muted);font-family:"JetBrains Mono"}
+.verdict{font-family:"Anton";font-size:22px;padding:2px 12px;border-radius:10px;border:1px solid var(--line)}
+.verdict.win{color:var(--pos)} .verdict.loss{color:var(--neg)} .verdict.even{color:var(--gold)}
+.ladder{padding:13px 15px;display:flex;flex-direction:column;gap:8px}
+.rung{display:grid;grid-template-columns:1.4fr 3fr auto;gap:12px;align-items:center}
+.rung .rn{font-size:13px;display:flex;align-items:center;gap:8px}
+.rung .track{height:22px;border-radius:6px;background:var(--panel-2);border:1px solid var(--line-soft);position:relative;overflow:hidden}
+.rung .fill{position:absolute;left:0;top:0;bottom:0;border-radius:6px 0 0 6px;background:linear-gradient(90deg,var(--gold-deep),var(--gold));opacity:.85}
+.rung.chosen .fill{background:linear-gradient(90deg,#2c6f4f,var(--pos))}
+.rung .pts{font-family:"Anton";font-size:16px;min-width:34px;text-align:right}
+.crown{color:var(--gold);font-size:11px}
+.you{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:#1a1200;background:var(--gold);border-radius:10px;padding:1px 6px;font-weight:700}
+.dcard .foot{display:flex;justify-content:space-between;padding:10px 15px;border-top:1px solid var(--line-soft);align-items:center}
+.link-btn{background:transparent;border:none;color:var(--muted);font-size:11px;letter-spacing:.06em;text-transform:uppercase}
+.link-btn:hover{color:var(--neg)}
+
+/* ---------- Empty / loading / error ---------- */
+.empty{text-align:center;padding:44px 16px;color:var(--muted)}
+.empty .anton{font-size:20px;color:var(--chalk);margin-bottom:8px;text-transform:uppercase}
+.overlay{position:fixed;inset:0;background:rgba(6,17,10,.92);z-index:80;display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:20px;text-align:center;padding:24px}
+.goalframe{width:120px;height:78px;position:relative}
+.goalframe .post{position:absolute;background:var(--gold);border-radius:2px}
+.goalframe .l{left:0;top:0;bottom:0;width:4px} .goalframe .r{right:0;top:0;bottom:0;width:4px}
+.goalframe .t{left:0;right:0;top:0;height:4px}
+.goalframe .net{position:absolute;inset:4px 4px 0;background-image:
+  linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);
+  background-size:12px 12px;opacity:.55}
+.ball{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--chalk);left:53px;bottom:-4px;
+  animation:topbin 2.1s ease-in-out infinite}
+@keyframes topbin{0%{left:53px;bottom:-4px}45%{left:8px;bottom:44px}55%{left:8px;bottom:44px}100%{left:53px;bottom:-4px}}
+.load-txt{font-family:"Anton";text-transform:uppercase;letter-spacing:.12em;font-size:15px}
+.load-sub{font-size:12px;color:var(--muted);font-family:"JetBrains Mono"}
+.err{max-width:440px}
+@media (prefers-reduced-motion:reduce){.ball{animation:none;left:8px;bottom:44px}}
+@media (max-width:640px){
+  .brand .wm{font-size:19px}.section-head h2{font-size:22px}
+  .mast-inner{gap:10px}.tab{padding:10px 12px;font-size:12px}
+}
+.foot-src{max-width:1160px;margin:18px auto 0;padding:0 16px;font-size:11px;color:var(--muted-2);text-align:center}
+.foot-src a{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="overlay" id="overlay">
+  <div class="goalframe" aria-hidden="true">
+    <div class="net"></div><div class="post l"></div><div class="post r"></div><div class="post t"></div>
+    <div class="ball"></div>
+  </div>
+  <div>
+    <div class="load-txt" id="loadTxt">Warming up the data room</div>
+    <div class="load-sub" id="loadSub">Pulling the season from GitHub…</div>
+  </div>
+</div>
+
+<header class="mast">
+  <div class="mast-inner">
+    <svg class="crest" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <rect x="4" y="6" width="32" height="22" rx="2" stroke="#E7C15E" stroke-width="2.4"/>
+      <path d="M8 10h24M8 14h24M8 18h24M8 22h24M12 6v22M18 6v22M24 6v22M30 6v22" stroke="#1C4230" stroke-width="1"/>
+      <circle cx="12" cy="12" r="4.4" fill="#EAF3EC"/>
+      <path d="M12 8.4l1.2 2.5 2.6.3-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.3z" fill="#08170E"/>
+      <path d="M6 34c3-3 7-3 10 0M24 34c3-3 7-3 10 0" stroke="#E7C15E" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div class="brand">
+      <div class="wm">TOP <b>BINS</b></div>
+      <div class="sub">with twins · data room</div>
+    </div>
+    <div class="mast-spacer"></div>
+    <div class="season-pick">
+      <label for="season">Season</label>
+      <select id="season">
+        <option value="2025-26">2025 / 26</option>
+        <option value="2024-25">2024 / 25</option>
+        <option value="2026-27">2026 / 27</option>
+      </select>
+    </div>
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusTxt">Loading…</span></div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab" role="tab" aria-selected="true" data-tab="teams"><span class="k">01</span> Teams</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="players"><span class="k">02</span> Players</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="decisions"><span class="k">03</span> Decision Log</button>
+</nav>
+
+<main class="wrap">
+  <div class="board">
+    <section id="panel-teams"></section>
+    <section id="panel-players" hidden></section>
+    <section id="panel-decisions" hidden></section>
+  </div>
+  <p class="foot-src">Data mirrored from the community <a href="https://github.com/vaastav/Fantasy-Premier-League" target="_blank" rel="noopener">vaastav/Fantasy-Premier-League</a> dataset · fetched live in your browser · not affiliated with the Premier League or FPL.</p>
+</main>
+
+<script>
+"use strict";
+const REPO="https://raw.githubusercontent.com/vaastav/Fantasy-Premier-League/master/data";
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
+const f2=n=>n.toFixed(2);
+const f1=n=>n.toFixed(1);
+const signed=n=>(n>0?"+":"")+n;
+
+/* ---------------- CSV parser (handles quoted fields) ---------------- */
+function parseCSV(text){
+  const rows=[];let i=0,f="",row=[],q=false;
+  const pushF=()=>{row.push(f);f="";};
+  const pushR=()=>{rows.push(row);row=[];};
+  while(i<text.length){
+    const c=text[i];
+    if(q){
+      if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; }
+      else f+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===',')pushF();
+      else if(c==='\n'){pushF();pushR();}
+      else if(c==='\r'){}
+      else f+=c;
+    }
+    i++;
+  }
+  if(f.length||row.length){pushF();pushR();}
+  const head=rows.shift().map(h=>h.trim());
+  return rows.filter(r=>r.length>1).map(r=>{const o={};head.forEach((h,idx)=>o[h]=r[idx]);return o;});
+}
+
+/* ---------------- State ---------------- */
+const S={
+  season:"2025-26",
+  teams:{},            // id -> {name,short}
+  nameToShort:{},
+  rows:[],             // per-player-per-fixture rows
+  players:[],          // aggregated season player objects
+  playerByEl:{},       // element -> player agg
+  teamAgg:[],          // aggregated season team objects
+  ptsByEl:{},          // element -> {round -> points}
+  maxRound:38,
+  ui:{ teamScope:"season", teamGW:1, teamSort:{k:"xg",dir:-1},
+       playerScope:"season", playerGW:1, playerSort:{k:"pts",dir:-1}, minMinutes:180,
+       playerTeam:"", playerPos:"", playerQuery:"" },
+  decisions:[],
+  draft:{ gw:1, title:"", horizon:1, cands:[], chosen:null }
+};
+const POS_MID_FWD=new Set(["MID","FWD"]);
+const defconThreshold=pos=>pos==="DEF"?10:(POS_MID_FWD.has(pos)?12:Infinity);
+
+/* ---------------- Persistence (window.storage) ---------------- */
+async function loadDecisions(){
+  try{
+    const r=await window.storage.get("tbwt:decisions:"+S.season);
+    S.decisions=r&&r.value?JSON.parse(r.value):[];
+  }catch(e){ S.decisions=[]; }
+}
+async function saveDecisions(){
+  try{ await window.storage.set("tbwt:decisions:"+S.season, JSON.stringify(S.decisions)); }
+  catch(e){ /* storage unavailable — keep in memory */ }
+}
+
+/* ---------------- Fetch + build ---------------- */
+async function loadSeason(season){
+  S.season=season;
+  showOverlay("Warming up the data room","Pulling "+season+" from GitHub…");
+  setStatus(false,"Loading "+season+"…");
+  let teamsTxt, gwTxt;
+  try{
+    teamsTxt=await (await fetch(`${REPO}/${season}/teams.csv`)).text();
+    if(teamsTxt.trim().startsWith("404")||teamsTxt.includes("Not Found")) throw new Error("nofile");
+    $("#loadSub").textContent="Loading gameweek data (~5 MB)…";
+    const res=await fetch(`${REPO}/${season}/gws/merged_gw.csv`);
+    if(!res.ok) throw new Error("nofile");
+    gwTxt=await res.text();
+  }catch(e){
+    hideOverlay();
+    if(season==="2026-27") return renderNotStarted();
+    return renderError(season);
+  }
+  build(teamsTxt,gwTxt);
+  await loadDecisions();
+  hideOverlay();
+  setStatus(true, S.maxRound+" GWs · "+S.players.length+" players · "+S.teamAgg.length+" teams");
+  render();
+}
+
+function build(teamsTxt,gwTxt){
+  // teams
+  S.teams={}; S.nameToShort={};
+  parseCSV(teamsTxt).forEach(t=>{ S.teams[t.id]={name:t.name,short:t.short_name}; S.nameToShort[t.name]=t.short_name; });
+  // rows
+  S.rows=parseCSV(gwTxt);
+  S.maxRound=Math.max(...S.rows.map(r=>+r.round||0));
+  S.ui.teamGW=S.maxRound; S.ui.playerGW=S.maxRound; S.draft.gw=1;
+
+  // player season aggregation + points-by-round
+  const pmap={}; const pts={};
+  for(const r of S.rows){
+    const el=r.element, rnd=+r.round;
+    if(!pmap[el]) pmap[el]={element:el,name:r.name,team:r.team,short:S.nameToShort[r.team]||r.team,pos:r.position,
+      price:0,min:0,pts:0,xg:0,xa:0,xgi:0,xgc:0,g:0,a:0,defcon:0,crea:0,threat:0,apps:0,dcHits:0,gwPts:{}};
+    const p=pmap[el];
+    p.price=num(r.value)/10; // latest seen (rows are chronological)
+    const mins=num(r.minutes);
+    p.min+=mins; p.pts+=num(r.total_points);
+    p.xg+=num(r.expected_goals); p.xa+=num(r.expected_assists); p.xgi+=num(r.expected_goal_involvements);
+    p.xgc+=num(r.expected_goals_conceded); p.g+=num(r.goals_scored); p.a+=num(r.assists);
+    p.defcon+=num(r.defensive_contribution); p.crea+=num(r.creativity); p.threat+=num(r.threat);
+    p.gwPts[rnd]=(p.gwPts[rnd]||0)+num(r.total_points);
+    if(mins>0){ p.apps++; if(num(r.defensive_contribution)>=defconThreshold(r.position)) p.dcHits++; }
+    // per-round points map for decision log
+    if(!pts[el])pts[el]={}; pts[el][rnd]=(pts[el][rnd]||0)+num(r.total_points);
+    // stash raw row per gw for By-GW scope
+    p.gwPts=p.gwPts;
+  }
+  S.players=Object.values(pmap);
+  S.playerByEl=pmap;
+  S.ptsByEl=pts;
+
+  // team aggregation — grouped by fixture so DGW/BGW are correct
+  // fixtureXG[fixture][teamName]=xG; also store team goals/opp per fixture
+  const fx={}; // fixture -> { teamName -> {xg,xa,xgi,crea,threat,defcon} }
+  const teamFix={}; // teamName -> Set(fixture)
+  const fixMeta={}; // fixture -> {round, scores by side} using was_home
+  for(const r of S.rows){
+    const fxid=r.fixture, tn=r.team;
+    if(!fx[fxid])fx[fxid]={};
+    if(!fx[fxid][tn])fx[fxid][tn]={xg:0,xa:0,xgi:0,crea:0,threat:0,defcon:0,gf:0,ga:0,round:+r.round,home:r.was_home==="True"};
+    const a=fx[fxid][tn];
+    a.xg+=num(r.expected_goals); a.xa+=num(r.expected_assists); a.xgi+=num(r.expected_goal_involvements);
+    a.crea+=num(r.creativity); a.threat+=num(r.threat); a.defcon+=num(r.defensive_contribution);
+    a.gf=r.was_home==="True"?num(r.team_h_score):num(r.team_a_score);
+    a.ga=r.was_home==="True"?num(r.team_a_score):num(r.team_h_score);
+    if(!teamFix[tn])teamFix[tn]=new Set(); teamFix[tn].add(fxid);
+  }
+  S.fxAgg=fx; S.teamFix=teamFix;
+  S.teamAgg=buildTeamAgg("season",null);
+}
+
+// scope: 'season' -> all fixtures; 'gw' -> only that round
+function buildTeamAgg(scope,gw){
+  const acc={};
+  for(const fxid in S.fxAgg){
+    const sides=S.fxAgg[fxid];
+    const teamNames=Object.keys(sides);
+    for(const tn of teamNames){
+      const s=sides[tn];
+      if(scope==="gw" && s.round!==gw) continue;
+      if(!acc[tn])acc[tn]={team:tn,short:S.nameToShort[tn]||tn,gp:0,xg:0,xa:0,xgi:0,crea:0,threat:0,defcon:0,gf:0,ga:0,xga:0,cs:0};
+      const A=acc[tn];
+      A.gp++; A.xg+=s.xg; A.xa+=s.xa; A.xgi+=s.xgi; A.crea+=s.crea; A.threat+=s.threat; A.defcon+=s.defcon;
+      A.gf+=s.gf; A.ga+=s.ga; if(s.ga===0)A.cs++;
+      // xGA = opponent's xG in same fixture
+      const opp=teamNames.find(x=>x!==tn);
+      if(opp) A.xga+=sides[opp].xg;
+    }
+  }
+  return Object.values(acc).map(t=>({...t, gmxg:t.gf-t.xg, xgcDiff:t.ga-t.xga}));
+}
+
+/* ---------------- Status / overlay ---------------- */
+function setStatus(live,txt){ $("#statusTxt").textContent=txt; $("#statusDot").className="dot"+(live?" live":""); }
+function showOverlay(t,s){ $("#overlay").style.display="flex"; $("#loadTxt").textContent=t; $("#loadSub").textContent=s; }
+function hideOverlay(){ $("#overlay").style.display="none"; }
+
+/* ---------------- Rendering: tabs ---------------- */
+function render(){
+  const active=$(".tab[aria-selected=true]").dataset.tab;
+  if(active==="teams")renderTeams();
+  else if(active==="players")renderPlayers();
+  else renderDecisions();
+}
+$$(".tab").forEach(t=>t.addEventListener("click",()=>{
+  $$(".tab").forEach(x=>x.setAttribute("aria-selected",x===t));
+  ["teams","players","decisions"].forEach(id=>$("#panel-"+id).hidden=(id!==t.dataset.tab));
+  render();
+}));
+
+/* ---------------- TEAMS ---------------- */
+const TEAM_COLS=[
+  {k:"team",l:"Team",t:1},{k:"gp",l:"GP"},
+  {k:"xg",l:"xG",d:2},{k:"gf",l:"G",d:0},{k:"gmxg",l:"G−xG",d:2,sign:1},
+  {k:"xa",l:"xA",d:2},{k:"threat",l:"Threat",d:0},{k:"crea",l:"Creat",d:0},
+  {k:"xga",l:"xGA",d:2},{k:"ga",l:"GC",d:0},{k:"cs",l:"CS",d:0},{k:"defcon",l:"DEFCON",d:0}
+];
+function renderTeams(){
+  const scope=S.ui.teamScope;
+  const data=scope==="season"?S.teamAgg:buildTeamAgg("gw",S.ui.teamGW);
+  const sk=S.ui.teamSort.k, dir=S.ui.teamSort.dir;
+  data.sort((a,b)=> sk==="team"? a.team.localeCompare(b.team)*(-dir) : (a[sk]-b[sk])*dir);
+
+  // leaders
+  const topBy=(k,inv)=>[...data].sort((a,b)=>(b[k]-a[k])*(inv?-1:1))[0]||{};
+  const lXg=topBy("xg"),lDef=topBy("xga",true),lDc=topBy("defcon"),lGmx=topBy("gmxg");
+
+  let leaders = scope==="season" ? `
+    <div class="leaders">
+      ${leadCard("Most xG created",lXg.team,f2(lXg.xg||0),"xG")}
+      ${leadCard("Meanest defence",lDef.team,f2(lDef.xga||0),"xGA")}
+      ${leadCard("Top DEFCON side",lDc.team,String(Math.round(lDc.defcon||0)),"actions")}
+      ${leadCard("Best finishing",lGmx.team,signed(+f2(lGmx.gmxg||0)),"G−xG")}
+    </div>`:"";
+
+  $("#panel-teams").innerHTML=`
+    <div class="eyebrow">Pillar 01 · Team-centric</div>
+    <div class="section-head">
+      <h2>Team Data Room</h2>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="scope">
+          <button ${scope==="season"?'aria-pressed="true"':""} data-ts="season">Season</button>
+          <button ${scope==="gw"?'aria-pressed="true"':""} data-ts="gw">By GW</button>
+        </div>
+        ${scope==="gw"?gwSelect(S.ui.teamGW,"teamGW"):""}
+      </div>
+    </div>
+    ${leaders}
+    <div class="twrap"><table>
+      <thead><tr>${TEAM_COLS.map(c=>th(c,sk,dir)).join("")}</tr></thead>
+      <tbody>${data.map(rowTeam).join("")}</tbody>
+    </table></div>
+    <p class="hint" style="margin-top:10px">xGA is the opponent's xG in each fixture (not summed player xGC), so it reads as true chances conceded. Grouped by fixture — double gameweeks count both matches.</p>
+  `;
+  wireTeamControls();
+}
+function rowTeam(t){
+  return `<tr>
+    <td class="name">${t.team} <span class="sub-t">${t.short}</span></td>
+    <td>${t.gp}</td>
+    <td>${f2(t.xg)}</td><td>${Math.round(t.gf)}</td>
+    <td class="${t.gmxg>=0?'pos':'neg'}">${signed(+f2(t.gmxg))}</td>
+    <td>${f2(t.xa)}</td><td>${Math.round(t.threat)}</td><td>${Math.round(t.crea)}</td>
+    <td>${f2(t.xga)}</td><td>${Math.round(t.ga)}</td><td>${Math.round(t.cs)}</td>
+    <td style="color:var(--gold)">${Math.round(t.defcon)}</td>
+  </tr>`;
+}
+function wireTeamControls(){
+  $$("#panel-teams [data-ts]").forEach(b=>b.onclick=()=>{S.ui.teamScope=b.dataset.ts;renderTeams();});
+  const g=$("#panel-teams select[data-gw]"); if(g)g.onchange=()=>{S.ui.teamGW=+g.value;renderTeams();};
+  $$("#panel-teams thead th[data-k]").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k; const s=S.ui.teamSort;
+    s.dir=(s.k===k)?-s.dir:(k==="team"?1:-1); s.k=k; renderTeams();
+  });
+}
+
+/* ---------------- PLAYERS ---------------- */
+const P_COLS=[
+  {k:"name",l:"Player",t:1},{k:"short",l:"Team"},{k:"pos",l:"Pos"},
+  {k:"price",l:"£",d:1},{k:"min",l:"Min",d:0},{k:"pts",l:"Pts",d:0},
+  {k:"xg",l:"xG",d:2},{k:"xa",l:"xA",d:2},{k:"xgi",l:"xGI",d:2},{k:"xgc",l:"xGC",d:2},
+  {k:"defcon",l:"DEFCON",d:0},{k:"dcRate",l:"DC hit%",d:0},{k:"crea",l:"Creat",d:0},{k:"threat",l:"Threat",d:0}
+];
+function playerView(){
+  let list;
+  if(S.ui.playerScope==="season"){
+    list=S.players.map(p=>({...p, dcRate:p.apps?Math.round(100*p.dcHits/p.apps):0}));
+  }else{
+    const gw=S.ui.playerGW;
+    list=S.rows.filter(r=>+r.round===gw&&num(r.minutes)>=0).map(r=>({
+      element:r.element,name:r.name,team:r.team,short:S.nameToShort[r.team]||r.team,pos:r.position,
+      price:num(r.value)/10,min:num(r.minutes),pts:num(r.total_points),
+      xg:num(r.expected_goals),xa:num(r.expected_assists),xgi:num(r.expected_goal_involvements),
+      xgc:num(r.expected_goals_conceded),defcon:num(r.defensive_contribution),crea:num(r.creativity),threat:num(r.threat),
+      dcRate:num(r.defensive_contribution)>=defconThreshold(r.position)?100:0
+    }));
+  }
+  const q=S.ui.playerQuery.toLowerCase();
+  return list.filter(p=>
+    p.min>=(S.ui.playerScope==="season"?S.ui.minMinutes:0) &&
+    (!S.ui.playerTeam||p.team===S.ui.playerTeam) &&
+    (!S.ui.playerPos||p.pos===S.ui.playerPos) &&
+    (!q||p.name.toLowerCase().includes(q)));
+}
+function renderPlayers(){
+  const data=playerView();
+  const sk=S.ui.playerSort.k,dir=S.ui.playerSort.dir;
+  const strc=(k)=> k==="name"||k==="short"||k==="pos";
+  data.sort((a,b)=> strc(sk)? String(a[sk]).localeCompare(String(b[sk]))*(-dir):((a[sk]||0)-(b[sk]||0))*dir);
+  const maxDefcon=Math.max(1,...data.map(p=>p.defcon));
+  const teamOpts=[...new Set(S.players.map(p=>p.team))].sort();
+  $("#panel-players").innerHTML=`
+    <div class="eyebrow">Pillar 02 · Players & expected figures</div>
+    <div class="section-head">
+      <h2>Player Data Room</h2>
+      <div class="controls">
+        <div class="seg" role="group" aria-label="scope">
+          <button ${S.ui.playerScope==="season"?'aria-pressed="true"':""} data-ps="season">Season</button>
+          <button ${S.ui.playerScope==="gw"?'aria-pressed="true"':""} data-ps="gw">By GW</button>
+        </div>
+        ${S.ui.playerScope==="gw"?gwSelect(S.ui.playerGW,"playerGW"):""}
+      </div>
+    </div>
+    <div class="filters">
+      <input type="search" id="pq" placeholder="Search player…" value="${S.ui.playerQuery}">
+      <select id="pteam"><option value="">All teams</option>${teamOpts.map(t=>`<option ${t===S.ui.playerTeam?"selected":""}>${t}</option>`).join("")}</select>
+      <select id="ppos"><option value="">All positions</option>${["GK","DEF","MID","FWD"].map(p=>`<option ${p===S.ui.playerPos?"selected":""}>${p}</option>`).join("")}</select>
+      ${S.ui.playerScope==="season"?`<span class="range">Min mins <input type="range" id="pmin" min="0" max="3000" step="90" value="${S.ui.minMinutes}"><b class="mono" id="pminv">${S.ui.minMinutes}</b></span>`:""}
+      <span class="hint">${data.length} shown</span>
+    </div>
+    <div class="twrap"><table>
+      <thead><tr>${P_COLS.map(c=>th(c,sk,dir)).join("")}</tr></thead>
+      <tbody>${data.slice(0,400).map(p=>rowPlayer(p,maxDefcon)).join("")}</tbody>
+    </table></div>
+    <p class="hint" style="margin-top:10px">DEFCON = FPL defensive-contribution count (DEF: clearances+blocks+interceptions+tackles; MID/FWD add recoveries). <b>DC hit%</b> = share of appearances clearing the points threshold (DEF ≥10, MID/FWD ≥12) — the number that actually predicts DEFCON returns.</p>
+  `;
+  wirePlayerControls();
+}
+function rowPlayer(p,maxDefcon){
+  const w=Math.round(100*p.defcon/maxDefcon);
+  return `<tr>
+    <td class="name">${p.name}</td>
+    <td class="sub-t">${p.short}</td>
+    <td class="pos-cell"><span class="pos-chip pos-${p.pos}">${p.pos}</span></td>
+    <td>${f1(p.price)}</td><td>${Math.round(p.min)}</td>
+    <td style="color:var(--gold)">${Math.round(p.pts)}</td>
+    <td>${f2(p.xg)}</td><td>${f2(p.xa)}</td><td>${f2(p.xgi)}</td><td>${f2(p.xgc)}</td>
+    <td><span class="bar"><i style="width:${w}%"></i></span> ${Math.round(p.defcon)}</td>
+    <td>${p.dcRate}${p.dcRate?'%':''}</td>
+    <td>${Math.round(p.crea)}</td><td>${Math.round(p.threat)}</td>
+  </tr>`;
+}
+function wirePlayerControls(){
+  $$("#panel-players [data-ps]").forEach(b=>b.onclick=()=>{S.ui.playerScope=b.dataset.ps;renderPlayers();});
+  const g=$("#panel-players select[data-gw]"); if(g)g.onchange=()=>{S.ui.playerGW=+g.value;renderPlayers();};
+  const pq=$("#pq"); if(pq)pq.oninput=()=>{S.ui.playerQuery=pq.value;renderPlayers();pq.focus();
+    const v=pq.value;const el=$("#pq");el.setSelectionRange(v.length,v.length);};
+  const pt=$("#pteam"); if(pt)pt.onchange=()=>{S.ui.playerTeam=pt.value;renderPlayers();};
+  const pp=$("#ppos"); if(pp)pp.onchange=()=>{S.ui.playerPos=pp.value;renderPlayers();};
+  const pm=$("#pmin"); if(pm)pm.oninput=()=>{S.ui.minMinutes=+pm.value;$("#pminv").textContent=pm.value;renderPlayers();};
+  $$("#panel-players thead th[data-k]").forEach(th=>th.onclick=()=>{
+    const k=th.dataset.k;const s=S.ui.playerSort;const strc=(k==="name"||k==="short"||k==="pos");
+    s.dir=(s.k===k)?-s.dir:(strc?1:-1);s.k=k;renderPlayers();
+  });
+}
+
+/* ---------------- DECISION LOG ---------------- */
+function pointsOver(el,gw,horizon){
+  const map=S.ptsByEl[el]||{};
+  const end=horizon==="rest"?S.maxRound:gw+(+horizon)-1;
+  let s=0; for(let r=gw;r<=end;r++) s+=map[r]||0; return s;
+}
+function evalDecision(d){
+  const cands=d.cands.map(c=>({...c, pts:pointsOver(c.element,d.gw,d.horizon)}));
+  cands.sort((a,b)=>b.pts-a.pts);
+  const chosen=cands.find(c=>c.element===d.chosen)||cands[0];
+  const bestAlt=cands.filter(c=>c.element!==chosen.element).reduce((m,c)=>Math.max(m,c.pts),-Infinity);
+  const regret=chosen.pts-(bestAlt===-Infinity?chosen.pts:bestAlt);
+  const rank=cands.findIndex(c=>c.element===chosen.element)+1;
+  return {cands,chosen,regret,rank,best:cands[0]};
+}
+function horizonLabel(h,gw){
+  if(h==="rest")return "GW"+gw+"→"+S.maxRound;
+  const n=+h; return n===1?("GW"+gw+" only"):("GW"+gw+"–"+(gw+n-1));
+}
+function renderDecisions(){
+  let pnl=0,wins=0,best=0;
+  S.decisions.forEach(d=>{const e=evalDecision(d);pnl+=e.regret;if(e.regret>0)wins++;});
+  const p=$("#panel-decisions");
+  p.innerHTML=`
+    <div class="eyebrow">Pillar 03 · Decision journal</div>
+    <div class="section-head">
+      <h2>Decision Log</h2>
+      <div class="hint">Log the calls you actually agonised over, then see the points you won or left on the table.</div>
+    </div>
+    <div class="pnl">
+      <div class="card"><div class="lab">Decision P&amp;L (vs best pick)</div>
+        <div class="big ${pnl>0?'pos':pnl<0?'neg':''}">${signed(+f1(pnl))}</div></div>
+      <div class="card"><div class="lab">Calls logged</div><div class="big">${S.decisions.length}</div></div>
+      <div class="card"><div class="lab">Nailed the best option</div><div class="big" style="color:var(--gold)">${wins}<span style="font-size:14px;color:var(--muted)">/${S.decisions.length||0}</span></div></div>
+    </div>
+    ${draftForm()}
+    <div id="dlist">${S.decisions.length?S.decisions.map((d,i)=>decisionCard(d,i)).join(""):emptyDecisions()}</div>
+  `;
+  wireDraft();
+}
+function emptyDecisions(){
+  return `<div class="empty"><div class="anton">No calls logged yet</div>
+    Add the first one above — e.g. GW1, midfield slot: Foden vs Fernandes vs Kudus. The log pulls each player's real points across your chosen window and marks whether your pick beat the field.</div>`;
+}
+function draftForm(){
+  const d=S.draft;
+  const gwOpts=Array.from({length:S.maxRound},(_,i)=>i+1).map(n=>`<option ${n===d.gw?"selected":""}>${n}</option>`).join("");
+  return `<div class="form">
+    <h3>Log a decision</h3>
+    <div class="frow">
+      <div class="field"><label>Made for GW</label><select id="dgw">${gwOpts}</select></div>
+      <div class="field"><label>Evaluate over</label>
+        <select id="dhor">
+          <option value="1" ${d.horizon==1?"selected":""}>That GW only</option>
+          <option value="3" ${d.horizon==3?"selected":""}>Next 3 GWs</option>
+          <option value="5" ${d.horizon==5?"selected":""}>Next 5 GWs</option>
+          <option value="rest" ${d.horizon=="rest"?"selected":""}>Rest of season</option>
+        </select></div>
+      <div class="field" style="flex:1 1 200px"><label>What was the call?</label>
+        <input id="dtitle" placeholder="e.g. Midfield 3rd slot" value="${d.title.replace(/"/g,'&quot;')}"></div>
+    </div>
+    <div class="frow">
+      <div class="cand-search field" style="flex:1 1 260px"><label>Add candidates (2–6)</label>
+        <input id="dsearch" placeholder="Search a player you considered…" autocomplete="off">
+        <div id="ddrop"></div>
+      </div>
+    </div>
+    <div class="chips" id="dchips">${d.cands.map(c=>candChip(c,d.chosen)).join("")||'<span class="hint">No candidates yet — search above. Tap “Picked” on the one you actually went with.</span>'}</div>
+    <div class="frow" style="margin-bottom:0">
+      <button class="btn primary" id="dsave" ${d.cands.length<2||!d.chosen?"disabled style=opacity:.45;cursor:not-allowed":""}>Log this decision</button>
+      <button class="btn ghost" id="dclear">Clear</button>
+      ${d.cands.length>=2&&!d.chosen?'<span class="hint">Mark which candidate you picked to log.</span>':""}
+    </div>
+  </div>`;
+}
+function candChip(c,chosen){
+  const on=c.element===chosen;
+  return `<span class="chip"><b>${c.name}</b> <span class="sub-t">${c.short}</span>
+    <button class="pick ${on?'on':''}" data-pick="${c.element}">${on?'✓ Picked':'Picked?'}</button>
+    <button class="x" data-rm="${c.element}" aria-label="remove">×</button></span>`;
+}
+function decisionCard(d,i){
+  const e=evalDecision(d);
+  const maxP=Math.max(1,...e.cands.map(c=>c.pts));
+  const verdict=e.regret>0?["win","Beat the field"]:e.regret<0?["loss","Left "+(-e.regret)+" pts"]:["even","Line ball"];
+  return `<div class="dcard">
+    <div class="top">
+      <div>
+        <div class="title">${d.title||"Untitled call"} <span class="verdict ${verdict[0]}">${signed(+f1(e.regret))}</span></div>
+        <div class="meta">${horizonLabel(d.horizon,d.gw)} · ${verdict[1]} · you ranked #${e.rank} of ${e.cands.length}</div>
+      </div>
+    </div>
+    <div class="ladder">
+      ${e.cands.map(c=>{
+        const isYou=c.element===e.chosen.element, isBest=c===e.best;
+        return `<div class="rung ${isYou?'chosen':''}">
+          <div class="rn">${isBest?'<span class="crown">★</span>':''}${c.name} <span class="sub-t">${c.short}</span> ${isYou?'<span class="you">yours</span>':''}</div>
+          <div class="track"><div class="fill" style="width:${Math.round(100*c.pts/maxP)}%"></div></div>
+          <div class="pts">${Math.round(c.pts)}</div>
+        </div>`;
+      }).join("")}
+    </div>
+    <div class="foot">
+      <span class="hint">Made for GW${d.gw}</span>
+      <button class="link-btn" data-del="${i}">Delete</button>
+    </div>
+  </div>`;
+}
+function wireDraft(){
+  const d=S.draft;
+  const gw=$("#dgw"); if(gw)gw.onchange=()=>{d.gw=+gw.value;renderDecisions();};
+  const hor=$("#dhor"); if(hor)hor.onchange=()=>{d.horizon=hor.value;renderDecisions();};
+  const title=$("#dtitle"); if(title)title.oninput=()=>{d.title=title.value;};
+  const search=$("#dsearch"); const drop=$("#ddrop");
+  if(search)search.oninput=()=>{
+    const q=search.value.toLowerCase().trim();
+    if(!q){drop.innerHTML="";return;}
+    const picked=new Set(d.cands.map(c=>c.element));
+    const hits=S.players.filter(p=>p.name.toLowerCase().includes(q)&&!picked.has(p.element))
+      .sort((a,b)=>b.pts-a.pts).slice(0,8);
+    drop.innerHTML=`<div class="cand-drop">${hits.map(p=>
+      `<button data-add="${p.element}"><span>${p.name} <span class="sub-t">${p.short}·${p.pos}</span></span><span class="m">${Math.round(p.pts)} pts</span></button>`
+    ).join("")||'<button disabled style="color:var(--muted)">No match</button>'}</div>`;
+    $$("#ddrop [data-add]").forEach(b=>b.onclick=()=>{
+      const p=S.playerByEl[b.dataset.add];
+      d.cands.push({element:p.element,name:p.name,short:p.short}); if(!d.chosen)d.chosen=null;
+      search.value="";drop.innerHTML="";renderDecisions();$("#dsearch").focus();
+    });
+  };
+  $$("#dchips [data-pick]").forEach(b=>b.onclick=()=>{d.chosen=(d.chosen===b.dataset.pick)?null:b.dataset.pick;renderDecisions();});
+  $$("#dchips [data-rm]").forEach(b=>b.onclick=()=>{
+    d.cands=d.cands.filter(c=>c.element!==b.dataset.rm); if(d.chosen===b.dataset.rm)d.chosen=null; renderDecisions();
+  });
+  const save=$("#dsave"); if(save)save.onclick=async()=>{
+    if(d.cands.length<2||!d.chosen)return;
+    S.decisions.unshift({gw:d.gw,horizon:d.horizon,title:d.title.trim(),cands:d.cands.slice(),chosen:d.chosen});
+    await saveDecisions();
+    S.draft={gw:1,title:"",horizon:1,cands:[],chosen:null};
+    renderDecisions();
+  };
+  const clr=$("#dclear"); if(clr)clr.onclick=()=>{S.draft={gw:1,title:"",horizon:1,cands:[],chosen:null};renderDecisions();};
+  $$("#dlist [data-del]").forEach(b=>b.onclick=async()=>{
+    S.decisions.splice(+b.dataset.del,1);await saveDecisions();renderDecisions();
+  });
+}
+
+/* ---------------- shared bits ---------------- */
+function th(c,sk,dir){
+  const cls=c.k===sk?(dir<0?"down":"up"):"";
+  return `<th data-k="${c.k}" class="${cls}">${c.l}</th>`;
+}
+function gwSelect(val,key){
+  const o=Array.from({length:S.maxRound},(_,i)=>i+1).map(n=>`<option ${n===val?"selected":""}>${n}</option>`).join("");
+  return `<select data-gw="${key}" aria-label="gameweek">${o}</select>`;
+}
+function leadCard(lab,who,val,unit){
+  return `<div class="lead"><div class="lab">${lab}</div><div class="who">${who||"—"}</div>
+    <div class="val">${val}<small>${unit}</small></div></div>`;
+}
+function renderNotStarted(){
+  setStatus(false,"2026/27 not started");
+  $("#panel-teams").innerHTML=$("#panel-players").innerHTML=$("#panel-decisions").innerHTML=
+   `<div class="empty"><div class="anton">2026/27 hasn't kicked off</div>
+    Live data lands here once GW1 is played and the GitHub dataset updates. For now switch back to 2025/26 to explore the full season and stress-test your decision log.</div>`;
+}
+function renderError(season){
+  setStatus(false,"Couldn't load "+season);
+  $("#panel-teams").innerHTML=`<div class="empty err"><div class="anton">Couldn't reach the data</div>
+    The ${season} files didn't load from GitHub. Check your connection and retry — everything is fetched live from raw.githubusercontent.com.
+    <div style="margin-top:14px"><button class="btn primary" onclick="loadSeason('${season}')">Retry</button></div></div>`;
+}
+
+/* ---------------- boot ---------------- */
+$("#season").addEventListener("change",e=>loadSeason(e.target.value));
+loadSeason("2025-26");
+</script>
+</body>
+</html>
