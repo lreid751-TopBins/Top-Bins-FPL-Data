@@ -33,7 +33,7 @@ export const S = {
     per90: false,
     fPos: "",
     fTeam: "",
-    fMaxPrice: 15,
+    fMaxPrice: 17,
     fMinMins: 270,
     fQuery: "",
     fWatchOnly: false,
