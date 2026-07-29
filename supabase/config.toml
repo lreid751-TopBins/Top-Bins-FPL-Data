@@ -1,0 +1,22 @@
+project_id = "topbins-fpl"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 15
+
+[studio]
+enabled = true
+port = 54323
+
+[functions.fpl]
+# The browser calls this with no credentials, so the platform-level JWT check
+# has to be off. The function reads public FPL data and writes nothing that a
+# caller controls, apart from /snapshot which checks its own shared secret.
+verify_jwt = false

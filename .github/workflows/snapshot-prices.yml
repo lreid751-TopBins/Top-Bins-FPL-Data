@@ -1,0 +1,25 @@
+name: Snapshot prices
+
+# FPL applies price changes at about 01:30 UTC. This runs afterwards and
+# records every player's price for the day, which is the history the API
+# itself never gives you.
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Record today's prices
+        env:
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SNAPSHOT_KEY: ${{ secrets.SNAPSHOT_KEY }}
+        run: |
+          test -n "$PROJECT_REF" || { echo "::error::Set the SUPABASE_PROJECT_REF repository variable"; exit 1; }
+          test -n "$SNAPSHOT_KEY" || { echo "::error::Set the SNAPSHOT_KEY secret"; exit 1; }
+          curl -fsS --retry 3 --retry-delay 20 -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/fpl/snapshot" \
+            -H "x-snapshot-key: ${SNAPSHOT_KEY}"

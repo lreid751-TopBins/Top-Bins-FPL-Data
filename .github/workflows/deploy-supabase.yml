@@ -1,0 +1,47 @@
+name: Deploy Supabase
+
+# Migrations and the edge function ship together. Anything under supabase/
+# triggers a deploy; the tests gate it so a broken handler never reaches prod.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/**"
+      - ".github/workflows/deploy-supabase.yml"
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required configuration
+        run: |
+          test -n "$PROJECT_REF" || { echo "::error::Set the SUPABASE_PROJECT_REF repository variable"; exit 1; }
+          test -n "$SUPABASE_ACCESS_TOKEN" || { echo "::error::Set the SUPABASE_ACCESS_TOKEN secret"; exit 1; }
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Test the handler
+        run: deno test --no-remote supabase/functions/fpl/handler.test.ts
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Link project
+        run: supabase link --project-ref "$PROJECT_REF"
+
+      - name: Apply migrations
+        run: supabase db push
+
+      - name: Deploy function
+        run: supabase functions deploy fpl --project-ref "$PROJECT_REF"

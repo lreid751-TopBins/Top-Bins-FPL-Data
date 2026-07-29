@@ -1,0 +1,52 @@
+name: Deploy site
+
+# Publishes public/ to GitHub Pages. The only build step is writing env.js so
+# the browser knows which Supabase Function to call.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "public/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Point the site at the deployed function
+        env:
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: |
+          test -n "$PROJECT_REF" || { echo "::error::Set the SUPABASE_PROJECT_REF repository variable"; exit 1; }
+          cat > public/env.js <<EOF
+          window.__FPL_API_BASE__ = "https://${PROJECT_REF}.supabase.co/functions/v1/fpl";
+          EOF
+          cat public/env.js
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

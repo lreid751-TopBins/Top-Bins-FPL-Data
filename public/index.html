@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Top Bins — FPL Data Room</title>
+<meta name="description" content="Squad tracking, scouting and fixture planning for Fantasy Premier League." />
+<meta name="theme-color" content="#08170e" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="./css/styles.css">
+</head>
+<body>
+
+<div class="overlay" id="overlay">
+  <div class="goalframe" aria-hidden="true">
+    <div class="net"></div><div class="post l"></div><div class="post r"></div><div class="post t"></div>
+    <div class="ball"></div>
+  </div>
+  <div>
+    <div class="load-txt" id="loadTxt">Warming up the data room</div>
+    <div class="load-sub" id="loadSub">Connecting to the FPL API…</div>
+  </div>
+</div>
+
+<header class="mast">
+  <div class="mast-inner">
+    <svg class="crest" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+      <rect x="4" y="6" width="32" height="22" rx="2" stroke="#E7C15E" stroke-width="2.4"/>
+      <path d="M8 10h24M8 14h24M8 18h24M8 22h24M12 6v22M18 6v22M24 6v22M30 6v22" stroke="#1C4230" stroke-width="1"/>
+      <circle cx="12" cy="12" r="4.4" fill="#EAF3EC"/>
+      <path d="M12 8.4l1.2 2.5 2.6.3-1.9 1.8.5 2.6-2.4-1.3-2.4 1.3.5-2.6-1.9-1.8 2.6-.3z" fill="#08170E"/>
+      <path d="M6 34c3-3 7-3 10 0M24 34c3-3 7-3 10 0" stroke="#E7C15E" stroke-width="2.2" stroke-linecap="round"/>
+    </svg>
+    <div class="brand">
+      <div class="wm">TOP <b>BINS</b></div>
+      <div class="sub">with twins · fpl data room</div>
+    </div>
+
+    <div class="mast-spacer"></div>
+
+    <div class="gw-badge" id="gwBadge" hidden>
+      <div>
+        <div class="lab">Next</div>
+        <div class="val" id="gwVal">—</div>
+      </div>
+      <div class="deadline" id="gwDeadline"></div>
+    </div>
+
+    <div class="status">
+      <span class="dot" id="statusDot"></span>
+      <span id="statusTxt">Loading…</span>
+    </div>
+  </div>
+</header>
+
+<nav class="tabs" role="tablist" aria-label="Sections">
+  <button class="tab" role="tab" aria-selected="true"  data-tab="squad">My Team</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="scout">Player Finder</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="fixtures">Fixture Ticker</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="teams">Teams</button>
+  <button class="tab" role="tab" aria-selected="false" data-tab="journal">Journal</button>
+</nav>
+
+<main class="wrap">
+  <div class="board">
+    <section id="panel-squad"    role="tabpanel"></section>
+    <section id="panel-scout"    role="tabpanel" hidden></section>
+    <section id="panel-fixtures" role="tabpanel" hidden></section>
+    <section id="panel-teams"    role="tabpanel" hidden></section>
+    <section id="panel-journal"  role="tabpanel" hidden></section>
+  </div>
+  <p class="foot-src">
+    Live data from the official Fantasy Premier League API. Not affiliated with the Premier League or FPL.
+  </p>
+</main>
+
+<!-- Written by the Pages workflow. Absent locally, which falls back to /api. -->
+<script src="./env.js"></script>
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
