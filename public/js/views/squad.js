@@ -18,31 +18,40 @@ export async function loadManager(id, rerender) {
   rerender();
 
   try {
+    // The profile is the thing that proves the ID is real. If this fails,
+    // the ID is wrong; everything else is best-effort on top of it.
     const [entry, history] = await Promise.all([api.entry(id), api.history(id)]);
     S.entry = entry;
     S.history = history;
 
-    // The picks endpoint 404s before a gameweek's first deadline passes.
-    let gw = S.currentGw;
+    // Find the most recent gameweek this manager has picks for. The endpoint
+    // 404s for gameweeks that haven't been played, and between seasons it can
+    // 404 or error for all of them — so we step back a bounded number of
+    // times and treat ANY failure as "not this gameweek", never as fatal.
+    let gw = S.currentGw || 38;
     let picks = null;
-    while (gw >= 1 && !picks) {
+    let tries = 0;
+    while (gw >= 1 && !picks && tries < 40) {
+      tries++;
       try {
         picks = await api.picks(id, gw);
-      } catch (err) {
-        if (err.status === 404) gw -= 1;
-        else throw err;
+        if (picks) break;
+      } catch {
+        // 404, network hiccup, between-seasons weirdness — all the same here.
       }
+      gw -= 1;
     }
     S.picks = picks;
-    S.picksGw = gw;
+    S.picksGw = picks ? gw : 0;
 
-    if (gw) {
+    if (picks && gw) {
       const live = await api.live(gw).catch(() => null);
       liveById = {};
       (live?.elements || []).forEach((el) => (liveById[el.id] = el.stats || {}));
     }
     saveManagerId(id);
   } catch (err) {
+    // Only a failed profile lookup lands here now.
     loadError =
       err.status === 404
         ? "No manager with that ID. Check the number in your team's URL."
@@ -66,7 +75,7 @@ export function renderSquad(root) {
     return;
   }
 
-  if (!S.entry || !S.picks) {
+  if (!S.entry) {
     root.innerHTML = `
       <div class="eyebrow">Your season</div>
       <div class="section-head"><h2>My Team</h2></div>
@@ -86,7 +95,41 @@ export function renderSquad(root) {
       if (v) loadManager(v, rerender);
     };
     $("#mgrGo", root).onclick = go;
-    $("#mgrId", root).onkeydown = (e) => e.key === "Enter" && go();
+    $("#mgrId", root).onkeydown = (e) => {
+      // A bare `e.key === "Enter" && go()` returns false for every other key,
+      // and returning false from an onX handler calls preventDefault — which
+      // silently blocked all typing. Keep the body a statement, return nothing.
+      if (e.key === "Enter") go();
+    };
+    return;
+  }
+
+  // Profile loaded, but no squad yet — between seasons, or before the first
+  // deadline. Show who they are and say so, rather than dead-ending.
+  if (!S.picks) {
+    root.innerHTML = `
+      <div class="eyebrow">Your season</div>
+      <div class="section-head">
+        <h2>${esc(S.entry.name || "My Team")}</h2>
+        <div class="controls">
+          <span class="hint">${esc(S.entry.player_first_name || "")} ${esc(S.entry.player_last_name || "")} · ID ${S.entry.id}</span>
+          <button class="btn ghost" id="mgrSwitch">Change team</button>
+        </div>
+      </div>
+      ${emptyState(
+        "Squad not available yet",
+        `<p style="max-width:480px;margin:0 auto">Your team loaded, but there are no picks to show for a played
+        gameweek yet. This is normal between seasons or before the first deadline — your full squad, live points
+        and transfer tools will appear here automatically once a gameweek is in play.</p>`
+      )}
+    `;
+    const sw = $("#mgrSwitch", root);
+    if (sw)
+      sw.onclick = () => {
+        S.entry = null;
+        S.picks = null;
+        rerender();
+      };
     return;
   }
 
@@ -173,8 +216,14 @@ function playerCard(pick, benched) {
     ? `<span class="tag v">V</span>`
     : "";
 
+  const jersey = p.jersey
+    ? `<img class="jersey" src="${p.jersey}" alt="" loading="lazy"
+         onerror="this.style.display='none'">`
+    : "";
+
   return `<div class="plr ${benched ? "benched" : ""} ${playing ? "playing" : ""}">
     ${tag}
+    ${jersey}
     <div class="pts">${pts}</div>
     <div class="nm">${esc(p.name)}${availabilityFlag(p)}</div>
     <div class="nx">${esc(fixtureText(p.teamId, 1))}</div>

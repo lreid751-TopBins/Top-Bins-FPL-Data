@@ -632,3 +632,18 @@ textarea::placeholder { color: var(--muted-2); }
   .dbar-track { grid-column: 1 / -1; order: 3; }
   .dbar-m { grid-column: 1 / -1; order: 4; }
 }
+
+/* ---------------- Jerseys & set-piece flags (added) ---------------- */
+.plr .jersey {
+  display: block; width: 42px; height: auto; margin: 2px auto 4px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+}
+.sp-flag {
+  display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
+  font-weight: 700; letter-spacing: 0.02em; padding: 1px 4px; margin-left: 5px;
+  border-radius: 4px; border: 1px solid var(--line); color: var(--muted);
+  vertical-align: middle;
+}
+.sp-flag.pen {
+  background: var(--gold); color: #1a1200; border-color: var(--gold);
+}

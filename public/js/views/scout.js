@@ -11,6 +11,7 @@ function columns(per90) {
     { k: "pos", l: "Pos" },
     { k: "price", l: "£" },
     { k: "minutes", l: "Min" },
+    { k: "xMin", l: "xMin", help: "Expected minutes next gameweek, from recent minutes and injury flags. Descriptive, not a forecast of rotation." },
     { k: "total_points", l: "Pts" },
     { k: "form6", l: "Last 6", help: "Points in each of the last six gameweeks" },
     per90
@@ -87,7 +88,7 @@ export function renderScout(root) {
           .map((t) => `<option value="${t.id}" ${String(t.id) === String(u.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
           .join("")}
       </select>
-      <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="17" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
+      <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="15" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
       <span class="range">Min mins<input type="range" id="sMins" min="0" max="2500" step="90" value="${u.fMinMins}"><b class="mono" id="sMinsV">${u.fMinMins}</b></span>
       <button class="btn ghost" id="sWatch" aria-pressed="${u.fWatchOnly}">
         ${u.fWatchOnly ? "★ Watchlist only" : "☆ Watchlist only"}
@@ -140,12 +141,13 @@ function row(p, u, maxDefcon) {
   return `<tr>
     <td class="name">
       <button class="star ${starred ? "on" : ""}" data-star="${p.id}" aria-label="${starred ? "Remove from" : "Add to"} watchlist">${starred ? "★" : "☆"}</button>
-      ${esc(p.name)}${availabilityFlag(p)}
+      ${esc(p.name)}${availabilityFlag(p)}${setPieceFlag(p)}
     </td>
     <td class="sub-t">${p.short}</td>
     <td><span class="pos-chip pos-${p.pos}">${p.pos}</span></td>
     <td>${f1(p.price)}</td>
     <td>${Math.round(p.minutes)}</td>
+    <td>${xMinCell(p)}</td>
     <td style="color:var(--gold)">${p.total_points}</td>
     <td>${sparkline(p.formSeries, p.formMins)}</td>
     <td>${f2(u.per90 ? p.xgi90 : p.xgi)}</td>
@@ -159,6 +161,29 @@ function row(p, u, maxDefcon) {
     <td>${f1(p.ppm)}</td>
     <td><span class="plr" style="all:unset"><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span></span> <span class="sub-t">${f2(p.fdr5)}</span></td>
   </tr>`;
+}
+
+function xMinCell(p) {
+  const v = p.xMin ?? 0;
+  // Colour by rotation risk: green nailed on, gold rotation, red fringe.
+  const cls = v >= 80 ? "pos" : v >= 60 ? "" : v >= 30 ? "" : "neg";
+  const style = v >= 80 ? "color:var(--pos)" : v < 30 ? "color:var(--neg)" : "";
+  return `<span style="${style}">${v}'</span>`;
+}
+
+function setPieceFlag(p) {
+  // First-choice penalty taker is the big one; show it prominently.
+  if (p.penaltyOrder === 1) {
+    return ` <span class="sp-flag pen" title="First-choice penalty taker">P</span>`;
+  }
+  // On penalties but not first, or on direct free-kicks — a smaller nod.
+  if (p.penaltyOrder && p.penaltyOrder <= 2) {
+    return ` <span class="sp-flag" title="Penalty order ${p.penaltyOrder}">P${p.penaltyOrder}</span>`;
+  }
+  if (p.freekickOrder === 1) {
+    return ` <span class="sp-flag" title="First-choice direct free-kicks">FK</span>`;
+  }
+  return "";
 }
 
 function priceMoveCell(p) {

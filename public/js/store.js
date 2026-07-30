@@ -33,7 +33,7 @@ export const S = {
     per90: false,
     fPos: "",
     fTeam: "",
-    fMaxPrice: 17,
+    fMaxPrice: 15,
     fMinMins: 270,
     fQuery: "",
     fWatchOnly: false,
@@ -203,6 +203,15 @@ function buildPlayers(boot) {
         gi90: per90(goals + assists),
         overperf: goals + assists - xgi,
         ppm: price > 0 ? n(e.total_points) / price : 0,
+        // Official kit image, keyed by team code. "-66" is the standard shirt size.
+        jersey: S.teams[e.team]?.code
+          ? `https://resources.premierleague.com/premierleague/photos/players/110x140/shirt_${S.teams[e.team].code}-66.png`
+          : "",
+        // Set-piece and penalty order: 1 = first choice. Lower is better;
+        // null means not on the list. Big signal for attacking returns.
+        penaltyOrder: e.penalties_order === null ? null : n(e.penalties_order),
+        cornersOrder: e.corners_and_indirect_freekicks_order === null ? null : n(e.corners_and_indirect_freekicks_order),
+        freekickOrder: e.direct_freekicks_order === null ? null : n(e.direct_freekicks_order),
         formSeries: [],
         formMins: [],
       };
@@ -219,7 +228,54 @@ function attachForm() {
     p.formMins = minutes?.[p.id] || [];
     const played = p.formSeries.filter((v, i) => v !== null && (p.formMins[i] ?? 0) > 0);
     p.form6 = played.length ? played.reduce((a, b) => a + b, 0) : 0;
+    p.xMin = expectedMinutes(p);
   });
+}
+
+/**
+ * Expected minutes next gameweek (xMin), 0–90.
+ *
+ * This is a DESCRIPTIVE estimate, not a forecast — it reads what a player's
+ * minutes have been doing lately and adjusts for known availability. It can't
+ * see a planned rotation the manager hasn't announced. Built entirely from
+ * data the FPL API already gives us:
+ *
+ *   1. Recency-weighted average of recent gameweek minutes (most recent counts
+ *      most), which captures a player working his way in or out of the side.
+ *   2. Scaled down by the official "chance of playing next round" when a player
+ *      is flagged injured or doubtful.
+ *   3. Fully sidelined players (status 'i','s','u') return 0.
+ */
+function expectedMinutes(p) {
+  // Suspended, injured-out, or unavailable — no minutes coming.
+  if (["i", "s", "u"].includes(p.status)) return 0;
+
+  const mins = (p.formMins || []).filter((m) => m !== null);
+  let base;
+
+  if (mins.length) {
+    // Weight recent gameweeks more heavily: the last game counts most.
+    let weightedSum = 0;
+    let weightTotal = 0;
+    mins.forEach((m, i) => {
+      const w = i + 1; // oldest = 1, newest = highest
+      weightedSum += n(m) * w;
+      weightTotal += w;
+    });
+    base = weightedSum / weightTotal;
+  } else {
+    // No recent gameweek data (e.g. early season) — fall back to the season
+    // average, from total minutes over appearances.
+    base = p.starts > 0 ? Math.min(90, p.minutes / Math.max(1, p.starts)) : 0;
+  }
+
+  // Apply the availability flag. 'chance' is a 0–100 percentage, or null when
+  // the player is fully fit.
+  if (p.status === "d" && typeof p.chance === "number") {
+    base *= p.chance / 100;
+  }
+
+  return Math.max(0, Math.min(90, Math.round(base)));
 }
 
 function attachPrices() {
