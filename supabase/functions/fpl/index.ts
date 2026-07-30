@@ -7,7 +7,14 @@
  *   ALLOWED_ORIGINS   comma-separated list, or * for any
  */
 
-import { createHandler, type Deps, type JournalRow, type NewDecision } from "./handler.ts";
+import {
+  createHandler,
+  type Deps,
+  type JournalRow,
+  type NewDecision,
+  type SquadRow,
+  type NewSquad,
+} from "./handler.ts";
 
 const FPL = "https://fantasy.premierleague.com/api";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
@@ -77,6 +84,58 @@ const deps: Deps = {
     });
     if (!res.ok) throw new Error(`price snapshot failed (${res.status})`);
     return body.length;
+  },
+
+  async squadList(tokenHash) {
+    const res = await fetch(
+      `${REST}/squads?token_hash=eq.${tokenHash}` +
+        `&select=id,created_at,updated_at,name,picks,captain,vice,note` +
+        `&order=updated_at.desc&limit=50`,
+      { headers: restHeaders }
+    );
+    if (!res.ok) throw new Error(`squad read failed (${res.status})`);
+    return (await res.json()) as SquadRow[];
+  },
+
+  async squadInsert(tokenHash, row: NewSquad) {
+    const res = await fetch(`${REST}/squads`, {
+      method: "POST",
+      headers: { ...restHeaders, Prefer: "return=representation" },
+      body: JSON.stringify({ ...row, token_hash: tokenHash }),
+    });
+    if (!res.ok) throw new Error(`squad write failed (${res.status})`);
+    return ((await res.json()) as SquadRow[])[0];
+  },
+
+  async squadUpdate(tokenHash, id, row: NewSquad) {
+    const res = await fetch(
+      `${REST}/squads?id=eq.${id}&token_hash=eq.${tokenHash}`,
+      {
+        method: "PATCH",
+        headers: { ...restHeaders, Prefer: "return=representation" },
+        body: JSON.stringify({ ...row, updated_at: new Date().toISOString() }),
+      }
+    );
+    if (!res.ok) return null;
+    const rows = (await res.json()) as SquadRow[];
+    return rows.length ? rows[0] : null;
+  },
+
+  async squadDelete(tokenHash, id) {
+    const res = await fetch(
+      `${REST}/squads?id=eq.${id}&token_hash=eq.${tokenHash}`,
+      { method: "DELETE", headers: { ...restHeaders, Prefer: "return=representation" } }
+    );
+    if (!res.ok) return false;
+    return ((await res.json()) as unknown[]).length > 0;
+  },
+
+  async squadCount(tokenHash) {
+    const res = await fetch(`${REST}/squads?token_hash=eq.${tokenHash}&select=id`, {
+      headers: { ...restHeaders, Prefer: "count=exact", Range: "0-0" },
+    });
+    const total = Number((res.headers.get("content-range") ?? "").split("/")[1]);
+    return Number.isFinite(total) ? total : 0;
   },
 
   async journalList(tokenHash) {

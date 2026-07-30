@@ -3,8 +3,8 @@
  *   deno test --allow-none supabase/functions/fpl/handler.test.ts
  */
 import {
-  createHandler, _resetMemory, validateDecision,
-  type Deps, type JournalRow, type NewDecision,
+  createHandler, _resetMemory, validateDecision, validateSquad,
+  type Deps, type JournalRow, type NewDecision, type SquadRow, type NewSquad,
 } from "./handler.ts";
 
 function assert(cond: unknown, msg: string): asserts cond {
@@ -33,6 +33,7 @@ interface Harness {
   store: Map<string, { payload: unknown; fetchedAt: number }>;
   prices: Array<{ element: number; now_cost: number; web_name: string }>;
   journal: Map<string, JournalRow[]>;
+  squads: Map<string, SquadRow[]>;
   clock: { t: number };
   fail: { on: boolean };
 }
@@ -42,7 +43,9 @@ function harness(overrides: Partial<Deps> = {}): Harness {
   const store = new Map<string, { payload: unknown; fetchedAt: number }>();
   const prices: Array<{ element: number; now_cost: number; web_name: string }> = [];
   const journal = new Map<string, JournalRow[]>();
+  const squads = new Map<string, SquadRow[]>();
   let nextId = 0;
+  let nextSquadId = 0;
   const clock = { t: 1_000_000 };
   const fail = { on: false };
 
@@ -77,6 +80,37 @@ function harness(overrides: Partial<Deps> = {}): Harness {
       prices.push(...rows);
       return rows.length;
     },
+    async squadList(tokenHash) {
+      return [...(squads.get(tokenHash) ?? [])];
+    },
+    async squadInsert(tokenHash, row: NewSquad) {
+      const saved: SquadRow = {
+        ...row,
+        id: `10000000-0000-4000-8000-${String(++nextSquadId).padStart(12, "0")}`,
+        created_at: new Date(clock.t).toISOString(),
+        updated_at: new Date(clock.t).toISOString(),
+      };
+      const list = squads.get(tokenHash) ?? [];
+      list.unshift(saved);
+      squads.set(tokenHash, list);
+      return saved;
+    },
+    async squadUpdate(tokenHash, id, row: NewSquad) {
+      const list = squads.get(tokenHash) ?? [];
+      const idx = list.findIndex((sq) => sq.id === id);
+      if (idx < 0) return null;
+      list[idx] = { ...list[idx], ...row, updated_at: new Date(clock.t).toISOString() };
+      return list[idx];
+    },
+    async squadDelete(tokenHash, id) {
+      const list = squads.get(tokenHash) ?? [];
+      const before = list.length;
+      squads.set(tokenHash, list.filter((sq) => sq.id !== id));
+      return (squads.get(tokenHash) ?? []).length < before;
+    },
+    async squadCount(tokenHash) {
+      return (squads.get(tokenHash) ?? []).length;
+    },
     async journalList(tokenHash) {
       return [...(journal.get(tokenHash) ?? [])];
     },
@@ -106,7 +140,7 @@ function harness(overrides: Partial<Deps> = {}): Harness {
     ...overrides,
   };
 
-  return { deps, calls, store, prices, journal, clock, fail };
+  return { deps, calls, store, prices, journal, squads, clock, fail };
 }
 
 const GET = (path: string, init?: RequestInit) =>
@@ -521,4 +555,115 @@ Deno.test("points endpoint guards its range", async () => {
   assertEquals((await handle(GET("/points?from=5"))).status, 400, "missing end");
   assertEquals((await handle(GET("/points?from=9&to=4"))).status, 400, "reversed range");
   assertEquals((await handle(GET("/points?from=1&to=38"))).status, 400, "range too wide");
+});
+
+
+/* ------------------------------------------------------------------
+   Planner squads
+------------------------------------------------------------------ */
+
+const validPicks = () =>
+  Array.from({ length: 15 }, (_, i) => ({ id: i + 1, slot: i + 1 }));
+
+const sampleSquad = (over: Partial<NewSquad> = {}): NewSquad => ({
+  name: "Haaland build",
+  picks: validPicks(),
+  captain: 1,
+  vice: 2,
+  note: "GW1 wildcard draft",
+  ...over,
+});
+
+const squadReq = (path: string, method: string, token: string | null, body?: unknown) =>
+  new Request(`https://x.supabase.co/functions/v1/fpl${path}`, {
+    method,
+    headers: {
+      ...(token ? { "x-journal-token": token } : {}),
+      ...(body !== undefined ? { "content-type": "application/json" } : {}),
+    },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+
+Deno.test("squads require a token", async () => {
+  const h = harness();
+  const res = await createHandler(h.deps)(squadReq("/squads", "GET", null));
+  assertEquals(res.status, 401);
+});
+
+Deno.test("a squad round-trips and is scoped to its token", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+
+  const created = await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad()));
+  assertEquals(created.status, 201);
+  const { squad } = await created.json() as { squad: SquadRow };
+  assertEquals(squad.name, "Haaland build");
+  assertEquals(squad.picks.length, 15);
+
+  const mine = await (await handle(squadReq("/squads", "GET", TOKEN_A))).json() as { squads: SquadRow[] };
+  assertEquals(mine.squads.length, 1);
+
+  const theirs = await (await handle(squadReq("/squads", "GET", TOKEN_B))).json() as { squads: SquadRow[] };
+  assertEquals(theirs.squads.length, 0);
+});
+
+Deno.test("multiple named squads coexist for one token", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+  await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad({ name: "Haaland build" })));
+  await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad({ name: "Triple City" })));
+  await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad({ name: "Differential punt" })));
+  const mine = await (await handle(squadReq("/squads", "GET", TOKEN_A))).json() as { squads: SquadRow[] };
+  assertEquals(mine.squads.length, 3, "all three should be kept side by side");
+});
+
+Deno.test("squad validation rejects malformed shapes", () => {
+  const bad: Array<[string, Partial<NewSquad> | Record<string, unknown>]> = [
+    ["too_many_picks", { picks: Array.from({ length: 16 }, (_, i) => ({ id: i + 1, slot: i + 1 })) }],
+    ["duplicate_player", { picks: [{ id: 5, slot: 1 }, { id: 5, slot: 2 }] }],
+    ["duplicate_slot", { picks: [{ id: 1, slot: 3 }, { id: 2, slot: 3 }] }],
+    ["bad_slot", { picks: [{ id: 1, slot: 99 }] }],
+    ["captain_not_in_squad", { picks: validPicks(), captain: 999 }],
+  ];
+  for (const [expected, patch] of bad) {
+    const r = validateSquad(sampleSquad(patch as Partial<NewSquad>));
+    if (r.ok) throw new Error(`${expected}: expected rejection`);
+    assertEquals(r.error, expected);
+  }
+});
+
+Deno.test("a squad can be updated in place, only by its owner", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+  const created = await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad()));
+  const id = (await created.json() as { squad: SquadRow }).squad.id;
+
+  const edited = await handle(squadReq(`/squads/${id}`, "PUT", TOKEN_A, sampleSquad({ name: "Renamed" })));
+  assertEquals(edited.status, 200);
+  assertEquals((await edited.json() as { squad: SquadRow }).squad.name, "Renamed");
+
+  const asOther = await handle(squadReq(`/squads/${id}`, "PUT", TOKEN_B, sampleSquad({ name: "Hijack" })));
+  assertEquals(asOther.status, 404, "another token must not edit it");
+});
+
+Deno.test("a squad can be deleted only by its owner", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+  const created = await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad()));
+  const id = (await created.json() as { squad: SquadRow }).squad.id;
+
+  const asOther = await handle(squadReq(`/squads/${id}`, "DELETE", TOKEN_B));
+  assertEquals(asOther.status, 404);
+
+  const asOwner = await handle(squadReq(`/squads/${id}`, "DELETE", TOKEN_A));
+  assertEquals(asOwner.status, 200);
+});
+
+Deno.test("squad list is capped", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+  h.deps.squadCount = async () => 50;
+  const res = await handle(squadReq("/squads", "POST", TOKEN_A, sampleSquad()));
+  assertEquals(res.status, 409);
+  assertEquals((await res.json()).error, "too_many_squads");
 });

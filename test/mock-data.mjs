@@ -14,7 +14,7 @@ const rnd = (seed => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2
 const ri = (a, b) => Math.floor(a + rnd() * (b - a + 1));
 
 const teams = TEAMS.map((name, i) => ({
-  id: i + 1, name, short_name: SHORTS[i],
+  id: i + 1, name, short_name: SHORTS[i], code: 100 + i,
   strength_attack_home: ri(1000, 1400), strength_attack_away: ri(1000, 1400),
   strength_defence_home: ri(1000, 1400), strength_defence_away: ri(1000, 1400),
   strength_overall_home: ri(1000, 1400), strength_overall_away: ri(1000, 1400),
@@ -52,6 +52,9 @@ for (const t of teams) {
         first_name: "Test", second_name: `${t.short_name}${j}`,
         team: t.id, element_type: type,
         now_cost: ri(38, 145), status: rnd() > 0.94 ? "d" : "a",
+        penalties_order: j === 0 && type >= 3 ? 1 : null,
+        corners_and_indirect_freekicks_order: null,
+        direct_freekicks_order: j === 1 && type === 3 ? 1 : null,
         news: rnd() > 0.94 ? "Knock - 75% chance of playing" : "",
         chance_of_playing_next_round: 100,
         minutes: mins, starts: Math.floor(mins / 90),

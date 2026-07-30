@@ -29,6 +29,8 @@ const TYPES = {
 
 // The journal is stateful, so the preview keeps it in memory for the session.
 let journal = seedDecisions.map((d) => ({ ...d }));
+let squads = [];
+let squadSeq = 0;
 
 function readBody(req) {
   return new Promise((resolve) => {
@@ -57,6 +59,31 @@ const server = http.createServer(async (req, res) => {
     const elements = (url.searchParams.get("elements") ?? "")
       .split(",").map(Number).filter(Boolean);
     return send(200, pointsPayload(from, to, elements));
+  }
+
+  if (url.pathname.startsWith("/api/squads")) {
+    if (!req.headers["x-journal-token"]) return send(401, { error: "missing_journal_token" });
+    if (req.method === "GET") return send(200, { squads });
+    if (req.method === "POST") {
+      const body = await readBody(req);
+      const squad = { ...body, id: `10000000-0000-4000-8000-${String(++squadSeq).padStart(12,"0")}`,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      squads = [squad, ...squads];
+      return send(201, { squad });
+    }
+    if (req.method === "PUT") {
+      const id = url.pathname.split("/").pop();
+      const body = await readBody(req);
+      const i = squads.findIndex((s2) => s2.id === id);
+      if (i < 0) return send(404, { error: "not_found" });
+      squads[i] = { ...squads[i], ...body, updated_at: new Date().toISOString() };
+      return send(200, { squad: squads[i] });
+    }
+    if (req.method === "DELETE") {
+      const id = url.pathname.split("/").pop();
+      squads = squads.filter((s2) => s2.id !== id);
+      return send(200, { ok: true });
+    }
   }
 
   if (url.pathname.startsWith("/api/journal")) {

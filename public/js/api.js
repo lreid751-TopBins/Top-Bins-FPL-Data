@@ -74,6 +74,28 @@ export const api = {
     return get(`${BASE}/points?${q}`, { ttl: 30_000 });
   },
 
+  squads: {
+    list: () =>
+      get(`${BASE}/squads`, { headers: { "x-journal-token": journalToken() } }),
+    add: (squad) =>
+      get(`${BASE}/squads`, {
+        method: "POST",
+        headers: { "x-journal-token": journalToken(), "content-type": "application/json" },
+        body: JSON.stringify(squad),
+      }),
+    update: (id, squad) =>
+      get(`${BASE}/squads/${id}`, {
+        method: "PUT",
+        headers: { "x-journal-token": journalToken(), "content-type": "application/json" },
+        body: JSON.stringify(squad),
+      }),
+    remove: (id) =>
+      get(`${BASE}/squads/${id}`, {
+        method: "DELETE",
+        headers: { "x-journal-token": journalToken() },
+      }),
+  },
+
   journal: {
     list: () =>
       get(`${BASE}/journal`, { headers: { "x-journal-token": journalToken() } }),

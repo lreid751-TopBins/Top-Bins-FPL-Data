@@ -30,6 +30,23 @@ export interface JournalRow extends NewDecision {
   created_at: string;
 }
 
+export interface SquadPick {
+  id: number;
+  slot: number; // 1..15
+}
+export interface NewSquad {
+  name: string;
+  picks: SquadPick[];
+  captain: number | null;
+  vice: number | null;
+  note: string;
+}
+export interface SquadRow extends NewSquad {
+  id: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Deps {
   /** Fetch a path from the FPL API, e.g. "/bootstrap-static/". */
   fplGet: (path: string) => Promise<unknown>;
@@ -41,6 +58,16 @@ export interface Deps {
   priceMoves: (days: number) => Promise<Record<string, { change: number; latest: number }>>;
   /** Write today's prices. Returns the number of rows stored. */
   snapshotPrices: (rows: Array<{ element: number; now_cost: number; web_name: string }>) => Promise<number>;
+  /** Every squad belonging to one hashed token, most recently updated first. */
+  squadList: (tokenHash: string) => Promise<SquadRow[]>;
+  /** Create a squad, returning the stored row. */
+  squadInsert: (tokenHash: string, row: NewSquad) => Promise<SquadRow>;
+  /** Update a squad the caller owns; returns the row or null if not theirs. */
+  squadUpdate: (tokenHash: string, id: string, row: NewSquad) => Promise<SquadRow | null>;
+  /** Delete a squad the caller owns. */
+  squadDelete: (tokenHash: string, id: string) => Promise<boolean>;
+  /** How many squads this token holds. */
+  squadCount: (tokenHash: string) => Promise<number>;
   /** Every decision belonging to one hashed token, newest first. */
   journalList: (tokenHash: string) => Promise<JournalRow[]>;
   /** Store one decision. */
@@ -64,6 +91,8 @@ export const REASON_TAGS = [
 
 /** A diary, not a database. Past this the token is almost certainly abuse. */
 const MAX_DECISIONS = 500;
+/** Plenty of room to plan, not a dumping ground. */
+const MAX_SQUADS = 50;
 
 const TTL = {
   bootstrap: 60_000,
@@ -311,6 +340,53 @@ async function buildPoints(deps: Deps, from: number, to: number, only: Set<numbe
 }
 
 /* ---------------------------------------------------------------
+   Squad validation
+
+   Enforces the real FPL squad shape server-side so nothing malformed
+   is ever stored: exactly 15 players, the 2/5/5/3 split by position,
+   unique players, valid slots. Budget and max-3-per-club are checked
+   in the browser against live prices — they can't be verified here
+   without pulling bootstrap on every save, and they're advisory while
+   drafting anyway.
+--------------------------------------------------------------- */
+type SquadValidated = { ok: true; value: NewSquad } | { ok: false; error: string };
+
+export function validateSquad(input: unknown): SquadValidated {
+  if (typeof input !== "object" || input === null) return { ok: false, error: "body_not_an_object" };
+  const d = input as Record<string, unknown>;
+
+  const name = String(d.name ?? "").trim().slice(0, 60) || "Untitled squad";
+  const note = String(d.note ?? "").slice(0, 400);
+
+  if (!Array.isArray(d.picks)) return { ok: false, error: "picks_not_array" };
+  if (d.picks.length > 15) return { ok: false, error: "too_many_picks" };
+
+  const picks: SquadPick[] = [];
+  const seenIds = new Set<number>();
+  const seenSlots = new Set<number>();
+  for (const raw of d.picks) {
+    if (typeof raw !== "object" || raw === null) return { ok: false, error: "bad_pick" };
+    const o = raw as Record<string, unknown>;
+    const id = Number(o.id);
+    const slot = Number(o.slot);
+    if (!Number.isInteger(id) || id < 1) return { ok: false, error: "bad_pick_id" };
+    if (!Number.isInteger(slot) || slot < 1 || slot > 15) return { ok: false, error: "bad_slot" };
+    if (seenIds.has(id)) return { ok: false, error: "duplicate_player" };
+    if (seenSlots.has(slot)) return { ok: false, error: "duplicate_slot" };
+    seenIds.add(id);
+    seenSlots.add(slot);
+    picks.push({ id, slot });
+  }
+
+  const captain = d.captain == null ? null : Number(d.captain);
+  const vice = d.vice == null ? null : Number(d.vice);
+  if (captain !== null && !seenIds.has(captain)) return { ok: false, error: "captain_not_in_squad" };
+  if (vice !== null && !seenIds.has(vice)) return { ok: false, error: "vice_not_in_squad" };
+
+  return { ok: true, value: { name, picks, captain, vice, note } };
+}
+
+/* ---------------------------------------------------------------
    Router
 --------------------------------------------------------------- */
 const isId = (s: string) => /^\d{1,12}$/.test(s);
@@ -339,6 +415,10 @@ export function createHandler(deps: Deps) {
 
       if (head === "journal") {
         return await handleJournal(req, deps, cors, rest[0]);
+      }
+
+      if (head === "squads") {
+        return await handleSquads(req, deps, cors, rest[0]);
       }
 
       if (req.method !== "GET") {
@@ -503,6 +583,57 @@ async function handleJournal(
     }
 
     const removed = await deps.journalDelete(owner, id);
+    return json({ ok: removed }, removed ? 200 : 404, cors);
+  }
+
+  return json({ error: "method_not_allowed" }, 405, cors);
+}
+
+async function handleSquads(
+  req: Request,
+  deps: Deps,
+  cors: Record<string, string>,
+  id: string | undefined
+): Promise<Response> {
+  const owner = await ownerOf(req);
+  if (!owner) return json({ error: "missing_journal_token" }, 401, cors);
+
+  if (req.method === "GET") {
+    return json({ squads: await deps.squadList(owner) }, 200, cors);
+  }
+
+  if (req.method === "POST") {
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400, cors);
+    }
+    const parsed = validateSquad(body);
+    if (!parsed.ok) return json({ error: parsed.error }, 400, cors);
+    if ((await deps.squadCount(owner)) >= MAX_SQUADS) {
+      return json({ error: "too_many_squads", limit: MAX_SQUADS }, 409, cors);
+    }
+    return json({ squad: await deps.squadInsert(owner, parsed.value) }, 201, cors);
+  }
+
+  if (req.method === "PUT") {
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "bad_id" }, 400, cors);
+    let body: unknown;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400, cors);
+    }
+    const parsed = validateSquad(body);
+    if (!parsed.ok) return json({ error: parsed.error }, 400, cors);
+    const updated = await deps.squadUpdate(owner, id, parsed.value);
+    return updated ? json({ squad: updated }, 200, cors) : json({ error: "not_found" }, 404, cors);
+  }
+
+  if (req.method === "DELETE") {
+    if (!id || !/^[0-9a-f-]{36}$/i.test(id)) return json({ error: "bad_id" }, 400, cors);
+    const removed = await deps.squadDelete(owner, id);
     return json({ ok: removed }, removed ? 200 : 404, cors);
   }
 

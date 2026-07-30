@@ -5,12 +5,14 @@ import { renderScout } from "./views/scout.js";
 import { renderFixtures } from "./views/fixtures.js";
 import { renderTeams } from "./views/teams.js";
 import { renderJournal } from "./views/journal.js";
+import { renderPlanner } from "./views/planner.js";
 
 const PANELS = {
   squad: { el: () => $("#panel-squad"), render: renderSquad },
   scout: { el: () => $("#panel-scout"), render: renderScout },
   fixtures: { el: () => $("#panel-fixtures"), render: renderFixtures },
   teams: { el: () => $("#panel-teams"), render: renderTeams },
+  planner: { el: () => $("#panel-planner"), render: renderPlanner },
   journal: { el: () => $("#panel-journal"), render: renderJournal },
 };
 

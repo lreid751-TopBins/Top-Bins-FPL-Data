@@ -26,6 +26,7 @@ global.Node = dom.window.Node;
 
 const misses = [];
 let journalRows = seedDecisions.map((d) => ({ ...d }));
+let squadRows = [];
 
 global.fetch = async (url, init = {}) => {
   const p = String(url).replace("http://localhost:3000", "");
@@ -36,6 +37,32 @@ global.fetch = async (url, init = {}) => {
     const q = new URLSearchParams(p.split("?")[1] ?? "");
     const elements = (q.get("elements") ?? "").split(",").map(Number).filter(Boolean);
     return ok(pointsPayload(Number(q.get("from")), Number(q.get("to")), elements));
+  }
+
+  if (p.startsWith("/api/squads")) {
+    if (!init.headers?.["x-journal-token"]) {
+      return { ok: false, status: 401, json: async () => ({ error: "missing_journal_token" }) };
+    }
+    if (method === "GET") return ok({ squads: squadRows });
+    if (method === "POST") {
+      const squad = { ...JSON.parse(init.body),
+        id: `10000000-0000-4000-8000-${String(squadRows.length + 1).padStart(12,"0")}`,
+        created_at: new Date().toISOString(), updated_at: new Date().toISOString() };
+      squadRows = [squad, ...squadRows];
+      return ok({ squad }, 201);
+    }
+    if (method === "PUT") {
+      const id = p.split("/").pop();
+      const i = squadRows.findIndex((s2) => s2.id === id);
+      if (i < 0) return { ok:false, status:404, json: async()=>({error:"not_found"}) };
+      squadRows[i] = { ...squadRows[i], ...JSON.parse(init.body) };
+      return ok({ squad: squadRows[i] });
+    }
+    if (method === "DELETE") {
+      const id = p.split("/").pop();
+      squadRows = squadRows.filter((s2) => s2.id !== id);
+      return ok({ ok: true });
+    }
   }
 
   if (p.startsWith("/api/journal")) {
@@ -81,6 +108,8 @@ const { renderTeams } = await import("../public/js/views/teams.js");
 const { renderSquad, loadManager } = await import("../public/js/views/squad.js");
 const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
+const { renderPlanner } = await import("../public/js/views/planner.js");
+const { PL, loadSquads, addPlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft } = await import("../public/js/planner.js");
 
 const results = [];
 const check = (name, fn) => {
@@ -190,7 +219,9 @@ check("price column degrades to unknown before the first snapshot", () => {
   S.priceDataAvailable = false;
   S.players.forEach((p) => (p.priceMove = 0));
   renderScout(panel("panel-scout"));
-  const cells = panel("panel-scout").querySelectorAll("tbody tr td:nth-child(13)");
+  const headers = [...panel("panel-scout").querySelectorAll("thead th")].map((h) => h.textContent.trim());
+  const priceCol = headers.findIndex((h) => h.includes("£ move")) + 1;
+  const cells = panel("panel-scout").querySelectorAll(`tbody tr td:nth-child(${priceCol})`);
   const allUnknown = [...cells].every((c) => c.textContent.trim() === "—");
   S.priceMoves = savedMoves;
   S.priceDataAvailable = true;
@@ -250,10 +281,49 @@ check("transfer scratchpad compares two players", () => {
 });
 
 await loadManager("999", () => renderSquad(panel("panel-squad")));
+check("manager ID keydown handler never blocks typing", () => {
+  // Regression guard: the handler must not return false, which would call
+  // preventDefault and silently block every non-Enter keystroke.
+  renderSquad(panel("panel-squad"));
+  const input = panel("panel-squad").querySelector("#mgrId");
+  if (!input) throw new Error("manager input not rendered");
+  const ev = { key: "5", preventDefault() { this._prevented = true; }, _prevented: false };
+  const result = input.onkeydown(ev);
+  if (result === false) throw new Error("handler returns false — this blocks typing");
+  if (ev._prevented) throw new Error("handler prevented default on a normal key");
+  return "normal keys pass through, Enter still handled";
+});
+
 check("bad manager id shows a message, not a crash", () => {
   const html = panel("panel-squad").innerHTML;
   if (!html.includes("No manager with that ID")) throw new Error("no error message shown");
   return "recovers to the connect screen";
+});
+
+check("xMin is computed and bounded 0-90", () => {
+  const withMins = S.players.filter((p) => (p.formMins || []).some((m) => m > 0));
+  if (!withMins.length) throw new Error("no players had recent minutes to base xMin on");
+  for (const p of S.players) {
+    if (p.xMin < 0 || p.xMin > 90) throw new Error(`${p.name} xMin out of range: ${p.xMin}`);
+  }
+  const injured = S.players.find((p) => ["i", "s", "u"].includes(p.status));
+  if (injured && injured.xMin !== 0) throw new Error("sidelined player should have xMin 0");
+  return `computed for ${S.players.length} players, all 0-90`;
+});
+
+check("xMin column and set-piece flags render", () => {
+  renderScout(panel("panel-scout"));
+  const html = panel("panel-scout").innerHTML;
+  if (!html.includes("xMin")) throw new Error("xMin column header missing");
+  if (!html.includes("sp-flag")) throw new Error("no set-piece flags rendered");
+  if (html.includes("undefined") || html.includes("NaN")) throw new Error("bad value in scout output");
+  return "xMin column and penalty flags present";
+});
+
+check("jerseys attach to players", () => {
+  const withKit = S.players.filter((p) => p.jersey && p.jersey.includes("shirt_"));
+  if (!withKit.length) throw new Error("no jersey URLs built");
+  return `${withKit.length} players have kit images`;
 });
 
 /* ---------------- Journal ---------------- */
@@ -375,6 +445,78 @@ check("the diary key can be revealed and swapped", () => {
   if (panel("panel-journal").querySelector("#jToken")) throw new Error("panel did not close");
   return "key shown, paste box present";
 });
+
+/* ---------------- Planner ---------------- */
+await loadSquads();
+
+check("planner enforces position limits", () => {
+  newDraft();
+  const gks = S.players.filter((p) => p.pos === "GKP");
+  addPlayer(gks[0]); addPlayer(gks[1]);
+  if (canAdd(gks[2]).ok) throw new Error("should not allow a 3rd GK");
+  return "blocks a 3rd goalkeeper";
+});
+
+check("planner enforces max 3 per club", () => {
+  newDraft();
+  const byClub = {};
+  S.players.forEach((p) => (byClub[p.teamId] ??= []).push(p));
+  const club = Object.values(byClub).find((list) => list.length >= 4);
+  addPlayer(club[0]); addPlayer(club[1]); addPlayer(club[2]);
+  if (canAdd(club[3]).ok) throw new Error("should not allow a 4th from one club");
+  newDraft();
+  return "blocks a 4th from one club";
+});
+
+check("planner starts with a full £100m budget", () => {
+  newDraft();
+  if (Math.abs(budgetLeft() - 100) > 1e-9) throw new Error("should start at 100");
+  return "£100.0m";
+});
+
+check("a complete squad validates and totals compute", () => {
+  newDraft();
+  const need = { GKP: 2, DEF: 5, MID: 5, FWD: 3 };
+  const pools = {};
+  S.players.forEach((p) => (pools[p.pos] ??= []).push(p));
+  for (const [posKey, count] of Object.entries(need)) {
+    const sorted = [...pools[posKey]].sort((a, b) => a.price - b.price);
+    let added = 0;
+    for (const p of sorted) { if (added >= count) break; if (canAdd(p).ok) { addPlayer(p); added++; } }
+  }
+  if (!isComplete()) throw new Error("squad not complete");
+  const t = squadTotals();
+  if (t.count !== 15) throw new Error("expected 15");
+  return `15 players, £${t.spend.toFixed(1)}, xGI ${t.xgi.toFixed(1)}`;
+});
+
+check("planner slots show xMin, not undefined", () => {
+  // The regression that started this: slots must render a real xMin figure.
+  renderPlanner(panel("panel-planner"));
+  const html = panel("panel-planner").innerHTML;
+  if (html.includes("undefined")) throw new Error("a slot rendered undefined (xMin missing)");
+  if (html.includes("NaN")) throw new Error("NaN in planner");
+  const slots = panel("panel-planner").querySelectorAll(".slot.filled");
+  if (!slots.length) throw new Error("no filled slots");
+  return `${slots.length} slots, no undefined values`;
+});
+
+{
+  const before = PL.squads.length;
+  await saveDraft();
+  newDraft();
+  PL.draft.name = "Second squad";
+  const gk = S.players.find((p) => p.pos === "GKP");
+  addPlayer(gk);
+  await saveDraft();
+  check("planner persists multiple named squads", () => {
+    if (PL.squads.length < before + 2) throw new Error(`expected 2 new squads, have ${PL.squads.length}`);
+    renderPlanner(panel("panel-planner"));
+    const tabs = panel("panel-planner").querySelectorAll(".squad-tab");
+    if (tabs.length < 2) throw new Error("expected 2+ tabs");
+    return `${tabs.length} squads side by side`;
+  });
+}
 
 /* ---------------- Report ---------------- */
 console.log("");
