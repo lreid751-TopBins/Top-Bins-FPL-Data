@@ -1,4 +1,5 @@
 import { S, runDifficulty, n } from "./store.js";
+import { projectSquad } from "./projection.js";
 import { api } from "./api.js";
 
 /* =========================================================
@@ -30,6 +31,7 @@ export const PL = {
   error: "",
   formError: "",
   compareId: null,   // second squad to compare against (Part 2 uses this)
+  projWindow: 5,     // gameweeks to project over (adjustable)
 };
 
 export function blankDraft() {
@@ -144,10 +146,18 @@ export function squadTotals(draft = PL.draft, span = 5) {
     ? clubs.reduce((a, t) => a + runDifficulty(t, span, S.ui.fdrMode), 0) / clubs.length
     : 0;
 
+  const projection = projectSquad(players, {
+    span: PL.projWindow,
+    captainId: draft.captain,
+  });
+
   return {
     count: players.length,
     spend: spend(draft),
     left: budgetLeft(draft),
+    projected: projection.total,
+    projWindow: PL.projWindow,
+    projRows: projection.players,
     xgi: sum("xgi"),
     xg: sum("xg"),
     xa: sum("xa"),

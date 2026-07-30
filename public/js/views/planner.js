@@ -175,6 +175,17 @@ function totalsPanel(t, complete) {
       <span class="hint">${t.count}/15</span>
     </div>
 
+    <div class="proj-headline">
+      <div class="proj-num">${t.projected.toFixed(1)}<span class="proj-unit">pts</span></div>
+      <div class="proj-sub">
+        projected over
+        <select id="plWindow" class="proj-window" aria-label="Projection window">
+          ${[3, 5, 8, 10].map((w) => `<option value="${w}" ${w === t.projWindow ? "selected" : ""}>next ${w} GWs</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <p class="proj-note">An estimate from xGI, expected minutes and fixtures — a sensible baseline for comparing options, not a forecast of any single week.</p>
+
     ${
       complete
         ? `<div class="totals-ok">Full, legal squad ✓</div>`
@@ -294,6 +305,9 @@ function wire(root, rerender) {
         };
       });
     };
+
+  const win = $("#plWindow", root);
+  if (win) win.onchange = () => { PL.projWindow = +win.value; rerender(); };
 
   bind("#plSave", "onclick", async () => {
     PL.saving = true; rerender();

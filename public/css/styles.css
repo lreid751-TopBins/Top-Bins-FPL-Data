@@ -735,3 +735,18 @@ textarea::placeholder { color: var(--muted-2); }
 .tstat-v { font-family: "Anton", sans-serif; font-size: 20px; color: var(--gold); line-height: 1; }
 .tstat-l { font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 5px; }
 .totals-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+
+/* ---------------- Projection headline (Planner) ---------------- */
+.proj-headline {
+  border: 1px solid var(--gold-deep); border-radius: 10px; padding: 12px 14px;
+  background: linear-gradient(180deg, rgba(231,193,94,0.09), transparent);
+  margin-bottom: 10px; text-align: center;
+}
+.proj-num { font-family: "Anton", sans-serif; font-size: 38px; line-height: 1; color: var(--gold); }
+.proj-unit { font-size: 15px; color: var(--muted); margin-left: 5px; font-family: "JetBrains Mono", monospace; }
+.proj-sub { font-size: 11px; color: var(--muted); margin-top: 7px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+.proj-window {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--chalk); font-size: 11px; padding: 3px 6px; font-family: inherit;
+}
+.proj-note { font-size: 10.5px; color: var(--muted-2); margin: 0 0 12px; line-height: 1.4; }
