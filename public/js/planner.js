@@ -175,6 +175,8 @@ export async function loadSquads() {
       err.status === 401
         ? "This browser has no planner key yet. Reload and it'll make one."
         : "Couldn't reach your saved squads. Try again in a moment.";
+    // Mark as loaded even on failure so the view stops retrying in a loop.
+    PL.loaded = true;
   } finally {
     PL.loading = false;
   }

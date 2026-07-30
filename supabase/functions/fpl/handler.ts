@@ -116,7 +116,7 @@ function corsHeaders(origin: string | null, allowed: string[]): Record<string, s
   return {
     "Access-Control-Allow-Origin": ok ? (allowAll ? "*" : origin!) : "null",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "content-type, x-snapshot-key",
+    "Access-Control-Allow-Headers": "content-type, x-journal-token, x-snapshot-key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

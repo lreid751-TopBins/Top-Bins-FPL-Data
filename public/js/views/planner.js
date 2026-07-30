@@ -15,6 +15,14 @@ export function renderPlanner(root) {
     root.innerHTML = `<div class="empty"><div class="anton">Opening the planner</div>Loading your saved squads.</div>`;
     return;
   }
+  if (PL.error && !PL.squads.length) {
+    root.innerHTML = `<div class="empty"><div class="anton">Couldn't open the planner</div>
+      <p style="max-width:440px;margin:0 auto">${esc(PL.error)}</p>
+      <button class="btn primary" id="plRetry" style="margin-top:14px">Try again</button></div>`;
+    const r = $("#plRetry", root);
+    if (r) r.onclick = () => { PL.loaded = false; PL.error = ""; rerender(); };
+    return;
+  }
 
   const totals = squadTotals();
   const pos = countByPosition();

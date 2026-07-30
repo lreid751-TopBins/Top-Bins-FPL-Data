@@ -326,6 +326,21 @@ Deno.test("answers CORS preflight and honours an origin allowlist", async () => 
   );
 });
 
+Deno.test("preflight allows the journal/squad token header", async () => {
+  const h = harness();
+  const res = await createHandler(h.deps)(
+    new Request("https://x.supabase.co/functions/v1/fpl/squads", {
+      method: "OPTIONS",
+      headers: { origin: "https://fpl.topbinswithtwins.com" },
+    })
+  );
+  const allowed = res.headers.get("Access-Control-Allow-Headers") ?? "";
+  if (!allowed.includes("x-journal-token")) {
+    throw new Error("x-journal-token must be in the allowed headers or the browser blocks it");
+  }
+  assertEquals(res.status, 204);
+});
+
 Deno.test("health check needs no upstream", async () => {
   const h = harness();
   const res = await createHandler(h.deps)(GET("/health"));
