@@ -57,6 +57,24 @@ export function fixtureStrip(teamId, span = 5, mode = null) {
     .join("");
 }
 
+/* ---------------- Fixture chips (labeled, for cards) ----------------
+   Same difficulty colouring as fixtureStrip, but with the opponent and
+   home/away printed on the chip instead of only in a hover title. */
+export function fixtureChips(teamId, span = 5, mode = null) {
+  const m = mode || S.ui.fdrMode;
+  return upcoming(teamId, span)
+    .map((r) => {
+      if (!r.list.length) return `<span class="fxc cell blank" title="GW${r.gw}: blank">–</span>`;
+      const f = r.list[0];
+      const d = difficultyOf(f, m);
+      const opp = S.teams[f.opp]?.short || "?";
+      const ha = f.home ? "H" : "A";
+      const dbl = r.list.length > 1 ? " +1" : "";
+      return `<span class="fxc cell d${d}" title="GW${r.gw}: ${opp} (${ha})${dbl}">${esc(opp)}<i>${ha}</i></span>`;
+    })
+    .join("");
+}
+
 /** Text form: "BOU(H) · LIV(A) · ..." */
 export function fixtureText(teamId, span = 3) {
   return upcoming(teamId, span)

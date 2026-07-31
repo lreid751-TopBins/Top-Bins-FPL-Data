@@ -574,6 +574,15 @@ check("planner slots show xMin, not undefined", () => {
   return `${slots.length} slots, no undefined values`;
 });
 
+check("planner fixture chips show the opponent, not just a colour", () => {
+  renderPlanner(panel("panel-planner"));
+  const chips = panel("panel-planner").querySelectorAll(".fxc");
+  if (!chips.length) throw new Error("no fixture chips rendered");
+  const withText = [...chips].filter((c) => c.textContent.trim().length > 0);
+  if (withText.length !== chips.length) throw new Error("some fixture chips have no visible opponent text");
+  return `${chips.length} chips, opponents visible`;
+});
+
 check("squad table view shows the same 15 with a remove action", () => {
   PL.squadView = "table";
   renderPlanner(panel("panel-planner"));

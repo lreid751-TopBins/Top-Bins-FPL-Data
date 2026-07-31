@@ -8,7 +8,7 @@ import {
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
-import { $, $$, esc, fixtureStrip, availabilityFlag, sparkline } from "../ui.js";
+import { $, $$, esc, fixtureChips, availabilityFlag, sparkline } from "../ui.js";
 import { divergingBars } from "../charts.js";
 
 export function renderPlanner(root) {
@@ -173,7 +173,7 @@ function squadTableRow(p) {
     <td>${f2(p.xg)}</td>
     <td>${f2(p.xa)}</td>
     <td>${Math.round(p.defcon)}</td>
-    <td><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span></td>
+    <td><span style="display:inline-flex;gap:3px">${fixtureChips(p.teamId, 5)}</span></td>
     <td><button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button></td>
   </tr>`;
 }
@@ -194,7 +194,7 @@ function filledSlot(p) {
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
-    <div class="slot-fx">${fixtureStrip(p.teamId, 5)}</div>
+    <div class="slot-fx">${fixtureChips(p.teamId, 5)}</div>
   </div>`;
 }
 
@@ -263,6 +263,7 @@ function lineupSlot(p, starting) {
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
+    <div class="slot-fx">${fixtureChips(p.teamId, 5)}</div>
     ${
       starting
         ? `<div class="slot-cap">

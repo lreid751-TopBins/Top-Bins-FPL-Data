@@ -298,6 +298,15 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   color: var(--muted-2); font-size: 10px;
 }
 .cell.dbl { box-shadow: inset 0 0 0 2px var(--gold); }
+
+/* Fixture chip: a shrunk .cell for cards and table cells - same difficulty
+   colours, small enough to sit five-in-a-row next to a player. */
+.fxc {
+  display: inline-flex; min-height: 0; width: 26px; height: 24px;
+  border-radius: 4px; padding: 2px 0; font-size: 8.5px; font-weight: 700;
+  letter-spacing: 0.01em; gap: 1px;
+}
+.fxc i { font-style: normal; font-size: 7px; opacity: 0.8; }
 .legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: 11px; color: var(--muted); }
 .legend .swatches { display: flex; gap: 3px; }
 .legend .sw { width: 22px; height: 14px; border-radius: 3px; }
@@ -491,6 +500,8 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   .tab { padding: 10px 12px; font-size: 12px; }
   .board { padding: 14px 12px; }
   .plr { width: 88px; }
+  .slot { width: 100px; min-height: 128px; }
+  .slot-jersey { width: 36px; }
   .pl-six { width: 130px; height: 26px; }
   .pl-box { width: 220px; height: 56px; }
   .pl-circle { width: 90px; height: 90px; }
@@ -720,10 +731,10 @@ textarea::placeholder { color: var(--muted-2); }
 .pos-rows { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
 .pos-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
-.slot-strip { display: flex; gap: 8px; flex-wrap: wrap; }
+.slot-strip { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
 .slot {
-  width: 108px; min-height: 132px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--panel); padding: 7px; position: relative; display: flex;
+  width: 128px; min-height: 150px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); padding: 8px; position: relative; display: flex;
   flex-direction: column; align-items: center; text-align: center;
 }
 .slot.empty {
@@ -737,8 +748,8 @@ textarea::placeholder { color: var(--muted-2); }
 .cap-badge { font-size: 9px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
 .cap-badge.c { background: var(--gold); color: #1a1200; }
 .cap-badge.v { background: var(--raise); color: var(--gold); border: 1px solid var(--line); }
-.slot-jersey { width: 34px; height: auto; margin: 2px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
-.slot-name { font-size: 11.5px; font-weight: 600; line-height: 1.1; margin-top: 2px;
+.slot-jersey { width: 46px; height: auto; margin: 2px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.slot-name { font-size: 12px; font-weight: 600; line-height: 1.1; margin-top: 4px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .slot-meta { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
 .slot-stats { display: flex; gap: 6px; font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
