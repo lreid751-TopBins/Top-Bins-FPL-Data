@@ -88,7 +88,7 @@ export function renderScout(root) {
           .map((t) => `<option value="${t.id}" ${String(t.id) === String(u.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
           .join("")}
       </select>
-      <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="15" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
+      <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="17" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
       <span class="range">Min mins<input type="range" id="sMins" min="0" max="2500" step="90" value="${u.fMinMins}"><b class="mono" id="sMinsV">${u.fMinMins}</b></span>
       <button class="btn ghost" id="sWatch" aria-pressed="${u.fWatchOnly}">
         ${u.fWatchOnly ? "★ Watchlist only" : "☆ Watchlist only"}

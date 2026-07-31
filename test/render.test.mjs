@@ -327,6 +327,14 @@ check("xMin column and set-piece flags render", () => {
 check("jerseys attach to players", () => {
   const withKit = S.players.filter((p) => p.jersey && p.jersey.includes("shirt_"));
   if (!withKit.length) throw new Error("no jersey URLs built");
+  // resources.premierleague.com 404s for this path (S3 AccessDenied) - the FPL
+  // site itself serves shirts from fantasy.premierleague.com's dist folder.
+  // Regression: jerseys silently never rendered in production until this was caught.
+  const wrongHost = S.players.find((p) => p.jersey && p.jersey.includes("resources.premierleague.com"));
+  if (wrongHost) throw new Error(`jersey URL points at the wrong host: ${wrongHost.jersey}`);
+  if (!withKit.every((p) => p.jersey.startsWith("https://fantasy.premierleague.com/"))) {
+    throw new Error("jersey URL isn't pointing at fantasy.premierleague.com");
+  }
   return `${withKit.length} players have kit images`;
 });
 

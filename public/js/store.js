@@ -33,7 +33,7 @@ export const S = {
     per90: false,
     fPos: "",
     fTeam: "",
-    fMaxPrice: 15,
+    fMaxPrice: 17,
     fMinMins: 270,
     fQuery: "",
     fWatchOnly: false,
@@ -204,8 +204,10 @@ function buildPlayers(boot) {
         overperf: goals + assists - xgi,
         ppm: price > 0 ? n(e.total_points) / price : 0,
         // Official kit image, keyed by team code. "-66" is the standard shirt size.
+        // Note: resources.premierleague.com 404s for this path — the FPL site itself
+        // serves shirts from fantasy.premierleague.com's static dist folder.
         jersey: S.teams[e.team]?.code
-          ? `https://resources.premierleague.com/premierleague/photos/players/110x140/shirt_${S.teams[e.team].code}-66.png`
+          ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${S.teams[e.team].code}-66.png`
           : "",
         // Set-piece and penalty order: 1 = first choice. Lower is better;
         // null means not on the list. Big signal for attacking returns.
