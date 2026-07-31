@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 
-import { MOCK, CURRENT_GW, squadPicks, seedDecisions, pointsPayload } from "./mock-data.mjs";
+import { MOCK, CURRENT_GW, squadPicks, seedDecisions, pointsPayload, teamsWindowPayload } from "./mock-data.mjs";
 
 /* ---------------- jsdom harness ---------------- */
 const html = fs.readFileSync(path.join(root, "public/index.html"), "utf8");
@@ -37,6 +37,11 @@ global.fetch = async (url, init = {}) => {
     const q = new URLSearchParams(p.split("?")[1] ?? "");
     const elements = (q.get("elements") ?? "").split(",").map(Number).filter(Boolean);
     return ok(pointsPayload(Number(q.get("from")), Number(q.get("to")), elements));
+  }
+
+  if (p.startsWith("/api/teams-window")) {
+    const q = new URLSearchParams(p.split("?")[1] ?? "");
+    return ok(teamsWindowPayload(Number(q.get("from")), Number(q.get("to"))));
   }
 
   if (p.startsWith("/api/squads")) {
@@ -259,6 +264,33 @@ check("teams table renders", () => {
   if (rows.length !== 20) throw new Error(`expected 20 rows, got ${rows.length}`);
   if (panel("panel-teams").innerHTML.includes("NaN")) throw new Error("NaN in teams table");
   return `${rows.length} rows`;
+});
+
+check("teams tab shows a loading state while a gameweek window fetches", () => {
+  S.ui.teamsWindowGws = 4;
+  renderTeams(panel("panel-teams"));
+  const html = panel("panel-teams").innerHTML;
+  if (!html.includes("Loading GW")) throw new Error("expected a loading hint while the window fetch is in flight");
+  const rows = panel("panel-teams").querySelectorAll("tbody tr");
+  if (rows.length !== 20) throw new Error("should still show all 20 teams (season totals) while loading");
+  return "loading hint shown, table still usable";
+});
+
+await new Promise((resolve) => setTimeout(resolve, 20));
+
+check("teams tab loads windowed data and updates the range shown", () => {
+  renderTeams(panel("panel-teams"));
+  const html = panel("panel-teams").innerHTML;
+  if (html.includes("Loading GW")) throw new Error("window fetch never resolved");
+  if (!html.includes(`GW${CURRENT_GW - 3}–${CURRENT_GW}`)) {
+    throw new Error(`expected the GW${CURRENT_GW - 3}–${CURRENT_GW} range in the hint text`);
+  }
+  if (html.includes("undefined") || html.includes("NaN")) {
+    throw new Error("undefined/NaN leaked into the windowed table");
+  }
+  S.ui.teamsWindowGws = 0;
+  renderTeams(panel("panel-teams"));
+  return `GW${CURRENT_GW - 3}–${CURRENT_GW} loaded, reset to season to date`;
 });
 
 check("xGC estimate is plausible", () => {

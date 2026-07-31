@@ -10,7 +10,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MOCK, pointsPayload, seedDecisions, CURRENT_GW } from "./mock-data.mjs";
+import { MOCK, pointsPayload, teamsWindowPayload, seedDecisions, CURRENT_GW } from "./mock-data.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, "../public");
@@ -59,6 +59,12 @@ const server = http.createServer(async (req, res) => {
     const elements = (url.searchParams.get("elements") ?? "")
       .split(",").map(Number).filter(Boolean);
     return send(200, pointsPayload(from, to, elements));
+  }
+
+  if (url.pathname === "/api/teams-window") {
+    const from = Number(url.searchParams.get("from"));
+    const to = Number(url.searchParams.get("to"));
+    return send(200, teamsWindowPayload(from, to));
   }
 
   if (url.pathname.startsWith("/api/squads")) {

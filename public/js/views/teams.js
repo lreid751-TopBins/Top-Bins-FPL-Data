@@ -1,5 +1,8 @@
 import { S, runDifficulty, n, f1, f2, signed } from "../store.js";
+import { api } from "../api.js";
 import { $, $$, esc, th, fixtureStrip, statCard } from "../ui.js";
+
+const WINDOW_OPTIONS = [0, 4, 6, 8];
 
 const COLS = [
   { k: "name", l: "Team" },
@@ -16,7 +19,20 @@ const COLS = [
   { k: "fdr5", l: "Next 5" },
 ];
 
-function aggregate() {
+// Windowed xG/xA/xGC/DEFCON need a fetch — bootstrap only ever gives season
+// totals for those. Goals/clean sheets come from fixtures the client already
+// has, so those stay accurate even while the fetch is in flight.
+let win = { from: 0, to: 0, data: null, loading: false, error: "" };
+
+function windowRange() {
+  const gws = S.ui.teamsWindowGws || 0;
+  if (!gws) return null;
+  const to = S.currentGw || 1;
+  const from = Math.max(1, to - gws + 1);
+  return { from, to };
+}
+
+function aggregate(range) {
   const acc = {};
   S.teamList.forEach((t) => {
     acc[t.id] = {
@@ -26,9 +42,10 @@ function aggregate() {
     };
   });
 
-  // Results come from finished fixtures.
+  // Results come from finished fixtures, optionally narrowed to a window.
   for (const f of S.fixtures) {
     if (!f.finished) continue;
+    if (range && (f.event < range.from || f.event > range.to)) continue;
     const h = acc[f.team_h];
     const a = acc[f.team_a];
     if (!h || !a) continue;
@@ -39,15 +56,24 @@ function aggregate() {
     if (n(f.team_h_score) === 0) a.cs++;
   }
 
-  // Expected figures come from summing the squad.
-  for (const p of S.players) {
-    const t = acc[p.teamId];
-    if (!t) continue;
-    t.xg += p.xg;
-    t.xa += p.xa;
-    t.defcon += p.defcon;
-    t.xgcRaw += p.xgc;
-    t.mins += p.minutes;
+  if (range && range.teams) {
+    // Windowed expected figures, already summed per team server-side.
+    for (const t of Object.values(acc)) {
+      const w = range.teams[t.id];
+      if (!w) continue;
+      t.xg = w.xg; t.xa = w.xa; t.xgcRaw = w.xgcRaw; t.defcon = w.defcon; t.mins = w.mins;
+    }
+  } else {
+    // Season to date (also the fallback while a window is still loading).
+    for (const p of S.players) {
+      const t = acc[p.teamId];
+      if (!t) continue;
+      t.xg += p.xg;
+      t.xa += p.xa;
+      t.defcon += p.defcon;
+      t.xgcRaw += p.xgc;
+      t.mins += p.minutes;
+    }
   }
 
   return Object.values(acc).map((t) => {
@@ -68,10 +94,22 @@ function aggregate() {
 }
 
 export function renderTeams(root) {
-  const data = aggregate();
+  const rerender = () => renderTeams(root);
   if (!S.ui.teamSort) S.ui.teamSort = { k: "xg", dir: -1 };
-  const { k, dir } = S.ui.teamSort;
+  if (!S.ui.teamsWindowGws) S.ui.teamsWindowGws = 0;
 
+  const range = windowRange();
+  const stale = range && (win.from !== range.from || win.to !== range.to);
+  if (range && stale && !win.loading) {
+    win = { from: range.from, to: range.to, data: null, loading: true, error: "" };
+    api.teamsWindow(range.from, range.to)
+      .then((res) => { win = { from: range.from, to: range.to, data: res.teams, loading: false, error: "" }; rerender(); })
+      .catch(() => { win = { from: range.from, to: range.to, data: null, loading: false, error: "Couldn't load that window. Try again." }; rerender(); });
+  }
+  const windowReady = range && !stale && win.data;
+  const data = aggregate(windowReady ? { ...range, teams: win.data } : range);
+
+  const { k, dir } = S.ui.teamSort;
   data.sort((a, b) =>
     k === "name" ? a.name.localeCompare(b.name) * -dir : (n(a[k]) - n(b[k])) * dir
   );
@@ -83,12 +121,27 @@ export function renderTeams(root) {
   const luckiest = top("gmxg");
   const unlucky = top("gmxg", true);
 
+  const windowHint = !range
+    ? "Season to date, all competitions excluded — Premier League only."
+    : win.loading || (stale && !win.error)
+    ? `Loading GW${range.from}–${range.to}…`
+    : win.error
+    ? win.error
+    : `GW${range.from}–${range.to}, all competitions excluded — Premier League only.`;
+
   root.innerHTML = `
     <div class="eyebrow">Team shape</div>
     <div class="section-head">
       <h2>Team Data Room</h2>
-      <div class="hint">Season to date, all competitions excluded — Premier League only.</div>
+      <div class="controls">
+        <select id="teamsWindow" aria-label="Gameweek window">
+          ${WINDOW_OPTIONS.map((g) =>
+            `<option value="${g}" ${g === S.ui.teamsWindowGws ? "selected" : ""}>${g === 0 ? "Season to date" : `Last ${g} GWs`}</option>`
+          ).join("")}
+        </select>
+      </div>
     </div>
+    <p class="hint" style="margin:-6px 0 14px">${esc(windowHint)}</p>
 
     <div class="cards">
       ${statCard("Most chances created", `<span style="font-size:20px">${esc(bestAtk.name || "—")}</span>`, `${f2(bestAtk.xg || 0)} xG`, true)}
@@ -109,6 +162,9 @@ export function renderTeams(root) {
       on the pitch, so this scales that total back down by team minutes played. Treat it as a ranking, not a precise number.
     </p>
   `;
+
+  const winSel = $("#teamsWindow", root);
+  if (winSel) winSel.onchange = () => { S.ui.teamsWindowGws = +winSel.value; rerender(); };
 
   $$("thead th[data-k]", root).forEach((el) => {
     el.onclick = () => {

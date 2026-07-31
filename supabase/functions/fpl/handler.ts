@@ -184,7 +184,17 @@ interface BootstrapLike {
   events?: Array<{ id: number; is_current?: boolean; finished?: boolean }>;
 }
 interface LiveLike {
-  elements?: Array<{ id: number; stats?: { total_points?: number; minutes?: number } }>;
+  elements?: Array<{
+    id: number;
+    stats?: {
+      total_points?: number;
+      minutes?: number;
+      expected_goals?: number | string;
+      expected_assists?: number | string;
+      expected_goals_conceded?: number | string;
+      defensive_contribution?: number | string;
+    };
+  }>;
 }
 
 async function buildForm(deps: Deps, last: number) {
@@ -337,6 +347,58 @@ async function buildPoints(deps: Deps, from: number, to: number, only: Set<numbe
   });
 
   return { from, to, current: currentId, finished: [...finished], points, minutes };
+}
+
+/**
+ * Per-team xG/xA/xGC/DEFCON summed over a gameweek range, for the Teams tab's
+ * "previous gameweeks" filter. Goals/clean sheets/results come from fixtures
+ * the client already has, so this only needs to cover the expected-stats
+ * columns, which bootstrap only ever gives as season-to-date totals.
+ */
+async function buildTeamWindow(deps: Deps, from: number, to: number) {
+  const boot = (await cached(deps, "bootstrap", TTL.bootstrap, "/bootstrap-static/")) as
+    & BootstrapLike
+    & { elements?: Array<{ id: number; team: number }> };
+  const events = boot.events ?? [];
+  const current =
+    events.find((e) => e.is_current) ?? [...events].reverse().find((e) => e.finished) ?? null;
+  const currentId = current?.id ?? 0;
+  const finished = new Set(events.filter((e) => e.finished).map((e) => e.id));
+
+  const teamOf = new Map<number, number>();
+  for (const el of boot.elements ?? []) teamOf.set(el.id, el.team);
+
+  const gws: number[] = [];
+  for (let g = from; g <= Math.min(to, currentId); g++) gws.push(g);
+
+  const rounds = await Promise.all(
+    gws.map((g) =>
+      cached(deps, `live:${g}`, finished.has(g) ? TTL.liveFinal : TTL.live, `/event/${g}/live/`)
+        .catch(() => null)
+    )
+  );
+
+  const teams: Record<number, { xg: number; xa: number; xgcRaw: number; defcon: number; mins: number }> = {};
+  const ensure = (id: number) => (teams[id] ??= { xg: 0, xa: 0, xgcRaw: 0, defcon: 0, mins: 0 });
+
+  rounds.forEach((data) => {
+    const elements = (data as LiveLike | null)?.elements;
+    if (!Array.isArray(elements)) return;
+    for (const el of elements) {
+      const teamId = teamOf.get(el.id);
+      if (!teamId) continue;
+      const s = el.stats;
+      if (!s) continue;
+      const t = ensure(teamId);
+      t.xg += Number(s.expected_goals ?? 0);
+      t.xa += Number(s.expected_assists ?? 0);
+      t.xgcRaw += Number(s.expected_goals_conceded ?? 0);
+      t.defcon += Number(s.defensive_contribution ?? 0);
+      t.mins += Number(s.minutes ?? 0);
+    }
+  });
+
+  return { from, to: Math.min(to, currentId), teams };
 }
 
 /* ---------------------------------------------------------------
@@ -512,6 +574,25 @@ export function createHandler(deps: Deps) {
           const only = raw.length ? new Set(raw) : null;
 
           return json(await buildPoints(deps, from, to, only), 200, cors, 20);
+        }
+
+        case "teams-window": {
+          const from = Number(url.searchParams.get("from"));
+          const to = Number(url.searchParams.get("to"));
+          if (!Number.isInteger(from) || !Number.isInteger(to)) {
+            return json({ error: "bad_range" }, 400, cors);
+          }
+          if (from < 1 || to > 38 || to < from) return json({ error: "bad_range" }, 400, cors);
+
+          const key = `teams-window:${from}:${to}`;
+          const hit = memory.get(key);
+          const ttl = to === from ? TTL.live : TTL.form;
+          if (hit && deps.now() - hit.fetchedAt < ttl) {
+            return json(hit.payload, 200, cors, 40);
+          }
+          const payload = await buildTeamWindow(deps, from, to);
+          memory.set(key, { payload, fetchedAt: deps.now() });
+          return json(payload, 200, cors, 40);
         }
 
         case "prices": {

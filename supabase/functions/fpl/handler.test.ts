@@ -22,8 +22,8 @@ const BOOTSTRAP = {
     { id: 12, is_current: true, finished: false },
   ],
   elements: [
-    { id: 1, now_cost: 145, web_name: "Salah" },
-    { id: 2, now_cost: 78, web_name: "Gordon" },
+    { id: 1, now_cost: 145, web_name: "Salah", team: 1 },
+    { id: 2, now_cost: 78, web_name: "Gordon", team: 2 },
   ],
 };
 
@@ -59,7 +59,26 @@ function harness(overrides: Partial<Deps> = {}): Harness {
       if (path === "/fixtures/") return [{ id: 1, event: 13 }];
       if (path.startsWith("/event/")) {
         const gw = Number(path.split("/")[2]);
-        return { elements: [{ id: 1, stats: { total_points: gw, minutes: 90 } }] };
+        return {
+          elements: [
+            {
+              id: 1,
+              stats: {
+                total_points: gw, minutes: 90,
+                expected_goals: 0.5, expected_assists: 0.2,
+                expected_goals_conceded: 1.1, defensive_contribution: 3,
+              },
+            },
+            {
+              id: 2,
+              stats: {
+                total_points: gw, minutes: 90,
+                expected_goals: 0.1, expected_assists: 0.4,
+                expected_goals_conceded: 0.8, defensive_contribution: 5,
+              },
+            },
+          ],
+        };
       }
       if (path.includes("/event/") && path.includes("/picks/")) return { picks: [] };
       if (path.startsWith("/entry/") && path.endsWith("/history/")) return { current: [] };
@@ -592,6 +611,31 @@ Deno.test("points endpoint guards its range", async () => {
   assertEquals((await handle(GET("/points?from=5"))).status, 400, "missing end");
   assertEquals((await handle(GET("/points?from=9&to=4"))).status, 400, "reversed range");
   assertEquals((await handle(GET("/points?from=1&to=38"))).status, 400, "range too wide");
+});
+
+Deno.test("teams-window endpoint sums expected stats per team over a gameweek range", async () => {
+  const h = harness();
+  const res = await createHandler(h.deps)(GET("/teams-window?from=12&to=12"));
+  assertEquals(res.status, 200);
+  const body = (await res.json()) as {
+    from: number; to: number;
+    teams: Record<number, { xg: number; xa: number; xgcRaw: number; defcon: number; mins: number }>;
+  };
+  assertEquals(body.from, 12);
+  assertEquals(body.to, 12);
+  assert(body.teams[1], "team 1 (Salah's club) should have aggregated stats");
+  assert(body.teams[2], "team 2 (Gordon's club) should have aggregated stats");
+  assertEquals(body.teams[1].xg, 0.5, "team 1's xG should be its own player's, not summed across teams");
+  assertEquals(body.teams[2].xg, 0.1, "team 2's xG should be its own player's, not team 1's");
+  assertEquals(body.teams[1].defcon, 3);
+  assertEquals(body.teams[2].defcon, 5);
+});
+
+Deno.test("teams-window endpoint guards its range", async () => {
+  const h = harness();
+  const handle = createHandler(h.deps);
+  assertEquals((await handle(GET("/teams-window?from=5"))).status, 400, "missing end");
+  assertEquals((await handle(GET("/teams-window?from=9&to=4"))).status, 400, "reversed range");
 });
 
 

@@ -74,6 +74,9 @@ export const api = {
     return get(`${BASE}/points?${q}`, { ttl: 30_000 });
   },
 
+  teamsWindow: (from, to) =>
+    get(`${BASE}/teams-window?${new URLSearchParams({ from, to })}`, { ttl: 45_000 }),
+
   squads: {
     list: () =>
       get(`${BASE}/squads`, { headers: { "x-journal-token": journalToken() } }),

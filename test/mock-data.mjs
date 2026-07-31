@@ -218,6 +218,24 @@ export function pointsPayload(from, to, elements) {
   };
 }
 
+/** Approximates the real endpoint by scaling each player's season totals
+ *  down to the requested window's share of gameweeks played so far. */
+export function teamsWindowPayload(from, to) {
+  const cappedTo = Math.min(to, CURRENT_GW);
+  const span = Math.max(0, cappedTo - from + 1);
+  const scale = CURRENT_GW > 0 ? span / CURRENT_GW : 0;
+  const teams = {};
+  for (const e of elements) {
+    const t = (teams[e.team] ??= { xg: 0, xa: 0, xgcRaw: 0, defcon: 0, mins: 0 });
+    t.xg += Number(e.expected_goals) * scale;
+    t.xa += Number(e.expected_assists) * scale;
+    t.xgcRaw += Number(e.expected_goals_conceded) * scale;
+    t.defcon += Number(e.defensive_contribution) * scale;
+    t.mins += Math.round(e.minutes * scale);
+  }
+  return { from, to: cappedTo, teams };
+}
+
 const pickIds = elements.filter((e) => e.element_type === 3).slice(0, 6).map((e) => e.id);
 const opt = (id) => {
   const e = elements.find((x) => x.id === id);
