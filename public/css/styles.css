@@ -750,3 +750,13 @@ textarea::placeholder { color: var(--muted-2); }
   color: var(--chalk); font-size: 11px; padding: 3px 6px; font-family: inherit;
 }
 .proj-note { font-size: 10.5px; color: var(--muted-2); margin: 0 0 12px; line-height: 1.4; }
+
+/* ---------------- Starting XI (lineup layer) ---------------- */
+.lineup-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+.lineup-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.lineup-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
+.lineup-bench { margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
+.slot[data-lineup] { cursor: pointer; }
+.slot[data-lineup]:hover { border-color: var(--gold-deep); }
+.slot.bench { opacity: 0.65; }
+.slot.selected { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); opacity: 1; }

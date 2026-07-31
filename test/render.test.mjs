@@ -109,7 +109,10 @@ const { renderSquad, loadManager } = await import("../public/js/views/squad.js")
 const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
 const { renderPlanner } = await import("../public/js/views/planner.js");
-const { PL, loadSquads, addPlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft } = await import("../public/js/planner.js");
+const {
+  PL, loadSquads, addPlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
+  startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
+} = await import("../public/js/planner.js");
 
 const results = [];
 const check = (name, fn) => {
@@ -488,6 +491,51 @@ check("a complete squad validates and totals compute", () => {
   const t = squadTotals();
   if (t.count !== 15) throw new Error("expected 15");
   return `15 players, £${t.spend.toFixed(1)}, xGI ${t.xgi.toFixed(1)}`;
+});
+
+check("planner auto-picks a legal starting XI once the squad is full", () => {
+  if (!isValidLineup()) throw new Error("lineup should be legal after auto-pick");
+  const starting = startingPlayers();
+  const bench = benchPlayers();
+  if (starting.length !== STARTING_XI_SIZE) throw new Error(`expected 11 starters, got ${starting.length}`);
+  if (bench.length !== 4) throw new Error(`expected 4 on the bench, got ${bench.length}`);
+  const gks = starting.filter((p) => p.pos === "GKP").length;
+  if (gks !== 1) throw new Error(`expected exactly 1 starting GK, got ${gks}`);
+  return `${formationLabel()} formation, ${bench.length} on the bench`;
+});
+
+check("lineup swap rejects two players from the same side", () => {
+  const starting = startingPlayers();
+  const res = swapLineup(starting[0].id, starting[1].id);
+  if (res.ok) throw new Error("should require one starter and one bench player");
+  return res.reason;
+});
+
+check("lineup swap rejects a formation-breaking move", () => {
+  const benchGk = benchPlayers().find((p) => p.pos === "GKP");
+  const startingOutfield = startingPlayers().find((p) => p.pos !== "GKP");
+  const res = swapLineup(benchGk.id, startingOutfield.id);
+  if (res.ok) throw new Error("should not allow a 2nd starting goalkeeper");
+  return res.reason;
+});
+
+check("a legal lineup swap moves both players and clears the outgoing captain", () => {
+  const benchP = benchPlayers().find((p) => p.pos !== "GKP");
+  const startP = startingPlayers().find((p) => p.pos === benchP.pos);
+  if (!startP) throw new Error("test setup needs a matching position on the bench and in the XI");
+  PL.draft.captain = startP.id;
+  const res = swapLineup(benchP.id, startP.id);
+  if (!res.ok) throw new Error(`expected a legal swap, got: ${res.reason}`);
+  if (!startingPlayers().some((p) => p.id === benchP.id)) throw new Error("bench player did not move into the XI");
+  if (startingPlayers().some((p) => p.id === startP.id)) throw new Error("starting player did not move to the bench");
+  if (PL.draft.captain === startP.id) throw new Error("captain should be cleared once benched");
+  return `swapped ${benchP.name} in for ${startP.name}`;
+});
+
+check("squad projection runs on the starting XI, not the full 15", () => {
+  const t = squadTotals();
+  if (t.projRows.length !== STARTING_XI_SIZE) throw new Error(`expected ${STARTING_XI_SIZE} projected rows, got ${t.projRows.length}`);
+  return `${t.projRows.length} players projected`;
 });
 
 check("planner slots show xMin, not undefined", () => {

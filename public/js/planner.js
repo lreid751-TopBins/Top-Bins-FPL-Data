@@ -1,5 +1,5 @@
 import { S, runDifficulty, n } from "./store.js";
-import { projectSquad } from "./projection.js";
+import { projectSquad, projectPlayer } from "./projection.js";
 import { api } from "./api.js";
 
 /* =========================================================
@@ -13,10 +13,21 @@ export const SQUAD_RULES = {
   total: 15,
 };
 
-// Slot layout: 1–11 are the notional starting XI, 12–15 the bench. We don't
-// enforce a formation while drafting — that's a matchday concern — but slots
-// keep players in a stable order and let a captain be marked.
+// Slot layout: 1–11 are the starting XI, 12–15 the bench. Squad-building
+// (add/remove) doesn't care about formation — that's what the lineup layer
+// below enforces once the 15 is complete.
 export const POSITION_ORDER = ["GKP", "DEF", "MID", "FWD"];
+
+/* =========================================================
+   Starting XI / formation rules
+   ========================================================= */
+export const STARTING_XI_SIZE = 11;
+export const FORMATION_RULES = {
+  GKP: { min: 1, max: 1 },
+  DEF: { min: 3, max: 5 },
+  MID: { min: 2, max: 5 },
+  FWD: { min: 1, max: 3 },
+};
 
 /* =========================================================
    State
@@ -32,6 +43,8 @@ export const PL = {
   formError: "",
   compareId: null,   // second squad to compare against (Part 2 uses this)
   projWindow: 5,     // gameweeks to project over (adjustable)
+  lineupSelect: null, // player id currently selected for a starting/bench swap
+  lineupError: "",    // reason the last swap attempt was rejected
 };
 
 export function blankDraft() {
@@ -111,6 +124,7 @@ export function addPlayer(player) {
   let slot = 1;
   while (used.has(slot) && slot <= 15) slot++;
   PL.draft.picks.push({ id: player.id, slot });
+  ensureValidLineup(PL.draft);
   return { ok: true };
 }
 
@@ -118,6 +132,7 @@ export function removePlayer(id) {
   PL.draft.picks = PL.draft.picks.filter((pk) => pk.id !== id);
   if (PL.draft.captain === id) PL.draft.captain = null;
   if (PL.draft.vice === id) PL.draft.vice = null;
+  if (PL.lineupSelect === id) PL.lineupSelect = null;
 }
 
 export function isComplete(draft = PL.draft) {
@@ -134,6 +149,148 @@ export function needed(draft = PL.draft) {
 }
 
 /* =========================================================
+   Starting XI (lineup layer)
+   ========================================================= */
+/** The 11 players currently in slots 1–11. */
+export function startingPlayers(draft = PL.draft) {
+  return draftPlayers(draft).filter((p) => p.slot <= STARTING_XI_SIZE);
+}
+
+/** The bench (slots 12–15), in bench order. */
+export function benchPlayers(draft = PL.draft) {
+  return draftPlayers(draft)
+    .filter((p) => p.slot > STARTING_XI_SIZE)
+    .sort((a, b) => a.slot - b.slot);
+}
+
+export function startingCountByPosition(draft = PL.draft) {
+  const c = { GKP: 0, DEF: 0, MID: 0, FWD: 0 };
+  for (const p of startingPlayers(draft)) c[p.pos]++;
+  return c;
+}
+
+/** Is the current slot arrangement a full, legal 11-man formation? */
+export function isValidLineup(draft = PL.draft) {
+  if (draft.picks.length !== SQUAD_RULES.total) return false;
+  const c = startingCountByPosition(draft);
+  const total = POSITION_ORDER.reduce((a, k) => a + c[k], 0);
+  if (total !== STARTING_XI_SIZE) return false;
+  return POSITION_ORDER.every((k) => c[k] >= FORMATION_RULES[k].min && c[k] <= FORMATION_RULES[k].max);
+}
+
+/** "4-4-2" style label for the current starting XI. */
+export function formationLabel(draft = PL.draft) {
+  const c = startingCountByPosition(draft);
+  return `${c.DEF}-${c.MID}-${c.FWD}`;
+}
+
+export function isStarting(id, draft = PL.draft) {
+  const pk = draft.picks.find((pk) => pk.id === id);
+  return !!pk && pk.slot <= STARTING_XI_SIZE;
+}
+
+/**
+ * Swap a bench player into the starting XI and vice versa. Rejects the swap
+ * if it would break formation legality (e.g. going to a 2nd goalkeeper).
+ * A player who gets benched loses the armband if they held it.
+ */
+export function swapLineup(idA, idB) {
+  const draft = PL.draft;
+  const pkA = draft.picks.find((pk) => pk.id === idA);
+  const pkB = draft.picks.find((pk) => pk.id === idB);
+  if (!pkA || !pkB) return { ok: false, reason: "Player not found" };
+
+  const aStarting = pkA.slot <= STARTING_XI_SIZE;
+  const bStarting = pkB.slot <= STARTING_XI_SIZE;
+  if (aStarting === bStarting) return { ok: false, reason: "Pick one starting and one bench player" };
+
+  const [benchPk, startPk] = aStarting ? [pkB, pkA] : [pkA, pkB];
+  const benchPlayer = S.playerById[benchPk.id];
+  const startPlayer = S.playerById[startPk.id];
+
+  const c = startingCountByPosition(draft);
+  c[startPlayer.pos]--;
+  c[benchPlayer.pos]++;
+  const inRule = FORMATION_RULES[benchPlayer.pos];
+  const outRule = FORMATION_RULES[startPlayer.pos];
+  if (c[benchPlayer.pos] > inRule.max) {
+    return { ok: false, reason: `Max ${inRule.max} ${benchPlayer.pos} in a lineup` };
+  }
+  if (c[startPlayer.pos] < outRule.min) {
+    return { ok: false, reason: `Need at least ${outRule.min} ${startPlayer.pos}` };
+  }
+
+  const tmp = benchPk.slot;
+  benchPk.slot = startPk.slot;
+  startPk.slot = tmp;
+
+  if (draft.captain === startPk.id) draft.captain = null;
+  if (draft.vice === startPk.id) draft.vice = null;
+  return { ok: true };
+}
+
+/**
+ * Pick a legal, projection-maximising starting XI from a complete 15 and
+ * reassign slots to match (starters 1–11, bench 12–15, bench GK first).
+ * Used to seed a sensible default lineup — after that, swaps are manual.
+ */
+export function autoPickLineup(draft = PL.draft) {
+  const players = draftPlayers(draft);
+  if (players.length !== SQUAD_RULES.total) return;
+
+  const proj = new Map(players.map((p) => [p.id, projectPlayer(p, PL.projWindow).total]));
+  const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
+  players.forEach((p) => byPos[p.pos].push(p));
+  POSITION_ORDER.forEach((k) => byPos[k].sort((a, b) => proj.get(b.id) - proj.get(a.id)));
+
+  const sumTop = (list, count) => list.slice(0, count).reduce((a, p) => a + proj.get(p.id), 0);
+
+  // GKP is always exactly 1; enumerate legal DEF/MID/FWD splits of the
+  // remaining 10 starters and keep the one with the highest projected total.
+  let best = null;
+  for (let d = FORMATION_RULES.DEF.min; d <= FORMATION_RULES.DEF.max; d++) {
+    for (let m = FORMATION_RULES.MID.min; m <= FORMATION_RULES.MID.max; m++) {
+      const f = STARTING_XI_SIZE - 1 - d - m;
+      if (f < FORMATION_RULES.FWD.min || f > FORMATION_RULES.FWD.max) continue;
+      if (d > byPos.DEF.length || m > byPos.MID.length || f > byPos.FWD.length) continue;
+      const total = sumTop(byPos.DEF, d) + sumTop(byPos.MID, m) + sumTop(byPos.FWD, f);
+      if (!best || total > best.total) best = { d, m, f, total };
+    }
+  }
+  if (!best) return; // a legal 2/5/5/3 squad should always yield a split
+
+  const startingIds = new Set([
+    byPos.GKP[0]?.id,
+    ...byPos.DEF.slice(0, best.d).map((p) => p.id),
+    ...byPos.MID.slice(0, best.m).map((p) => p.id),
+    ...byPos.FWD.slice(0, best.f).map((p) => p.id),
+  ]);
+
+  const starters = players.filter((p) => startingIds.has(p.id));
+  const benchGk = players.filter((p) => !startingIds.has(p.id) && p.pos === "GKP");
+  const benchOutfield = players.filter((p) => !startingIds.has(p.id) && p.pos !== "GKP");
+
+  let slot = 1;
+  const setSlot = (id) => {
+    const pk = draft.picks.find((pk) => pk.id === id);
+    if (pk) pk.slot = slot++;
+  };
+  starters.forEach((p) => setSlot(p.id));
+  benchGk.forEach((p) => setSlot(p.id));
+  benchOutfield.forEach((p) => setSlot(p.id));
+
+  if (draft.captain != null && !startingIds.has(draft.captain)) draft.captain = null;
+  if (draft.vice != null && !startingIds.has(draft.vice)) draft.vice = null;
+}
+
+/** Auto-pick a lineup only when the squad is complete but not yet legal. */
+export function ensureValidLineup(draft = PL.draft) {
+  if (draft.picks.length === SQUAD_RULES.total && !isValidLineup(draft)) {
+    autoPickLineup(draft);
+  }
+}
+
+/* =========================================================
    Squad-level analysis totals
    ========================================================= */
 export function squadTotals(draft = PL.draft, span = 5) {
@@ -146,7 +303,11 @@ export function squadTotals(draft = PL.draft, span = 5) {
     ? clubs.reduce((a, t) => a + runDifficulty(t, span, S.ui.fdrMode), 0) / clubs.length
     : 0;
 
-  const projection = projectSquad(players, {
+  // Once a legal starting XI is set, project on that (captain doubled) — the
+  // number that actually plays. While still drafting, fall back to the full
+  // squad so the panel isn't empty.
+  const lineup = isValidLineup(draft) ? startingPlayers(draft) : players;
+  const projection = projectSquad(lineup, {
     span: PL.projWindow,
     captainId: draft.captain,
   });
@@ -208,11 +369,18 @@ export function loadIntoDraft(squad) {
     captain: squad.captain ?? null,
     vice: squad.vice ?? null,
   };
+  // Squads saved before the lineup layer existed have no formation-legal
+  // arrangement in slots 1-11 — give them a sensible default.
+  ensureValidLineup(PL.draft);
+  PL.lineupSelect = null;
+  PL.lineupError = "";
 }
 
 export function newDraft() {
   PL.activeId = null;
   PL.draft = blankDraft();
+  PL.lineupSelect = null;
+  PL.lineupError = "";
 }
 
 export async function saveDraft() {

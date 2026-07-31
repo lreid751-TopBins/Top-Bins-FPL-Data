@@ -1,8 +1,9 @@
 import { S, f1, f2, n } from "../store.js";
 import {
-  PL, SQUAD_RULES, POSITION_ORDER,
+  PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
   draftPlayers, countByPosition, spend, budgetLeft, canAdd, addPlayer,
   removePlayer, isComplete, needed, squadTotals,
+  startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { $, $$, esc, fixtureStrip, availabilityFlag, sparkline } from "../ui.js";
@@ -47,6 +48,7 @@ export function renderPlanner(root) {
         ${budgetBar(left)}
         ${positionRows()}
         ${addRow()}
+        ${lineupSection(complete)}
       </div>
       <aside class="planner-side">
         ${totalsPanel(totals, complete)}
@@ -124,14 +126,12 @@ function positionRows() {
 }
 
 function filledSlot(p) {
-  const isC = PL.draft.captain === p.id;
-  const isV = PL.draft.vice === p.id;
   const jersey = p.jersey
     ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : "";
   return `<div class="slot filled">
     <div class="slot-top">
-      ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : ""}
+      <span></span>
       <button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
     </div>
     ${jersey}
@@ -142,10 +142,6 @@ function filledSlot(p) {
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
     <div class="slot-fx">${fixtureStrip(p.teamId, 5)}</div>
-    <div class="slot-cap">
-      <button class="mini ${isC ? "on" : ""}" data-cap="${p.id}">C</button>
-      <button class="mini ${isV ? "on" : ""}" data-vice="${p.id}">V</button>
-    </div>
   </div>`;
 }
 
@@ -153,6 +149,75 @@ function emptySlot(posKey) {
   return `<div class="slot empty" data-addpos="${posKey}">
     <div class="slot-plus">+</div>
     <div class="slot-meta">${posKey}</div>
+  </div>`;
+}
+
+/* ---------------- Starting XI (lineup layer) ---------------- */
+function lineupSection(complete) {
+  if (!complete) {
+    return `<div class="lineup-section">
+      <div class="lineup-head"><span class="anton">Starting XI</span></div>
+      <p class="hint">Complete your 15 to set a lineup.</p>
+    </div>`;
+  }
+
+  const valid = isValidLineup();
+  const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
+  startingPlayers().forEach((p) => byPos[p.pos].push(p));
+  const bench = benchPlayers();
+
+  return `<div class="lineup-section">
+    <div class="lineup-head">
+      <span class="anton">Starting XI</span>
+      <span class="hint mono">${formationLabel()}</span>
+    </div>
+    ${
+      valid
+        ? ""
+        : `<p class="totals-need">Formation isn't legal — click a bench player, then a starter, to swap them.</p>`
+    }
+    ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
+    <div class="pos-rows">
+      ${POSITION_ORDER.map((posKey) => `<div class="pos-row">
+        <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
+          <span class="hint">${byPos[posKey].length}</span></div>
+        <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true)).join("")}</div>
+      </div>`).join("")}
+    </div>
+    <div class="pos-row lineup-bench">
+      <div class="pos-label"><span class="hint">Bench</span></div>
+      <div class="slot-strip">${bench.map((p) => lineupSlot(p, false)).join("")}</div>
+    </div>
+    <p class="hint">Click a player, then click one from the other side to swap them. Captain and vice can only be a starter.</p>
+  </div>`;
+}
+
+function lineupSlot(p, starting) {
+  const isC = PL.draft.captain === p.id;
+  const isV = PL.draft.vice === p.id;
+  const selected = PL.lineupSelect === p.id;
+  const jersey = p.jersey
+    ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
+    : "";
+  return `<div class="slot filled ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}">
+    <div class="slot-top">
+      ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : "<span></span>"}
+    </div>
+    ${jersey}
+    <div class="slot-name">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
+    <div class="slot-stats">
+      <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
+      <span title="Expected minutes next GW">${p.xMin}'</span>
+    </div>
+    ${
+      starting
+        ? `<div class="slot-cap">
+      <button class="mini ${isC ? "on" : ""}" data-cap="${p.id}">C</button>
+      <button class="mini ${isV ? "on" : ""}" data-vice="${p.id}">V</button>
+    </div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -270,6 +335,24 @@ function wire(root, rerender) {
   // Empty slot click → focus search
   $$("[data-addpos]", root).forEach((s) => {
     s.onclick = () => { const el = $("#plSearch", root); if (el) el.focus(); };
+  });
+
+  // Lineup: click a player, then one from the other side (bench/starting) to swap
+  $$("[data-lineup]", root).forEach((el) => {
+    el.onclick = (e) => {
+      if (e.target.closest("[data-cap],[data-vice]")) return;
+      const id = +el.dataset.lineup;
+      if (PL.lineupSelect == null) {
+        PL.lineupSelect = id;
+      } else if (PL.lineupSelect === id) {
+        PL.lineupSelect = null;
+      } else {
+        const res = swapLineup(PL.lineupSelect, id);
+        PL.lineupSelect = null;
+        PL.lineupError = res.ok ? "" : res.reason;
+      }
+      rerender();
+    };
   });
 
   // Player search
