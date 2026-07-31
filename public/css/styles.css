@@ -302,7 +302,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 /* Fixture chip: a shrunk .cell for cards and table cells - same difficulty
    colours, small enough to sit five-in-a-row next to a player. */
 .fxc {
-  display: inline-flex; min-height: 0; width: 26px; height: 24px;
+  display: inline-flex; min-height: 0; width: 24px; height: 24px;
   border-radius: 4px; padding: 2px 0; font-size: 8.5px; font-weight: 700;
   letter-spacing: 0.01em; gap: 1px;
 }
@@ -731,9 +731,9 @@ textarea::placeholder { color: var(--muted-2); }
 .pos-rows { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
 .pos-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
-.slot-strip { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.slot-strip { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
 .slot {
-  width: 128px; min-height: 150px; border-radius: 10px; border: 1px solid var(--line);
+  width: 160px; min-height: 156px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--panel); padding: 8px; position: relative; display: flex;
   flex-direction: column; align-items: center; text-align: center;
 }
@@ -753,7 +753,7 @@ textarea::placeholder { color: var(--muted-2); }
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
 .slot-meta { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
 .slot-stats { display: flex; gap: 6px; font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
-.slot-fx { display: inline-flex; gap: 2px; margin-top: 5px; }
+.slot-fx { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 6px; }
 .slot-cap { display: flex; gap: 4px; margin-top: 6px; }
 .slot-cap .mini {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
