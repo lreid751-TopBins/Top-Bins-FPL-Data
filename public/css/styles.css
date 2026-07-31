@@ -304,16 +304,39 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 
 /* ---------------- Squad pitch ---------------- */
 .squad-pitch {
+  position: relative; overflow: hidden;
   background:
     repeating-linear-gradient(180deg, rgba(255,255,255,.012) 0 44px, transparent 44px 88px),
     linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 1px solid var(--line); border-radius: 14px; padding: 18px 12px; margin-bottom: 16px;
 }
+/* Painted pitch markings, drawn faint and behind the cards — a real formation
+   read without competing with the data. Bottom-anchored so they scale with
+   however many rows a formation actually has. */
+.pitch-lines { position: absolute; inset: 0; pointer-events: none; }
+.pl-touch { position: absolute; inset: 12px; border: 1px solid rgba(234,243,236,.07); border-radius: 8px; }
+.pl-goal {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 64px; height: 8px; border: 1px solid rgba(234,243,236,.20); border-top: none;
+}
+.pl-six {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 180px; height: 34px; border: 1px solid rgba(234,243,236,.13); border-top: none;
+}
+.pl-box {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  width: 320px; height: 74px; border: 1px solid rgba(234,243,236,.10); border-top: none;
+}
+.pl-half { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 1px; background: rgba(234,243,236,.08); }
+.pl-circle {
+  position: absolute; left: 50%; bottom: 12px; transform: translate(-50%, 50%);
+  width: 130px; height: 130px; border: 1px solid rgba(234,243,236,.08); border-radius: 50%;
+}
 .row-line {
-  display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
+  position: relative; display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px;
 }
 .bench-line {
-  border-top: 1px dashed var(--line); padding-top: 14px; margin-top: 4px; margin-bottom: 0;
+  position: relative; border-top: 1px dashed var(--line); padding-top: 14px; margin-top: 4px; margin-bottom: 0;
 }
 .bench-label {
   font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted);
@@ -464,6 +487,9 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   .tab { padding: 10px 12px; font-size: 12px; }
   .board { padding: 14px 12px; }
   .plr { width: 88px; }
+  .pl-six { width: 130px; height: 26px; }
+  .pl-box { width: 220px; height: 56px; }
+  .pl-circle { width: 90px; height: 90px; }
   .swap { grid-template-columns: 1fr; }
   .swap-arrow { transform: rotate(90deg); }
 }

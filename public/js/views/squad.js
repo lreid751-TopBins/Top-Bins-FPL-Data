@@ -180,6 +180,14 @@ export function renderSquad(root) {
     </div>
 
     <div class="squad-pitch">
+      <div class="pitch-lines" aria-hidden="true">
+        <span class="pl-touch"></span>
+        <span class="pl-goal"></span>
+        <span class="pl-six"></span>
+        <span class="pl-box"></span>
+        <span class="pl-half"></span>
+        <span class="pl-circle"></span>
+      </div>
       ${["GKP", "DEF", "MID", "FWD"]
         .map((pos) => {
           const line = starters.filter((p) => S.playerById[p.element]?.pos === pos);
