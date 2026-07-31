@@ -365,7 +365,11 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .plr.benched { opacity: 0.6; }
 .plr.playing { border-color: var(--gold-deep); }
 .plr .fx { display: flex; gap: 2px; justify-content: center; margin-top: 5px; }
-.plr .fx i { width: 12px; height: 5px; border-radius: 2px; display: block; }
+
+/* Fixture-strip pill, sized on its own class so it renders correctly in any
+   context (table cell, card, detail panel) without depending on an ancestor
+   selector happening to match. */
+.fxi { width: 12px; height: 5px; border-radius: 2px; display: inline-block; }
 
 /* ---------------- Charts ---------------- */
 .chart-box {
@@ -710,6 +714,8 @@ textarea::placeholder { color: var(--muted-2); }
 .budget-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
 .budget-fill.over { background: linear-gradient(90deg, #7a3428, var(--neg)); }
 
+.squad-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+
 /* Position rows + slots */
 .pos-rows { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
 .pos-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
@@ -737,7 +743,6 @@ textarea::placeholder { color: var(--muted-2); }
 .slot-meta { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
 .slot-stats { display: flex; gap: 6px; font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
 .slot-fx { display: inline-flex; gap: 2px; margin-top: 5px; }
-.slot-fx .fxstrip i { width: 9px; height: 4px; }
 .slot-cap { display: flex; gap: 4px; margin-top: 6px; }
 .slot-cap .mini {
   background: transparent; border: 1px solid var(--line); color: var(--muted);

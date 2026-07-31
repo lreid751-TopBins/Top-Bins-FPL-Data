@@ -40,17 +40,19 @@ export function sparkline(series, mins = []) {
 }
 
 /* ---------------- Fixture pills (compact, for tables) ---------------- */
+// Self-sized via the .fxi class so this renders correctly wherever it's
+// dropped in, instead of depending on ancestor selectors matching by luck.
 export function fixtureStrip(teamId, span = 5, mode = null) {
   const m = mode || S.ui.fdrMode;
   return upcoming(teamId, span)
     .map((r) => {
       if (!r.list.length)
-        return `<i style="background:var(--line-soft)" title="GW${r.gw}: blank"></i>`;
+        return `<i class="fxi" style="background:var(--line-soft)" title="GW${r.gw}: blank"></i>`;
       const f = r.list[0];
       const d = difficultyOf(f, m);
       const opp = S.teams[f.opp]?.short || "?";
       const label = `GW${r.gw}: ${opp} (${f.home ? "H" : "A"})${r.list.length > 1 ? " +1" : ""}`;
-      return `<i style="background:var(--fdr-${d})" title="${label}"></i>`;
+      return `<i class="fxi" style="background:var(--fdr-${d})" title="${label}"></i>`;
     })
     .join("");
 }

@@ -1,4 +1,4 @@
-import { S, f1, f2, n } from "../store.js";
+import { S, f1, f2 } from "../store.js";
 import {
   PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
   draftPlayers, countByPosition, spend, budgetLeft, canAdd, addPlayer,
@@ -49,7 +49,7 @@ export function renderPlanner(root) {
       <div class="planner-build">
         ${draftHeader()}
         ${budgetBar(left)}
-        ${positionRows()}
+        ${squadSection()}
         ${addRow()}
         ${lineupSection(complete)}
       </div>
@@ -107,8 +107,19 @@ function budgetBar(left) {
   </div>`;
 }
 
-/* ---------------- Position rows ---------------- */
-function positionRows() {
+/* ---------------- Squad list: cards (jerseys) or table (dense stats) ---------------- */
+function squadSection() {
+  return `<div class="squad-section-head">
+    <span class="hint">Squad</span>
+    <div class="seg" role="group" aria-label="Squad view">
+      <button data-squadview="cards" ${PL.squadView === "cards" ? 'aria-pressed="true"' : ""}>Cards</button>
+      <button data-squadview="table" ${PL.squadView === "table" ? 'aria-pressed="true"' : ""}>Table</button>
+    </div>
+  </div>
+  ${PL.squadView === "table" ? squadTable() : squadCards()}`;
+}
+
+function squadCards() {
   const byPos = {};
   POSITION_ORDER.forEach((k) => (byPos[k] = []));
   draftPlayers().forEach((p) => byPos[p.pos].push(p));
@@ -129,6 +140,42 @@ function positionRows() {
       </div>`;
     }).join("")}
   </div>`;
+}
+
+function squadTable() {
+  const players = draftPlayers();
+  const needs = needed();
+
+  if (!players.length) {
+    return `<p class="hint" style="margin-bottom:16px">No players yet — search below to start building.</p>`;
+  }
+
+  return `<div class="twrap" style="margin-bottom:16px">
+    <table>
+      <thead><tr>
+        <th style="text-align:left">Player</th><th>Team</th><th>Pos</th><th>£</th>
+        <th>xMin</th><th>xGI</th><th>xG</th><th>xA</th><th>DEFCON</th><th>Next 5</th><th></th>
+      </tr></thead>
+      <tbody>${players.map(squadTableRow).join("")}</tbody>
+    </table>
+  </div>
+  ${needs.length ? `<p class="hint" style="margin:-10px 0 16px">Still need: ${needs.map((x) => `${x.want} ${x.pos}`).join(", ")}</p>` : ""}`;
+}
+
+function squadTableRow(p) {
+  return `<tr>
+    <td class="name">${esc(p.name)}${availabilityFlag(p)}</td>
+    <td class="sub-t">${esc(p.short)}</td>
+    <td><span class="pos-chip pos-${p.pos}">${p.pos}</span></td>
+    <td>£${f1(p.price)}</td>
+    <td>${p.xMin}'</td>
+    <td>${f2(p.xgi)}</td>
+    <td>${f2(p.xg)}</td>
+    <td>${f2(p.xa)}</td>
+    <td>${Math.round(p.defcon)}</td>
+    <td><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span></td>
+    <td><button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button></td>
+  </tr>`;
 }
 
 function filledSlot(p) {
@@ -375,6 +422,10 @@ function wire(root, rerender) {
   bind("#plNew", "onclick", () => { newDraft(); rerender(); });
   bind("#plName", "oninput", (e) => { PL.draft.name = e.target.value; });
   bind("#plNote", "oninput", (e) => { PL.draft.note = e.target.value; });
+
+  $$("[data-squadview]", root).forEach((b) => {
+    b.onclick = () => { PL.squadView = b.dataset.squadview; rerender(); };
+  });
 
   // Load / branch / delete saved squads
   $$("[data-load]", root).forEach((b) => {

@@ -102,6 +102,7 @@ console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
 const { S, load, runDifficulty, difficultyOf } = await import("../public/js/store.js");
+const { fixtureStrip } = await import("../public/js/ui.js");
 const { renderScout } = await import("../public/js/views/scout.js");
 const { renderFixtures } = await import("../public/js/views/fixtures.js");
 const { renderTeams } = await import("../public/js/views/teams.js");
@@ -186,6 +187,21 @@ check("player finder renders", () => {
   if (svgs.length < 2) throw new Error(`expected 2 charts, got ${svgs.length}`);
   if (panel("panel-scout").innerHTML.includes("NaN")) throw new Error("NaN rendered into the table");
   return `${rows.length} rows, ${svgs.length} charts`;
+});
+
+check("fixture strip pills are self-sized, not dependent on an ancestor selector", () => {
+  // Regression: fixtureStrip() used to emit bare <i> tags with no sizing of
+  // their own, relying on ancestor CSS (".plr .fx i", a nonexistent ".fxstrip
+  // i") that only matched by coincidence in one context and silently
+  // rendered as invisible zero-size pills everywhere else - including the
+  // Player Finder and Teams tables.
+  const html = fixtureStrip(S.players[0].teamId, 5);
+  const count = (html.match(/<i /g) || []).length;
+  if (!count) throw new Error("fixtureStrip produced no pills");
+  if ((html.match(/class="fxi"/g) || []).length !== count) {
+    throw new Error("every fixture pill needs the .fxi class to be visible");
+  }
+  return `${count} pills, all self-sized`;
 });
 
 check("player finder filters", () => {
@@ -556,6 +572,21 @@ check("planner slots show xMin, not undefined", () => {
   const slots = panel("panel-planner").querySelectorAll(".slot.filled");
   if (!slots.length) throw new Error("no filled slots");
   return `${slots.length} slots, no undefined values`;
+});
+
+check("squad table view shows the same 15 with a remove action", () => {
+  PL.squadView = "table";
+  renderPlanner(panel("panel-planner"));
+  const html = panel("panel-planner").innerHTML;
+  if (html.includes("undefined")) throw new Error("undefined leaked into the squad table");
+  if (html.includes("NaN")) throw new Error("NaN leaked into the squad table");
+  const rows = panel("panel-planner").querySelectorAll(".twrap tbody tr");
+  if (rows.length !== 15) throw new Error(`expected 15 rows, got ${rows.length}`);
+  const removeButtons = panel("panel-planner").querySelectorAll(".twrap [data-remove]");
+  if (removeButtons.length !== 15) throw new Error("each row should still be removable");
+  PL.squadView = "cards";
+  renderPlanner(panel("panel-planner"));
+  return `${rows.length} rows, switched back to cards`;
 });
 
 {

@@ -159,7 +159,7 @@ function row(p, u, maxDefcon) {
     <td>${f1(p.selected)}</td>
     <td class="${p.netTransfers >= 0 ? "pos" : "neg"}">${signed(p.netTransfers.toLocaleString())}</td>
     <td>${f1(p.ppm)}</td>
-    <td><span class="plr" style="all:unset"><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span></span> <span class="sub-t">${f2(p.fdr5)}</span></td>
+    <td><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span> <span class="sub-t">${f2(p.fdr5)}</span></td>
   </tr>`;
 }
 
