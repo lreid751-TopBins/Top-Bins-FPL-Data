@@ -110,8 +110,9 @@ const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
 const { renderPlanner } = await import("../public/js/views/planner.js");
 const {
-  PL, loadSquads, addPlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
+  PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
+  draftPlayers, branchSquad, compareTotals, deleteSquad,
 } = await import("../public/js/planner.js");
 
 const results = [];
@@ -563,6 +564,77 @@ check("planner slots show xMin, not undefined", () => {
     const tabs = panel("panel-planner").querySelectorAll(".squad-tab");
     if (tabs.length < 2) throw new Error("expected 2+ tabs");
     return `${tabs.length} squads side by side`;
+  });
+}
+
+/* ---------------- Branching ---------------- */
+{
+  const need = { GKP: 2, DEF: 5, MID: 5, FWD: 3 };
+  const pools = {};
+  S.players.forEach((p) => (pools[p.pos] ??= []).push(p));
+  const buildSquad = (name) => {
+    newDraft();
+    PL.draft.name = name;
+    for (const [posKey, count] of Object.entries(need)) {
+      // Cheapest first, same as the existing "complete squad" test — guaranteed to fit the £100m budget.
+      const sorted = [...pools[posKey]].sort((a, b) => a.price - b.price);
+      let added = 0;
+      for (const p of sorted) { if (added >= count) break; if (canAdd(p).ok) { addPlayer(p); added++; } }
+    }
+  };
+
+  buildSquad("Branch A");
+  await saveDraft();
+
+  buildSquad("Branch B");
+  await saveDraft();
+  const squadB = PL.squads.find((s) => s.name === "Branch B");
+
+  check("branching a squad clones it unsaved and sets up a comparison", () => {
+    branchSquad(squadB);
+    if (PL.activeId !== null) throw new Error("a branch should be unsaved, not overwrite the original");
+    if (!PL.draft.name.includes(squadB.name)) throw new Error("branch name should reference the original");
+    if (PL.compareId !== squadB.id) throw new Error("branching should compare against the original");
+    return `branched "${squadB.name}" as "${PL.draft.name}"`;
+  });
+
+  let swapOutName = "";
+  check("swapping one player in a branch shows up as the only difference", () => {
+    const swapOut = draftPlayers(PL.draft).find((p) => p.pos === "MID");
+    swapOutName = swapOut.name;
+    removePlayer(swapOut.id);
+    const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
+    const swapIn = S.players.find((p) => p.pos === "MID" && !inSquad.has(p.id) && canAdd(p).ok);
+    if (!swapIn) throw new Error("test setup couldn't find a legal replacement");
+    addPlayer(swapIn);
+
+    if (!isComplete()) throw new Error("branch should still be a complete 15 after a 1-for-1 swap");
+
+    const cmp = compareTotals();
+    if (!cmp) throw new Error("expected a comparison once branched");
+    if (cmp.bName !== squadB.name) throw new Error("should compare against the branched-from squad");
+    if (cmp.onlyA.length !== 1 || cmp.onlyB.length !== 1) {
+      throw new Error(`expected exactly one player different each side, got ${cmp.onlyA.length}/${cmp.onlyB.length}`);
+    }
+    if (cmp.onlyB[0].name !== swapOutName) throw new Error("the swapped-out player should be the one only in the original");
+    if (typeof cmp.delta !== "number" || Number.isNaN(cmp.delta)) throw new Error("delta should be a number");
+    return `${swapOutName} → ${swapIn.name}, delta ${cmp.delta >= 0 ? "+" : ""}${cmp.delta.toFixed(1)} pts`;
+  });
+
+  check("comparison renders side by side in the planner", () => {
+    renderPlanner(panel("panel-planner"));
+    const html = panel("panel-planner").innerHTML;
+    if (html.includes("undefined")) throw new Error("undefined leaked into the compare panel");
+    if (html.includes("NaN")) throw new Error("NaN leaked into the compare panel");
+    const heads = panel("panel-planner").querySelectorAll(".compare-head");
+    if (heads.length !== 2) throw new Error(`expected 2 compare heads, got ${heads.length}`);
+    return "both squads rendered side by side";
+  });
+
+  await deleteSquad(squadB.id);
+  check("deleting the compared squad clears the comparison", () => {
+    if (PL.compareId !== null) throw new Error("compareId should clear when the compared squad is deleted");
+    return "comparison cleared";
   });
 }
 

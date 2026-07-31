@@ -4,9 +4,11 @@ import {
   draftPlayers, countByPosition, spend, budgetLeft, canAdd, addPlayer,
   removePlayer, isComplete, needed, squadTotals,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
+  branchSquad, setCompare, compareTotals,
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { $, $$, esc, fixtureStrip, availabilityFlag, sparkline } from "../ui.js";
+import { divergingBars } from "../charts.js";
 
 export function renderPlanner(root) {
   const rerender = () => renderPlanner(root);
@@ -54,6 +56,8 @@ export function renderPlanner(root) {
         ${totalsPanel(totals, complete)}
       </aside>
     </div>
+
+    ${compareSection()}
   `;
 
   wire(root, rerender);
@@ -70,6 +74,7 @@ function savedSquadsBar() {
         (sq) => `<button class="squad-tab ${sq.id === PL.activeId ? "on" : ""}" data-load="${sq.id}">
           <span class="st-name">${esc(sq.name)}</span>
           <span class="st-meta">${sq.picks.length}/15</span>
+          <span class="st-branch" data-branch="${sq.id}" title="Branch: clone this squad to try a swap against it">⑂</span>
           <span class="st-x" data-del="${sq.id}" title="Delete" role="button">×</span>
         </button>`
       )
@@ -288,6 +293,76 @@ function totalStat(label, value, help) {
   </div>`;
 }
 
+/* ---------------- Branching (compare two squads) ---------------- */
+function compareSection() {
+  const others = PL.squads.filter((s) => s.id !== PL.activeId);
+  const cmp = PL.compareId ? compareTotals() : null;
+
+  return `<div class="compare-section">
+    <div class="lineup-head">
+      <span class="anton">Compare</span>
+      ${
+        others.length
+          ? `<select id="plCompare" class="proj-window" aria-label="Compare against">
+        <option value="">— pick a saved squad —</option>
+        ${others.map((s) => `<option value="${s.id}" ${s.id === PL.compareId ? "selected" : ""}>${esc(s.name)}</option>`).join("")}
+      </select>`
+          : ""
+      }
+    </div>
+    ${
+      !others.length
+        ? `<p class="hint">Save a second squad, or branch one from the tabs above (⑂), to compare it against what you're building.</p>`
+        : !cmp
+        ? `<p class="hint">Pick a saved squad to compare against your current draft, over the same window as the projection above.</p>`
+        : compareBody(cmp)
+    }
+  </div>`;
+}
+
+function compareBody(cmp) {
+  const deltaPos = cmp.delta >= 0;
+  const movers = [
+    ...cmp.onlyA.map((p) => ({ label: p.name, value: p.contribution, side: "a" })),
+    ...cmp.onlyB.map((p) => ({ label: p.name, value: -p.contribution, side: "b" })),
+  ].sort((x, y) => Math.abs(y.value) - Math.abs(x.value));
+
+  return `
+    <div class="compare-heads">
+      <div class="compare-head">
+        <div class="compare-name">${esc(cmp.aName)}</div>
+        <div class="compare-total">${cmp.aTotal.toFixed(1)}<span class="proj-unit">pts</span></div>
+        ${cmp.aValid ? "" : `<div class="hint">no legal XI set — using full squad</div>`}
+      </div>
+      <div class="compare-vs">
+        <div class="compare-delta ${deltaPos ? "pos" : "neg"}">${deltaPos ? "+" : ""}${cmp.delta.toFixed(1)}</div>
+        <div class="hint">over ${cmp.span} GWs</div>
+      </div>
+      <div class="compare-head">
+        <div class="compare-name">${esc(cmp.bName)}</div>
+        <div class="compare-total">${cmp.bTotal.toFixed(1)}<span class="proj-unit">pts</span></div>
+        ${cmp.bValid ? "" : `<div class="hint">no legal XI set — using full squad</div>`}
+      </div>
+    </div>
+
+    ${
+      movers.length
+        ? `<h3 class="compare-sub">Who's driving the difference</h3>
+           ${divergingBars(movers, {
+             meta: (m) => (m.side === "a" ? `only in ${cmp.aName}` : `only in ${cmp.bName}`),
+             empty: "Same 15 players in both.",
+           })}`
+        : `<p class="hint">Same players in both squads — the difference is entirely lineup and captaincy.</p>`
+    }
+
+    <h3 class="compare-sub">Per gameweek</h3>
+    ${divergingBars(
+      cmp.byGw.map((row) => ({ label: `GW${row.gw}`, value: row.a - row.b })),
+      { meta: () => "", empty: "Nothing scheduled in this window." }
+    )}
+  `;
+}
+
 /* ---------------- Events ---------------- */
 function wire(root, rerender) {
   const bind = (sel, ev, fn) => { const el = $(sel, root); if (el) el[ev] = fn; };
@@ -296,12 +371,19 @@ function wire(root, rerender) {
   bind("#plName", "oninput", (e) => { PL.draft.name = e.target.value; });
   bind("#plNote", "oninput", (e) => { PL.draft.note = e.target.value; });
 
-  // Load / delete saved squads
+  // Load / branch / delete saved squads
   $$("[data-load]", root).forEach((b) => {
     b.onclick = (e) => {
-      if (e.target.closest("[data-del]")) return; // let delete handle it
+      if (e.target.closest("[data-del]") || e.target.closest("[data-branch]")) return;
       const sq = PL.squads.find((s) => s.id === b.dataset.load);
       if (sq) { loadIntoDraft(sq); rerender(); }
+    };
+  });
+  $$("[data-branch]", root).forEach((x) => {
+    x.onclick = (e) => {
+      e.stopPropagation();
+      const sq = PL.squads.find((s) => s.id === x.dataset.branch);
+      if (sq) { branchSquad(sq); rerender(); }
     };
   });
   $$("[data-del]", root).forEach((x) => {
@@ -391,6 +473,9 @@ function wire(root, rerender) {
 
   const win = $("#plWindow", root);
   if (win) win.onchange = () => { PL.projWindow = +win.value; rerender(); };
+
+  const cmp = $("#plCompare", root);
+  if (cmp) cmp.onchange = () => { setCompare(cmp.value); rerender(); };
 
   bind("#plSave", "onclick", async () => {
     PL.saving = true; rerender();

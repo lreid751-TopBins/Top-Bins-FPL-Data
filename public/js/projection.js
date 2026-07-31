@@ -110,11 +110,16 @@ export function projectPlayer(p, span = 5, from = null) {
  */
 export function projectSquad(players, { span = 5, from = null, captainId = null } = {}) {
   let total = 0;
+  const gwTotals = new Map(); // gw -> summed contribution across the squad
   const rows = players.map((p) => {
     const proj = projectPlayer(p, span, from);
     const isCaptain = captainId != null && p.id === captainId;
-    const contribution = isCaptain ? proj.total * 2 : proj.total;
+    const mult = isCaptain ? 2 : 1;
+    const contribution = proj.total * mult;
     total += contribution;
+    proj.perGw.forEach((row) => {
+      gwTotals.set(row.gw, (gwTotals.get(row.gw) || 0) + row.total * mult);
+    });
     return {
       id: p.id,
       name: p.name,
@@ -128,16 +133,19 @@ export function projectSquad(players, { span = 5, from = null, captainId = null 
   });
 
   rows.sort((a, b) => b.contribution - a.contribution);
-  return { total, players: rows, span };
+  const byGw = [...gwTotals.entries()].sort((a, b) => a[0] - b[0]).map(([gw, total]) => ({ gw, total }));
+  return { total, players: rows, span, byGw };
 }
 
 /**
- * Compare two projected squads over the same window.
+ * Compare two projected squads over the same window. Each side gets its own
+ * captain — two squads rarely share an armband, and doubling the wrong
+ * player would skew the whole comparison.
  * Returns the delta and which players drive it.
  */
-export function compareSquads(playersA, playersB, opts = {}) {
-  const a = projectSquad(playersA, opts);
-  const b = projectSquad(playersB, opts);
+export function compareSquads(playersA, playersB, { span = 5, from = null, captainA = null, captainB = null } = {}) {
+  const a = projectSquad(playersA, { span, from, captainId: captainA });
+  const b = projectSquad(playersB, { span, from, captainId: captainB });
 
   // Which players differ between the two squads.
   const idsA = new Set(playersA.map((p) => p.id));

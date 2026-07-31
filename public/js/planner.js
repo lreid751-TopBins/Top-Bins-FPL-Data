@@ -1,5 +1,5 @@
 import { S, runDifficulty, n } from "./store.js";
-import { projectSquad, projectPlayer } from "./projection.js";
+import { projectSquad, projectPlayer, compareSquads } from "./projection.js";
 import { api } from "./api.js";
 
 /* =========================================================
@@ -41,7 +41,7 @@ export const PL = {
   saving: false,
   error: "",
   formError: "",
-  compareId: null,   // second squad to compare against (Part 2 uses this)
+  compareId: null,   // saved squad id to branch-compare the current draft against
   projWindow: 5,     // gameweeks to project over (adjustable)
   lineupSelect: null, // player id currently selected for a starting/bench swap
   lineupError: "",    // reason the last swap attempt was rejected
@@ -332,6 +332,77 @@ export function squadTotals(draft = PL.draft, span = 5) {
 }
 
 /* =========================================================
+   Branching (compare two squads side by side)
+   ========================================================= */
+/**
+ * Clone a saved squad into the draft as an unsaved copy, ready to tweak —
+ * "swap one player" — and immediately compare against the original.
+ */
+export function branchSquad(squad) {
+  PL.activeId = null; // saving now creates a new squad, not an overwrite
+  PL.draft = {
+    name: `${squad.name} (branch)`,
+    note: squad.note || "",
+    picks: squad.picks.map((pk) => ({ ...pk })),
+    captain: squad.captain ?? null,
+    vice: squad.vice ?? null,
+  };
+  PL.compareId = squad.id;
+  PL.lineupSelect = null;
+  PL.lineupError = "";
+}
+
+export function setCompare(id) {
+  PL.compareId = id || null;
+}
+
+/**
+ * Project the current draft against a saved squad over the same window,
+ * each with its own captain, on starting XIs where both have set one.
+ * Returns null until a squad to compare against is picked.
+ */
+export function compareTotals() {
+  if (!PL.compareId) return null;
+  const b = PL.squads.find((s) => s.id === PL.compareId);
+  if (!b) return null;
+
+  const span = PL.projWindow;
+  const aValid = isValidLineup(PL.draft);
+  const bValid = isValidLineup(b);
+  const lineupA = aValid ? startingPlayers(PL.draft) : draftPlayers(PL.draft);
+  const lineupB = bValid ? startingPlayers(b) : draftPlayers(b);
+
+  const cmp = compareSquads(lineupA, lineupB, {
+    span,
+    captainA: PL.draft.captain,
+    captainB: b.captain,
+  });
+
+  // Union the two gameweek ranges so a blank/missing side just reads as 0.
+  const gws = new Map();
+  cmp.a.byGw.forEach(({ gw, total }) => gws.set(gw, { gw, a: total, b: 0 }));
+  cmp.b.byGw.forEach(({ gw, total }) => {
+    const row = gws.get(gw) || { gw, a: 0, b: 0 };
+    row.b = total;
+    gws.set(gw, row);
+  });
+
+  return {
+    aName: PL.draft.name?.trim() || "Untitled squad",
+    bName: b.name,
+    aTotal: cmp.a.total,
+    bTotal: cmp.b.total,
+    delta: cmp.delta,
+    aValid,
+    bValid,
+    onlyA: cmp.onlyA,
+    onlyB: cmp.onlyB,
+    byGw: [...gws.values()].sort((x, y) => x.gw - y.gw),
+    span,
+  };
+}
+
+/* =========================================================
    Load / save
    ========================================================= */
 export async function loadSquads() {
@@ -374,6 +445,8 @@ export function loadIntoDraft(squad) {
   ensureValidLineup(PL.draft);
   PL.lineupSelect = null;
   PL.lineupError = "";
+  // Comparing a squad against itself is meaningless.
+  if (PL.compareId === squad.id) PL.compareId = null;
 }
 
 export function newDraft() {
@@ -414,6 +487,7 @@ export async function deleteSquad(id) {
   try {
     await api.squads.remove(id);
     if (PL.activeId === id) newDraft();
+    if (PL.compareId === id) PL.compareId = null;
     await loadSquads();
     return true;
   } catch {
