@@ -341,6 +341,28 @@ Deno.test("preflight allows the journal/squad token header", async () => {
   assertEquals(res.status, 204);
 });
 
+Deno.test("preflight allows PUT and DELETE, not just GET/POST", async () => {
+  // Regression: saving changes to a squad (PUT) and deleting a squad or
+  // withdrawing a journal entry (DELETE) all failed with an opaque
+  // "Failed to fetch" in the browser because these methods weren't listed
+  // here - the preflight succeeded but the browser refused to send the
+  // actual request afterward.
+  const h = harness();
+  const res = await createHandler(h.deps)(
+    new Request("https://x.supabase.co/functions/v1/fpl/squads/some-id", {
+      method: "OPTIONS",
+      headers: { origin: "https://fpl.topbinswithtwins.com" },
+    })
+  );
+  const methods = res.headers.get("Access-Control-Allow-Methods") ?? "";
+  for (const m of ["PUT", "DELETE"]) {
+    if (!methods.includes(m)) {
+      throw new Error(`${m} must be in Access-Control-Allow-Methods or the browser blocks it`);
+    }
+  }
+  assertEquals(res.status, 204);
+});
+
 Deno.test("health check needs no upstream", async () => {
   const h = harness();
   const res = await createHandler(h.deps)(GET("/health"));
