@@ -402,6 +402,34 @@ export function compareTotals() {
   };
 }
 
+/**
+ * Turn a live comparison into a pre-filled Journal transfer draft — the
+ * players who differ become the options, the one in the current draft is
+ * marked as chosen. Confidence and reasoning are left for Marina to set
+ * when she actually logs it; branching itself commits nothing.
+ */
+export function transferLogDraft(cmp) {
+  if (!cmp) return null;
+  const incoming = cmp.onlyA; // in the current draft, not the compared squad
+  const outgoing = cmp.onlyB; // in the compared squad, not the current draft
+  if (!incoming.length && !outgoing.length) return null;
+
+  const asOption = (p) => ({ id: p.id, name: p.name, short: p.short, pos: p.pos });
+  const title =
+    incoming.length === 1 && outgoing.length === 1
+      ? `${incoming[0].name} in for ${outgoing[0].name}`
+      : `${cmp.aName} vs ${cmp.bName}`;
+
+  return {
+    kind: "transfer",
+    gw: S.nextGw,
+    horizon: cmp.span <= 3 ? "3" : cmp.span <= 5 ? "5" : "rest",
+    title,
+    options: [...incoming, ...outgoing].map(asOption),
+    chosen: incoming[0]?.id ?? null,
+  };
+}
+
 /* =========================================================
    Load / save
    ========================================================= */

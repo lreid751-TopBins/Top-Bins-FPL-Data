@@ -112,7 +112,7 @@ const { renderPlanner } = await import("../public/js/views/planner.js");
 const {
   PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
-  draftPlayers, branchSquad, compareTotals, deleteSquad,
+  draftPlayers, branchSquad, compareTotals, deleteSquad, transferLogDraft,
 } = await import("../public/js/planner.js");
 
 const results = [];
@@ -619,6 +619,35 @@ check("planner slots show xMin, not undefined", () => {
     if (cmp.onlyB[0].name !== swapOutName) throw new Error("the swapped-out player should be the one only in the original");
     if (typeof cmp.delta !== "number" || Number.isNaN(cmp.delta)) throw new Error("delta should be a number");
     return `${swapOutName} → ${swapIn.name}, delta ${cmp.delta >= 0 ? "+" : ""}${cmp.delta.toFixed(1)} pts`;
+  });
+
+  check("a branch comparison turns into a transfer draft for the journal", () => {
+    const draft = transferLogDraft(compareTotals());
+    if (!draft) throw new Error("expected a draft once two squads differ");
+    if (draft.kind !== "transfer") throw new Error(`expected kind "transfer", got ${draft.kind}`);
+    if (draft.gw !== S.nextGw) throw new Error("should default to the next gameweek");
+    if (draft.options.length !== 2) throw new Error(`expected 2 options, got ${draft.options.length}`);
+    if (!draft.options.every((o) => o.id && o.name && o.short && o.pos)) {
+      throw new Error("each option needs id/name/short/pos for the journal chip");
+    }
+    const chosenOpt = draft.options.find((o) => o.id === draft.chosen);
+    if (!chosenOpt) throw new Error("chosen should be one of the options");
+    if (!draft.title.includes(chosenOpt.name)) throw new Error("title should name the incoming player");
+    return `"${draft.title}", chosen: ${chosenOpt.name}`;
+  });
+
+  check("logging a decision from the compare panel pre-fills the journal draft", () => {
+    renderPlanner(panel("panel-planner"));
+    const btn = panel("panel-planner").querySelector("#plLogDecision");
+    if (!btn) throw new Error("expected a Log this as a decision button once branched");
+    btn.onclick();
+    if (J.draft.kind !== "transfer") throw new Error(`expected a transfer draft, got ${J.draft.kind}`);
+    if (J.draft.options.length !== 2) throw new Error(`expected 2 options, got ${J.draft.options.length}`);
+    if (!J.draft.options.some((o) => o.id === J.draft.chosen)) throw new Error("chosen id should be one of the options");
+    if (J.draft.confidence == null || !Array.isArray(J.draft.reasons)) {
+      throw new Error("should still carry blank-draft defaults for confidence/reasons");
+    }
+    return `"${J.draft.title}" queued for the journal`;
   });
 
   check("comparison renders side by side in the planner", () => {

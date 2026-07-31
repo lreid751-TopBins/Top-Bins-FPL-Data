@@ -4,9 +4,10 @@ import {
   draftPlayers, countByPosition, spend, budgetLeft, canAdd, addPlayer,
   removePlayer, isComplete, needed, squadTotals,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
-  branchSquad, setCompare, compareTotals,
+  branchSquad, setCompare, compareTotals, transferLogDraft,
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
+import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { $, $$, esc, fixtureStrip, availabilityFlag, sparkline } from "../ui.js";
 import { divergingBars } from "../charts.js";
 
@@ -347,7 +348,11 @@ function compareBody(cmp) {
 
     ${
       movers.length
-        ? `<h3 class="compare-sub">Who's driving the difference</h3>
+        ? `<div class="compare-log">
+             <button class="btn primary" id="plLogDecision">Log this as a decision →</button>
+             <p class="hint">Sends it to the Journal, pre-filled with who's in and who's out — set your confidence and reasoning there.</p>
+           </div>
+           <h3 class="compare-sub">Who's driving the difference</h3>
            ${divergingBars(movers, {
              meta: (m) => (m.side === "a" ? `only in ${cmp.aName}` : `only in ${cmp.bName}`),
              empty: "Same 15 players in both.",
@@ -476,6 +481,13 @@ function wire(root, rerender) {
 
   const cmp = $("#plCompare", root);
   if (cmp) cmp.onchange = () => { setCompare(cmp.value); rerender(); };
+
+  bind("#plLogDecision", "onclick", () => {
+    const draft = transferLogDraft(compareTotals());
+    if (!draft) return;
+    J.draft = { ...blankJournalDraft(), ...draft };
+    document.querySelector('[data-tab="journal"]')?.click();
+  });
 
   bind("#plSave", "onclick", async () => {
     PL.saving = true; rerender();
