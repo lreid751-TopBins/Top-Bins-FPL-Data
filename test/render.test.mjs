@@ -498,6 +498,29 @@ check("captain multiplier applied", () => {
   return `captain shown as ${want}`;
 });
 
+check("player cards show this gameweek's actual opponent, not the next one", () => {
+  // Regression: the opponent line used to default to S.nextGw (upcoming
+  // fixture) no matter which gameweek's picks were on screen, so during a
+  // live gameweek it showed a future opponent instead of the one the live
+  // points are actually for.
+  const cap = squadPicks.find((p) => p.is_captain);
+  const p = S.playerById[cap.element];
+  const fx = S.fxByTeamGw[p.teamId]?.[S.picksGw] || [];
+  const expected = fx.length
+    ? fx.map((f) => `${S.teams[f.opp]?.short || "?"} (${f.home ? "H" : "A"})`).join(", ")
+    : "—";
+
+  const card = [...panel("panel-squad").querySelectorAll(".plr")].find((el) =>
+    el.querySelector(".nm")?.textContent.includes(p.name)
+  );
+  if (!card) throw new Error(`captain's card (${p.name}) not found on the pitch`);
+  const shown = card.querySelector(".nx")?.textContent;
+  if (shown !== expected) {
+    throw new Error(`expected opponent "${expected}" for GW${S.picksGw}, card shows "${shown}"`);
+  }
+  return `GW${S.picksGw}: ${p.name} vs ${expected}`;
+});
+
 check("transfer scratchpad compares two players", () => {
   const squadIds = squadPicks.map((p) => p.element);
   S.ui.swapOut = squadIds[3];

@@ -1,7 +1,7 @@
 import { S, saveManagerId, runDifficulty, n, f1, f2, signed } from "../store.js";
 import { api } from "../api.js";
 import {
-  $, $$, esc, statCard, emptyState, fixtureStrip, fixtureText,
+  $, $$, esc, statCard, emptyState, fixtureStrip,
   availabilityFlag, playerSearchResults, dropdownHTML, sparkline,
 } from "../ui.js";
 
@@ -234,9 +234,18 @@ function playerCard(pick, benched) {
     ${jersey}
     <div class="pts">${pts}</div>
     <div class="nm">${esc(p.name)}${availabilityFlag(p)}</div>
-    <div class="nx">${esc(fixtureText(p.teamId, 1))}</div>
+    <div class="nx">${gwOpponent(p.teamId, S.picksGw)}</div>
     <div class="fx">${fixtureStrip(p.teamId, 5)}</div>
   </div>`;
+}
+
+/** Who a team played (or is playing) in one specific gameweek, e.g. "MUN (H)" -
+    the actual fixture behind this gameweek's live or final points, not the
+    upcoming one. Joins multiple fixtures for a double gameweek. */
+function gwOpponent(teamId, gw) {
+  const list = S.fxByTeamGw[teamId]?.[gw] || [];
+  if (!list.length) return "—";
+  return list.map((f) => `${S.teams[f.opp]?.short || "?"} (${f.home ? "H" : "A"})`).join(", ");
 }
 
 /* =========================================================
