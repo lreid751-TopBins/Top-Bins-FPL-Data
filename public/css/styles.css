@@ -885,6 +885,15 @@ textarea::placeholder { color: var(--muted-2); }
 .lineup-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .lineup-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
 .lineup-bench { margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
+.gw-nav { display: flex; align-items: center; gap: 8px; }
+.gw-nav-btn {
+  background: var(--raise); border: 1px solid var(--line); color: var(--chalk);
+  border-radius: 7px; width: 26px; height: 26px; font-size: 11px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.gw-nav-btn:hover:not(:disabled) { border-color: var(--gold-deep); color: var(--gold); }
+.gw-nav-btn:disabled { opacity: 0.35; cursor: default; }
+.gw-nav-label { font-size: 12.5px; color: var(--chalk); min-width: 46px; text-align: center; }
 .slot[data-lineup] { cursor: pointer; }
 .slot[data-lineup]:hover { border-color: var(--gold-deep); }
 .slot.bench { opacity: 0.65; }

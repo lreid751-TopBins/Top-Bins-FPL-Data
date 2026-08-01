@@ -11,6 +11,8 @@ import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { $, $$, esc, fixtureChips, availabilityFlag, sparkline } from "../ui.js";
 import { divergingBars } from "../charts.js";
 
+const TOTAL_GWS = 38;
+
 export function renderPlanner(root) {
   const rerender = () => renderPlanner(root);
 
@@ -219,11 +221,22 @@ function lineupSection(complete) {
   startingPlayers().forEach((p) => byPos[p.pos].push(p));
   const bench = benchPlayers();
 
+  // Defaults to the next gameweek the first time this renders; after that,
+  // whatever gameweek the arrows landed on sticks.
+  if (PL.lineupGw == null) PL.lineupGw = S.nextGw || 1;
+  const gw = Math.min(TOTAL_GWS, Math.max(1, PL.lineupGw));
+
   return `<div class="lineup-section">
     <div class="lineup-head">
       <span class="anton">Starting XI</span>
       <span class="hint mono">${formationLabel()}</span>
+      <div class="gw-nav">
+        <button class="gw-nav-btn" data-gwnav="-1" ${gw <= 1 ? "disabled" : ""} aria-label="Previous gameweek">◀</button>
+        <span class="gw-nav-label mono">GW${gw}</span>
+        <button class="gw-nav-btn" data-gwnav="1" ${gw >= TOTAL_GWS ? "disabled" : ""} aria-label="Next gameweek">▶</button>
+      </div>
     </div>
+    <p class="hint" style="margin:-4px 0 10px">Showing who each player faces in GW${gw} - step through any gameweek this season.</p>
     ${
       valid
         ? ""
@@ -234,18 +247,18 @@ function lineupSection(complete) {
       ${POSITION_ORDER.map((posKey) => `<div class="pos-row">
         <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
           <span class="hint">${byPos[posKey].length}</span></div>
-        <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true)).join("")}</div>
+        <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>
       </div>`).join("")}
     </div>
     <div class="pos-row lineup-bench">
       <div class="pos-label"><span class="hint">Bench</span></div>
-      <div class="slot-strip">${bench.map((p) => lineupSlot(p, false)).join("")}</div>
+      <div class="slot-strip">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
     </div>
     <p class="hint">Click a player, then click one from the other side to swap them. Captain and vice can only be a starter.</p>
   </div>`;
 }
 
-function lineupSlot(p, starting) {
+function lineupSlot(p, starting, gw) {
   const isC = PL.draft.captain === p.id;
   const isV = PL.draft.vice === p.id;
   const selected = PL.lineupSelect === p.id;
@@ -263,7 +276,7 @@ function lineupSlot(p, starting) {
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
-    <div class="slot-fx">${fixtureChips(p.teamId, 5)}</div>
+    <div class="slot-fx">${fixtureChips(p.teamId, 1, null, gw)}</div>
     ${
       starting
         ? `<div class="slot-cap">
@@ -490,6 +503,15 @@ function wire(root, rerender) {
         PL.lineupSelect = null;
         PL.lineupError = res.ok ? "" : res.reason;
       }
+      rerender();
+    };
+  });
+
+  // Starting XI gameweek navigator
+  $$("[data-gwnav]", root).forEach((b) => {
+    b.onclick = () => {
+      const gw = Math.min(TOTAL_GWS, Math.max(1, PL.lineupGw ?? S.nextGw ?? 1));
+      PL.lineupGw = Math.min(TOTAL_GWS, Math.max(1, gw + +b.dataset.gwnav));
       rerender();
     };
   });

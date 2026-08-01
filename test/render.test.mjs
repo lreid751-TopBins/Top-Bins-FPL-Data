@@ -849,6 +849,40 @@ check("planner fixture chips show the opponent, not just a colour", () => {
   return `${chips.length} chips, opponents visible`;
 });
 
+check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
+  PL.lineupGw = null;
+  renderPlanner(panel("panel-planner"));
+  const label = panel("panel-planner").querySelector(".gw-nav-label");
+  if (!label) throw new Error("no gameweek navigator rendered");
+  if (label.textContent !== `GW${S.nextGw}`) {
+    throw new Error(`expected GW${S.nextGw}, navigator shows ${label.textContent}`);
+  }
+
+  // Regression: each lineup slot used to show a fixed 5-gameweek strip
+  // regardless of which gameweek was selected. It should now show exactly
+  // one chip, for the gameweek the navigator is on.
+  const lineupChips = panel("panel-planner").querySelectorAll(".slot[data-lineup] .slot-fx .fxc");
+  if (lineupChips.length !== 15) throw new Error(`expected 1 chip per lineup slot (15), got ${lineupChips.length}`);
+
+  const before = [...lineupChips].map((c) => c.textContent);
+  const next = panel("panel-planner").querySelector('[data-gwnav="1"]');
+  next.click();
+
+  const label2 = panel("panel-planner").querySelector(".gw-nav-label");
+  if (label2.textContent !== `GW${S.nextGw + 1}`) {
+    throw new Error(`expected GW${S.nextGw + 1} after clicking next, got ${label2.textContent}`);
+  }
+  const after = [...panel("panel-planner").querySelectorAll(".slot[data-lineup] .slot-fx .fxc")].map((c) => c.textContent);
+  if (JSON.stringify(before) === JSON.stringify(after)) {
+    throw new Error("fixture chips didn't change after moving to the next gameweek");
+  }
+
+  const prev = panel("panel-planner").querySelector('[data-gwnav="-1"]');
+  if (prev.disabled) throw new Error("previous-gameweek arrow shouldn't be disabled here");
+  PL.lineupGw = null; // reset for later tests
+  return `defaulted to GW${S.nextGw}, moved forward, chips updated`;
+});
+
 check("squad table view shows the same 15 with a remove action", () => {
   PL.squadView = "table";
   renderPlanner(panel("panel-planner"));

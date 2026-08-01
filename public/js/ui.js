@@ -70,9 +70,9 @@ export function fixtureStrip(teamId, span = 5, mode = null) {
 /* ---------------- Fixture chips (labeled, for cards) ----------------
    Same difficulty colouring as fixtureStrip, but with the opponent and
    home/away printed on the chip instead of only in a hover title. */
-export function fixtureChips(teamId, span = 5, mode = null) {
+export function fixtureChips(teamId, span = 5, mode = null, from = null) {
   const m = mode || S.ui.fdrMode;
-  return upcoming(teamId, span)
+  return upcoming(teamId, span, from)
     .map((r) => {
       if (!r.list.length) return `<span class="fxc cell blank" title="GW${r.gw}: blank">–</span>`;
       const f = r.list[0];

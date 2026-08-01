@@ -45,6 +45,7 @@ export const PL = {
   projWindow: 5,     // gameweeks to project over (adjustable)
   lineupSelect: null, // player id currently selected for a starting/bench swap
   lineupError: "",    // reason the last swap attempt was rejected
+  lineupGw: null,     // gameweek the Starting XI is showing fixtures for; null = defaults to next GW
   squadView: "cards", // "cards" (jerseys) or "table" (dense stats) for the squad list
 };
 
