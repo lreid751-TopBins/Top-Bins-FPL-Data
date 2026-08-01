@@ -1,7 +1,8 @@
-import { S, f1, f2, signed } from "../store.js";
-import { $$, esc, statCard, availabilityFlag } from "../ui.js";
+import { S, n, f1, f2, signed } from "../store.js";
+import { $$, esc, statCard, availabilityFlag, teamCrest } from "../ui.js";
 import { projectPlayer } from "../projection.js";
 import { aggregate } from "./teams.js";
+import { fmtRank } from "./squad.js";
 
 const MIN_MINS = 270; // same floor Player Finder defaults to, keeps small-sample noise out
 
@@ -24,6 +25,7 @@ export function renderHub(root) {
     <div class="hub-grid">
       ${fixturesWidget()}
       ${captaincyWidget()}
+      ${rankWidget()}
       ${performersWidget()}
       ${teamShapeWidget()}
       ${availabilityWidget()}
@@ -46,27 +48,43 @@ function fixturesWidget() {
   const withFixture = new Set(rows.flatMap((f) => [f.team_h, f.team_a]));
   const blanking = S.teamList.filter((t) => !withFixture.has(t.id));
 
-  const fmt = (iso) => {
-    if (!iso) return "TBC";
-    const d = new Date(iso);
-    return `${d.toLocaleDateString(undefined, { weekday: "short" }).toUpperCase()} ${d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
-  };
+  const dayOf = (iso) => (iso ? new Date(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" }).toUpperCase() : "TBC");
+  const timeOf = (iso) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "TBC");
+
+  // Grouped by day so the kickoff date isn't repeated on every row.
+  const days = new Map();
+  for (const f of rows) {
+    const key = dayOf(f.kickoff_time);
+    if (!days.has(key)) days.set(key, []);
+    days.get(key).push(f);
+  }
+
+  const team = (id, difficulty) => `<span class="hub-fx-team">
+    ${teamCrest(id, 18)}
+    <i class="fdr-dot" style="background:var(--fdr-${difficulty || 3})" title="Official difficulty"></i>${esc(S.teams[id]?.short || "?")}
+  </span>`;
 
   return `<div class="chart-box hub-w">
     <h3>Fixtures — GW${g}</h3>
-    <p class="cap">Dot colour is that match's official difficulty for the team named next to it.</p>
     ${
       rows.length
-        ? `<div class="hub-fx-list">${rows
+        ? [...days.entries()]
+            .map(
+              ([day, list]) => `<div class="hub-fx-day">
+          <div class="hub-fx-day-h">${esc(day)}</div>
+          ${list
             .map(
               (f) => `<div class="hub-fx-row">
-          <span class="hub-fx-time">${fmt(f.kickoff_time)}</span>
-          <span class="hub-fx-team"><i class="fdr-dot" style="background:var(--fdr-${f.team_h_difficulty || 3})"></i>${esc(S.teams[f.team_h]?.short || "?")}</span>
-          <span class="hub-fx-vs">v</span>
-          <span class="hub-fx-team"><i class="fdr-dot" style="background:var(--fdr-${f.team_a_difficulty || 3})"></i>${esc(S.teams[f.team_a]?.short || "?")}</span>
+            <span class="hub-fx-time">${timeOf(f.kickoff_time)}</span>
+            ${team(f.team_h, f.team_h_difficulty)}
+            <span class="hub-fx-vs">v</span>
+            ${team(f.team_a, f.team_a_difficulty)}
+          </div>`
+            )
+            .join("")}
         </div>`
             )
-            .join("")}</div>`
+            .join("")
         : `<p class="hint">Nothing scheduled yet for GW${g}.</p>`
     }
     ${blanking.length ? `<p class="hint" style="margin-top:10px">Blank this week: ${blanking.map((t) => esc(t.short)).join(", ")}</p>` : ""}
@@ -101,6 +119,74 @@ function captaincyWidget() {
         )
         .join("")}
     </div>
+  </div>`;
+}
+
+/* ---------------- Your season: overall rank, trend, mini-leagues ---------------- */
+function rankTrendSvg(history) {
+  const pts = (history || []).map((h) => n(h.overall_rank)).filter((v) => v > 0).slice(-8);
+  if (pts.length < 2) return "";
+  const w = 130, h = 32, pad = 3;
+  const max = Math.max(...pts), min = Math.min(...pts);
+  const span = Math.max(1, max - min);
+  const coords = pts
+    .map((v, i) => {
+      const x = pad + (i / (pts.length - 1)) * (w - pad * 2);
+      const y = pad + ((v - min) / span) * (h - pad * 2); // lower rank number sits higher on the chart
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+  const improving = pts[pts.length - 1] < pts[0];
+  return `<svg class="hub-trend" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Overall rank trend">
+    <polyline points="${coords}" fill="none" stroke="${improving ? "var(--pos)" : "var(--neg)"}" stroke-width="1.5" />
+  </svg>`;
+}
+
+function rankWidget() {
+  if (!S.entry) {
+    return `<div class="chart-box hub-w">
+      <h3>Your season</h3>
+      <p class="cap">Overall rank, its trend, and where you stand in your mini-leagues.</p>
+      <p class="hint">Not connected yet.</p>
+      <button class="hub-goto" data-goto="squad">Connect your team →</button>
+    </div>`;
+  }
+
+  const rank = n(S.entry.summary_overall_rank);
+  const history = S.history?.current || [];
+  const prevRank = history.length > 1 ? n(history.at(-2).overall_rank) : null;
+  const delta = prevRank != null && rank ? prevRank - rank : null; // positive = improved
+
+  const leagues = (S.entry.leagues?.classic || []).slice(0, 6);
+
+  return `<div class="chart-box hub-w">
+    <h3>Your season</h3>
+    <p class="cap">${esc(S.entry.name || "My Team")}</p>
+    <div class="hub-rank-head">
+      <div>
+        <div class="hub-rank-big">${fmtRank(rank)}</div>
+        <div class="hint">overall rank${delta != null ? ` · <span class="${delta >= 0 ? "pos" : "neg"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toLocaleString()}</span> last GW` : ""}</div>
+      </div>
+      ${rankTrendSvg(history)}
+    </div>
+    ${
+      leagues.length
+        ? `<div class="hub-list" style="margin-top:8px">${leagues
+            .map((l) => {
+              const cur = n(l.entry_rank);
+              const prev = n(l.entry_last_rank);
+              const ldelta = prev && cur ? prev - cur : 0;
+              return `<div class="hub-row">
+          <span class="hub-name">${esc(l.name)}</span>
+          <span class="hub-val ${ldelta > 0 ? "pos" : ldelta < 0 ? "neg" : ""}">
+            ${cur ? cur.toLocaleString() : "—"}
+            ${ldelta ? `<span class="sub-t">${ldelta > 0 ? "▲" : "▼"}${Math.abs(ldelta).toLocaleString()}</span>` : ""}
+          </span>
+        </div>`;
+            })
+            .join("")}</div>`
+        : `<p class="hint" style="margin-top:8px">Not in any classic mini-leagues yet.</p>`
+    }
   </div>`;
 }
 

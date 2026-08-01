@@ -163,6 +163,12 @@ const MOCK = {
   "/api/entry/1234567": {
     id: 1234567, name: "Top Bins XI", player_first_name: "Paul", player_last_name: "T",
     summary_overall_points: 712, summary_overall_rank: 184532, summary_event_points: 58,
+    leagues: {
+      classic: [
+        { id: 1, name: "Overall", entry_rank: 184532, entry_last_rank: 220145 },
+        { id: 314159, name: "Top Bins Listeners", entry_rank: 12, entry_last_rank: 9 },
+      ],
+    },
   },
   "/api/entry/1234567/history": {
     current: Array.from({ length: CURRENT_GW }, (_, i) => ({

@@ -8,6 +8,14 @@ export const esc = (s) =>
     ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
   );
 
+/* ---------------- Team crest ---------------- */
+export function teamCrest(teamId, size = 20) {
+  const code = S.teams[teamId]?.code;
+  if (!code) return "";
+  return `<img class="crest" src="https://resources.premierleague.com/premierleague/badges/70/t${code}.png"
+    alt="" loading="lazy" width="${size}" height="${size}" onerror="this.style.display='none'">`;
+}
+
 /* ---------------- Availability ---------------- */
 export function availabilityFlag(p) {
   if (p.status === "a") return "";

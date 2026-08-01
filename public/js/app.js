@@ -81,8 +81,9 @@ async function boot() {
   wireTabs();
   renderActive();
 
-  // Auto-load a previously saved manager ID.
-  if (S.ui.managerId && S.ui.tab === "squad") {
+  // Auto-load a previously saved manager ID - the Hub (now the default tab)
+  // needs S.entry/S.history for its rank widget just as much as My Team does.
+  if (S.ui.managerId) {
     loadManager(S.ui.managerId, () => renderActive());
   }
 

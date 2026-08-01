@@ -505,15 +505,19 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .hub-goto:hover { color: var(--gold-2); }
 
 .fdr-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+.crest { display: inline-block; object-fit: contain; flex: none; }
 
-.hub-fx-list { display: flex; flex-direction: column; gap: 2px; }
-.hub-fx-row {
-  display: grid; grid-template-columns: 70px 1fr auto 1fr; align-items: center; gap: 8px;
-  font-size: 12.5px; padding: 6px 0; border-bottom: 1px solid var(--line-soft);
+.hub-fx-day-h {
+  font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
+  margin: 10px 0 2px; padding-bottom: 3px; border-bottom: 1px solid var(--line-soft);
 }
-.hub-fx-row:last-child { border-bottom: none; }
-.hub-fx-time { font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--muted); }
-.hub-fx-team { display: flex; align-items: center; }
+.hub-fx-day:first-child .hub-fx-day-h { margin-top: 0; }
+.hub-fx-row {
+  display: grid; grid-template-columns: 40px 1fr auto 1fr; align-items: center; gap: 6px;
+  font-size: 12px; padding: 4px 0;
+}
+.hub-fx-time { font-family: "JetBrains Mono", monospace; font-size: 10px; color: var(--muted); }
+.hub-fx-team { display: flex; align-items: center; gap: 5px; }
 .hub-fx-team:last-child { justify-content: flex-end; }
 .hub-fx-vs { font-size: 10px; color: var(--muted-2); text-align: center; }
 
@@ -536,6 +540,10 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);
   margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--line-soft);
 }
+
+.hub-rank-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 2px; }
+.hub-rank-big { font-family: "Anton", sans-serif; font-size: 26px; color: var(--gold); line-height: 1; }
+.hub-trend { flex: none; }
 
 /* ---------------- Responsive ---------------- */
 @media (max-width: 720px) {

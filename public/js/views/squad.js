@@ -365,7 +365,7 @@ function wire(root, rerender, picks) {
 }
 
 /* ---------------- Formatting ---------------- */
-function fmtRank(r) {
+export function fmtRank(r) {
   const v = n(r);
   if (!v) return "—";
   if (v >= 1_000_000) return (v / 1_000_000).toFixed(2) + "M";

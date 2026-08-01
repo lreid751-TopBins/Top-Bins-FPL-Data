@@ -183,10 +183,19 @@ check("hub renders every widget with no undefined or NaN", () => {
   if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
   if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
   const widgets = [...panel("panel-hub").querySelectorAll(".chart-box h3")].map((h) => h.textContent);
-  for (const title of ["Fixtures", "Captaincy shortlist", "Best performers", "Team shape", "Availability watch", "Price movers"]) {
+  for (const title of ["Fixtures", "Captaincy shortlist", "Your season", "Best performers", "Team shape", "Availability watch", "Price movers"]) {
     if (!widgets.some((w) => w.includes(title))) throw new Error(`missing the "${title}" widget`);
   }
   return `${widgets.length} widgets rendered`;
+});
+
+check("hub prompts to connect a team before showing rank, not a crash", () => {
+  // No manager is connected yet at this point in the run.
+  renderHub(panel("panel-hub"));
+  if (panel("panel-hub").querySelector(".hub-rank-big")) throw new Error("shouldn't show a rank with no manager connected");
+  const connectBtn = panel("panel-hub").querySelector('[data-goto="squad"]');
+  if (!connectBtn) throw new Error("expected a way to connect a team from the hub");
+  return "connect prompt shown, no rank rendered";
 });
 
 check("hub captaincy shortlist matches the Planner's own projection engine", () => {
@@ -368,6 +377,27 @@ check("transfer scratchpad compares two players", () => {
   if (deltas.length !== 6) throw new Error(`expected 6 deltas, got ${deltas.length}`);
   if (panel("panel-squad").innerHTML.includes("NaN")) throw new Error("NaN in deltas");
   return `${deltas.length} comparison figures`;
+});
+
+check("hub shows crests, rank and mini-leagues once a manager is connected", () => {
+  renderHub(panel("panel-hub"));
+  const html = panel("panel-hub").innerHTML;
+  if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
+  if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
+
+  const crests = panel("panel-hub").querySelectorAll(".crest");
+  if (!crests.length) throw new Error("no team crests rendered in the fixtures widget");
+
+  const rankBig = panel("panel-hub").querySelector(".hub-rank-big");
+  if (!rankBig || rankBig.textContent.trim() === "—") throw new Error("overall rank not shown for a connected manager");
+
+  const trend = panel("panel-hub").querySelector(".hub-trend polyline");
+  if (!trend) throw new Error("no rank trend line rendered");
+
+  const leagueNames = [...panel("panel-hub").querySelectorAll(".hub-rank-head ~ .hub-list .hub-name")].map((el) => el.textContent);
+  if (!leagueNames.some((n) => n.includes("Top Bins Listeners"))) throw new Error("mini-league not listed");
+
+  return `${crests.length} crests, rank ${rankBig.textContent.trim()}, ${leagueNames.length} leagues`;
 });
 
 await loadManager("999", () => renderSquad(panel("panel-squad")));
