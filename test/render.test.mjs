@@ -313,6 +313,17 @@ check("teams table renders", () => {
   return `${rows.length} rows`;
 });
 
+check("teams tab plots an attack-vs-defence quadrant for every team", () => {
+  S.ui.teamsWindowGws = 0;
+  renderTeams(panel("panel-teams"));
+  const dots = panel("panel-teams").querySelectorAll(".chart-box .pt");
+  if (dots.length !== 20) throw new Error(`expected 20 team dots, got ${dots.length}`);
+  const quadLines = panel("panel-teams").querySelectorAll(".chart-box .paritys");
+  if (quadLines.length !== 2) throw new Error(`expected a 2-line quadrant crosshair, got ${quadLines.length}`);
+  if (panel("panel-teams").innerHTML.includes("NaN")) throw new Error("NaN in the quadrant chart");
+  return `${dots.length} teams plotted`;
+});
+
 check("teams tab shows a loading state while a gameweek window fetches", () => {
   S.ui.teamsWindowGws = 4;
   renderTeams(panel("panel-teams"));
@@ -385,8 +396,20 @@ check("hub shows crests, rank and mini-leagues once a manager is connected", () 
   if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
   if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
 
-  const crests = panel("panel-hub").querySelectorAll(".crest");
+  const crests = panel("panel-hub").querySelectorAll(".team-crest");
   if (!crests.length) throw new Error("no team crests rendered in the fixtures widget");
+  // Regression: teamCrest() used to render with class="crest", which
+  // collides with the masthead logo's .crest rule (fixed 40x40) - CSS
+  // always beats an element's own width/height attributes, so every team
+  // crest silently rendered at the masthead's size instead of the
+  // requested one. Confirm the two no longer share a class name, and that
+  // the requested size actually made it onto the element.
+  if (crests[0].classList.contains("crest")) {
+    throw new Error("team crests must not reuse the masthead logo's .crest class");
+  }
+  if (crests[0].getAttribute("width") !== "22") {
+    throw new Error(`expected the requested 22px crest size on the element, got ${crests[0].getAttribute("width")}`);
+  }
 
   const rankBig = panel("panel-hub").querySelector(".hub-rank-big");
   if (!rankBig || rankBig.textContent.trim() === "—") throw new Error("overall rank not shown for a connected manager");

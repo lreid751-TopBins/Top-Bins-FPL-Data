@@ -12,7 +12,9 @@ export const esc = (s) =>
 export function teamCrest(teamId, size = 20) {
   const code = S.teams[teamId]?.code;
   if (!code) return "";
-  return `<img class="crest" src="https://resources.premierleague.com/premierleague/badges/70/t${code}.png"
+  // Named team-crest, not crest, so it doesn't collide with the masthead
+  // logo's own fixed-size .crest class.
+  return `<img class="team-crest" src="https://resources.premierleague.com/premierleague/badges/70/t${code}.png"
     alt="" loading="lazy" width="${size}" height="${size}" onerror="this.style.display='none'">`;
 }
 

@@ -1,6 +1,7 @@
 import { S, runDifficulty, n, f1, f2, signed } from "../store.js";
 import { api } from "../api.js";
 import { $, $$, esc, th, fixtureStrip, statCard } from "../ui.js";
+import { scatter } from "../charts.js";
 
 const WINDOW_OPTIONS = [0, 4, 6, 8];
 
@@ -161,6 +162,32 @@ export function renderTeams(root) {
       xGC is an estimate. The FPL API only publishes expected goals conceded per player, measured while they were
       on the pitch, so this scales that total back down by team minutes played. Treat it as a ranking, not a precise number.
     </p>
+
+    <div class="chart-box" style="margin-top:20px">
+      <h3>Attack vs defence</h3>
+      <p class="cap">
+        Underlying output${range ? ` over GW${range.from}–${range.to}` : " this season"}, not results — xG created going
+        one way, xGC conceded the other (inverted, so up is still good). Top-right is the quadrant to chase: creating the
+        most while conceding the least. Bottom-left is a team out of form on both ends, whatever the table says.
+      </p>
+      ${scatter(
+        data.map((t) => ({
+          x: t.xg,
+          y: -t.xgc,
+          id: t.id,
+          label: `${t.name}: ${f2(t.xg)} xG, ${f2(t.xgc)} xGC`,
+          short: t.short,
+          weight: 1,
+        })),
+        {
+          xLabel: "xG created →",
+          yLabel: "← xGC conceded (fewer is up)",
+          quadrant: true,
+          labelTop: data.length,
+          fmt: (v) => Math.abs(v).toFixed(2),
+        }
+      )}
+    </div>
   `;
 
   const winSel = $("#teamsWindow", root);

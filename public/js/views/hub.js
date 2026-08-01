@@ -60,7 +60,7 @@ function fixturesWidget() {
   }
 
   const team = (id, difficulty) => `<span class="hub-fx-team">
-    ${teamCrest(id, 18)}
+    ${teamCrest(id, 22)}
     <i class="fdr-dot" style="background:var(--fdr-${difficulty || 3})" title="Official difficulty"></i>${esc(S.teams[id]?.short || "?")}
   </span>`;
 
