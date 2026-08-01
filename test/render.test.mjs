@@ -263,6 +263,30 @@ check("hub captaincy shortlist matches the Planner's own projection engine", () 
   return `top pick ${best.p.name} at ${firstVal}pts, ${nav.length} nav links`;
 });
 
+check("captaincy shortlist shows a riser/faller trend from today's net transfers", () => {
+  renderHub(panel("panel-hub"));
+  const box = [...panel("panel-hub").querySelectorAll(".chart-box")].find((b) =>
+    b.querySelector("h3")?.textContent.includes("Captaincy shortlist")
+  );
+  if (!box) throw new Error("captaincy shortlist widget not found");
+
+  const gw = S.nextGw || S.currentGw || 1;
+  const shortlist = S.players
+    .filter((p) => p.xMin >= 60 && p.minutes >= 270)
+    .map((p) => ({ p, total: projectPlayer(p, 1, gw).total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 6);
+  const expectedTags = shortlist.filter((r) => r.p.netTransfers).length;
+
+  const tags = box.querySelectorAll(".hub-trend-tag");
+  if (tags.length !== expectedTags) {
+    throw new Error(`expected ${expectedTags} trend tags (players with nonzero net transfers), got ${tags.length}`);
+  }
+  const posOrNeg = [...tags].every((t) => t.classList.contains("pos") || t.classList.contains("neg"));
+  if (!posOrNeg) throw new Error("every trend tag should be colored pos or neg");
+  return `${tags.length} of ${shortlist.length} shortlisted players trending`;
+});
+
 check("fixture ticker renders", () => {
   S.ui.fdrFrom = null;
   S.ui.fdrTo = null;
@@ -275,6 +299,24 @@ check("fixture ticker renders", () => {
   const crests = panel("panel-fixtures").querySelectorAll(".ticker .team-crest");
   if (crests.length !== 20) throw new Error(`expected 20 team crests in the ticker, got ${crests.length}`);
   return `${rows.length} rows, ${cells.length} cells, ${crests.length} crests`;
+});
+
+check("ticker sticky team cell wraps crest/name in an inner flex span, not the td itself", () => {
+  renderFixtures(panel("panel-fixtures"));
+  const cell = panel("panel-fixtures").querySelector("td.team-c");
+  if (!cell) throw new Error("no team-c cell found");
+  // Regression: making the <td> itself a flex container stops it stretching
+  // to the table row's full height, leaving a gap at the bottom where the
+  // GW cell scrolling underneath (behind the sticky column) peeks through
+  // as the ticker scrolls horizontally. The crest/name/avg must live in an
+  // inner span so the td stays a plain, full-height table cell.
+  if (!cell.querySelector(".ticker-team-inner")) {
+    throw new Error("expected crest/name/avg wrapped in .ticker-team-inner, not flexed directly on the td");
+  }
+  if (cell.classList.contains("ticker-team-inner")) {
+    throw new Error("the td itself must not carry the flex layout");
+  }
+  return "team-c stays a full-height table cell";
 });
 
 check("fixture ticker team-focus filter narrows the table down", () => {

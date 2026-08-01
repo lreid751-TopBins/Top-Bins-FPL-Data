@@ -143,6 +143,9 @@ function fixturesWidget() {
 }
 
 /* ---------------- Captaincy shortlist ---------------- */
+// Abbreviates a transfer count: 45231 -> "45.2k".
+const fmtTransfers = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(v));
+
 function captaincyWidget() {
   const g = gw();
   const rows = S.players
@@ -157,16 +160,23 @@ function captaincyWidget() {
 
   return `<div class="chart-box hub-w">
     <h3>Captaincy shortlist</h3>
-    <p class="cap">Top projected points for GW${g} alone, from the same engine the Planner uses.</p>
+    <p class="cap">
+      Top projected points for GW${g} alone, from the same engine the Planner uses.
+      Trend is net transfers in or out over the last day.
+    </p>
     <div class="hub-list">
       ${rows
-        .map(
-          (r, i) => `<div class="hub-row">
+        .map((r, i) => {
+          const nt = r.p.netTransfers;
+          const trend = nt
+            ? `<span class="hub-trend-tag ${nt > 0 ? "pos" : "neg"}">${nt > 0 ? "▲" : "▼"} ${fmtTransfers(Math.abs(nt))}</span>`
+            : "";
+          return `<div class="hub-row">
         <span class="hub-rank">${i + 1}</span>
-        <span class="hub-name">${esc(r.p.name)}${availabilityFlag(r.p)} <span class="sub-t">${esc(r.p.short)}</span></span>
+        <span class="hub-name">${esc(r.p.name)}${availabilityFlag(r.p)} <span class="sub-t">${esc(r.p.short)}</span> ${trend}</span>
         <span class="hub-val gold">${r.total.toFixed(1)}</span>
-      </div>`
-        )
+      </div>`;
+        })
         .join("")}
     </div>
   </div>`;

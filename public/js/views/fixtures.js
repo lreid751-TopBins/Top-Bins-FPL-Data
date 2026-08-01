@@ -162,7 +162,7 @@ function tickerRow(r, mode) {
     .join("");
 
   return `<tr>
-    <td class="team-c">${teamCrest(r.team.id, 18)}<span class="team-c-name">${esc(r.team.name)}</span><span class="avg">${f2(r.avg)}</span></td>
+    <td class="team-c"><span class="ticker-team-inner">${teamCrest(r.team.id, 18)}<span class="team-c-name">${esc(r.team.name)}</span><span class="avg">${f2(r.avg)}</span></span></td>
     ${cells}
   </tr>`;
 }

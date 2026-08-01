@@ -88,7 +88,7 @@ const deps: Deps = {
 
   async squadList(tokenHash) {
     const res = await fetch(
-      `${REST}/squads?token_hash=eq.${tokenHash}` +
+      `${REST}/squads?token_hash=eq.${encodeURIComponent(tokenHash)}` +
         `&select=id,created_at,updated_at,name,picks,captain,vice,note` +
         `&order=updated_at.desc&limit=50`,
       { headers: restHeaders }
@@ -108,8 +108,13 @@ const deps: Deps = {
   },
 
   async squadUpdate(tokenHash, id, row: NewSquad) {
+    // encodeURIComponent on both id and tokenHash is defense-in-depth: the
+    // caller in handler.ts already validates id against a strict UUID regex
+    // and tokenHash is always our own SHA-256 hex digest, but neither of
+    // those invariants should be the only thing standing between a crafted
+    // value and rewriting this PostgREST filter.
     const res = await fetch(
-      `${REST}/squads?id=eq.${id}&token_hash=eq.${tokenHash}`,
+      `${REST}/squads?id=eq.${encodeURIComponent(id)}&token_hash=eq.${encodeURIComponent(tokenHash)}`,
       {
         method: "PATCH",
         headers: { ...restHeaders, Prefer: "return=representation" },
@@ -123,7 +128,7 @@ const deps: Deps = {
 
   async squadDelete(tokenHash, id) {
     const res = await fetch(
-      `${REST}/squads?id=eq.${id}&token_hash=eq.${tokenHash}`,
+      `${REST}/squads?id=eq.${encodeURIComponent(id)}&token_hash=eq.${encodeURIComponent(tokenHash)}`,
       { method: "DELETE", headers: { ...restHeaders, Prefer: "return=representation" } }
     );
     if (!res.ok) return false;
@@ -131,7 +136,7 @@ const deps: Deps = {
   },
 
   async squadCount(tokenHash) {
-    const res = await fetch(`${REST}/squads?token_hash=eq.${tokenHash}&select=id`, {
+    const res = await fetch(`${REST}/squads?token_hash=eq.${encodeURIComponent(tokenHash)}&select=id`, {
       headers: { ...restHeaders, Prefer: "count=exact", Range: "0-0" },
     });
     const total = Number((res.headers.get("content-range") ?? "").split("/")[1]);
@@ -140,7 +145,7 @@ const deps: Deps = {
 
   async journalList(tokenHash) {
     const res = await fetch(
-      `${REST}/decisions?token_hash=eq.${tokenHash}` +
+      `${REST}/decisions?token_hash=eq.${encodeURIComponent(tokenHash)}` +
         `&select=id,created_at,kind,gw,horizon,title,options,chosen,confidence,reasons,note` +
         `&order=gw.desc,created_at.desc&limit=500`,
       { headers: restHeaders }
@@ -162,7 +167,7 @@ const deps: Deps = {
 
   async journalDelete(tokenHash, id) {
     const res = await fetch(
-      `${REST}/decisions?id=eq.${id}&token_hash=eq.${tokenHash}`,
+      `${REST}/decisions?id=eq.${encodeURIComponent(id)}&token_hash=eq.${encodeURIComponent(tokenHash)}`,
       { method: "DELETE", headers: { ...restHeaders, Prefer: "return=representation" } }
     );
     if (!res.ok) return false;
@@ -170,7 +175,7 @@ const deps: Deps = {
   },
 
   async journalCount(tokenHash) {
-    const res = await fetch(`${REST}/decisions?token_hash=eq.${tokenHash}&select=id`, {
+    const res = await fetch(`${REST}/decisions?token_hash=eq.${encodeURIComponent(tokenHash)}&select=id`, {
       headers: { ...restHeaders, Prefer: "count=exact", Range: "0-0" },
     });
     const range = res.headers.get("content-range") ?? "";
@@ -179,7 +184,13 @@ const deps: Deps = {
   },
 
   snapshotKey: Deno.env.get("SNAPSHOT_KEY") ?? "",
-  allowedOrigins: (Deno.env.get("ALLOWED_ORIGINS") ?? "*")
+  // Defaults to the real site rather than "*", so a project that never sets
+  // ALLOWED_ORIGINS is still locked down instead of silently wide open.
+  // Override via `supabase secrets set` for local/preview testing.
+  allowedOrigins: (
+    Deno.env.get("ALLOWED_ORIGINS") ??
+    "https://fpl.topbinswithtwins.com,https://lreid751-topbins.github.io"
+  )
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),

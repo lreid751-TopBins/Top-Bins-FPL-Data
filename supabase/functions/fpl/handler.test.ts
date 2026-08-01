@@ -338,10 +338,13 @@ Deno.test("answers CORS preflight and honours an origin allowlist", async () => 
   );
 
   const blocked = await handle(GET("/bootstrap", { headers: { origin: "https://evil.test" } }));
+  // Regression: this used to send the literal string "null", which some
+  // browsers treat as a real, matchable origin (sandboxed iframes, file://
+  // pages) - omitting the header entirely is the safe way to deny.
   assertEquals(
     blocked.headers.get("Access-Control-Allow-Origin"),
-    "null",
-    "unlisted origin should not be allowed"
+    null,
+    "unlisted origin should get no Access-Control-Allow-Origin header at all"
   );
 });
 

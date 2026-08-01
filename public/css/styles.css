@@ -272,12 +272,21 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .ticker th.team-h {
   left: 0; z-index: 3; text-align: left; cursor: pointer;
 }
+/* As GW cells scroll left underneath the sticky Team column, this shadow
+   fades them out at that edge instead of a hard, abrupt cut. */
+.ticker th.team-h, .ticker td.team-c {
+  box-shadow: 10px 0 12px -8px rgba(0, 0, 0, 0.5);
+}
 .ticker td.team-c {
   position: sticky; left: 0; z-index: 1; background: var(--panel);
   border-bottom: 1px solid var(--line-soft); padding: 5px 10px 5px 12px;
   font-weight: 600; font-size: 13px; white-space: nowrap;
-  display: flex; align-items: center; gap: 6px;
 }
+/* A flex td no longer stretches to the row's full height, leaving a gap at
+   the bottom where the GW cell scrolling underneath peeks through - so the
+   flex layout lives on an inner span instead, and the td stays a normal
+   full-height table cell. */
+.ticker-team-inner { display: flex; align-items: center; gap: 6px; }
 .ticker td.team-c .avg {
   font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--muted); margin-left: 8px;
 }
@@ -550,6 +559,12 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .hub-val { font-family: "JetBrains Mono", monospace; font-weight: 600; flex: none; }
 .hub-val.gold { color: var(--gold); }
 .hub-news { font-size: 10.5px; color: var(--muted); }
+.hub-trend-tag {
+  font-family: "JetBrains Mono", monospace; font-size: 10px; font-weight: 600;
+  padding: 1px 5px; border-radius: 8px; background: var(--raise); white-space: nowrap;
+}
+.hub-trend-tag.pos { color: var(--pos); }
+.hub-trend-tag.neg { color: var(--neg); }
 
 .hub-cols { display: flex; gap: 14px; flex-wrap: wrap; }
 .hub-col { flex: 1 1 140px; min-width: 140px; }

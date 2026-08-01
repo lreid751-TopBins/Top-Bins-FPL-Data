@@ -113,13 +113,18 @@ const TTL = {
 function corsHeaders(origin: string | null, allowed: string[]): Record<string, string> {
   const allowAll = allowed.includes("*");
   const ok = allowAll || (origin !== null && allowed.includes(origin));
-  return {
-    "Access-Control-Allow-Origin": ok ? (allowAll ? "*" : origin!) : "null",
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "content-type, x-journal-token, x-snapshot-key",
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
+  // Omit the header entirely for a disallowed origin, rather than sending the
+  // literal string "null" - some browsers treat that as a real origin value
+  // (e.g. sandboxed iframes, file:// pages), which could grant exactly the
+  // access this is meant to deny.
+  if (ok) headers["Access-Control-Allow-Origin"] = allowAll ? "*" : origin!;
+  return headers;
 }
 
 function json(body: unknown, status: number, cors: Record<string, string>, cacheSeconds = 0) {
@@ -239,6 +244,25 @@ async function buildForm(deps: Deps, last: number) {
 async function hashToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/**
+ * Constant-time-ish string comparison for the snapshot shared secret. Hashing
+ * both sides first means the compared values are always the same length, and
+ * XOR-accumulating every byte (instead of `!==`, which can bail out on the
+ * first mismatch) avoids leaking how much of the secret a guess got right.
+ */
+async function safeEqual(a: string, b: string): Promise<boolean> {
+  const enc = new TextEncoder();
+  const [da, db] = await Promise.all([
+    crypto.subtle.digest("SHA-256", enc.encode(a)),
+    crypto.subtle.digest("SHA-256", enc.encode(b)),
+  ]);
+  const va = new Uint8Array(da);
+  const vb = new Uint8Array(db);
+  let diff = 0;
+  for (let i = 0; i < va.length; i++) diff |= va[i] ^ vb[i];
+  return diff === 0;
 }
 
 /** Journal tokens are generated in the browser; anything short is a mistake. */
@@ -723,7 +747,7 @@ async function handleSquads(
 
 async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, string>) {
   const key = req.headers.get("x-snapshot-key") ?? "";
-  if (!deps.snapshotKey || key !== deps.snapshotKey) {
+  if (!deps.snapshotKey || !(await safeEqual(key, deps.snapshotKey))) {
     return json({ error: "unauthorized" }, 401, cors);
   }
 
