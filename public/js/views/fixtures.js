@@ -1,5 +1,5 @@
 import { S, difficultyOf, upcoming, runDifficulty, f1, f2 } from "../store.js";
-import { $, $$, esc } from "../ui.js";
+import { $, $$, esc, teamCrest } from "../ui.js";
 
 const MODE_COPY = {
   official: {
@@ -19,16 +19,28 @@ const MODE_COPY = {
   },
 };
 
-export function renderFixtures(root) {
-  const { fdrMode: mode, fdrSpan: span, fdrSort: sort } = S.ui;
-  const gws = [];
-  for (let g = S.nextGw; g < S.nextGw + span; g++) gws.push(g);
+const TOTAL_GWS = 38;
 
-  const rows = S.teamList.map((t) => ({
+export function renderFixtures(root) {
+  const { fdrMode: mode, fdrSort: sort, fdrFocus: focus } = S.ui;
+
+  // Default to the next 6 gameweeks the first time this renders; after that,
+  // whatever the user picked in the From/To selects sticks.
+  if (S.ui.fdrFrom == null) S.ui.fdrFrom = S.nextGw || 1;
+  if (S.ui.fdrTo == null) S.ui.fdrTo = Math.min(TOTAL_GWS, S.ui.fdrFrom + 5);
+  const from = S.ui.fdrFrom;
+  const to = Math.max(from, S.ui.fdrTo);
+  const span = to - from + 1;
+
+  const gws = [];
+  for (let g = from; g <= to; g++) gws.push(g);
+
+  const allRows = S.teamList.map((t) => ({
     team: t,
-    avg: runDifficulty(t.id, span, mode),
-    fixtures: upcoming(t.id, span),
+    avg: runDifficulty(t.id, span, mode, from),
+    fixtures: upcoming(t.id, span, from),
   }));
+  const rows = focus.size ? allRows.filter((r) => focus.has(r.team.id)) : allRows;
 
   if (sort === "avg") rows.sort((a, b) => a.avg - b.avg);
   else if (sort === "name") rows.sort((a, b) => a.team.name.localeCompare(b.team.name));
@@ -52,8 +64,11 @@ export function renderFixtures(root) {
           <button data-mode="attack" ${mode === "attack" ? 'aria-pressed="true"' : ""}>Attack</button>
           <button data-mode="defence" ${mode === "defence" ? 'aria-pressed="true"' : ""}>Defence</button>
         </div>
-        <select id="fdrSpan" aria-label="Number of gameweeks">
-          ${[4, 6, 8, 10].map((v) => `<option value="${v}" ${v === span ? "selected" : ""}>Next ${v} GWs</option>`).join("")}
+        <select id="fdrFrom" aria-label="From gameweek">
+          ${gwOptions(1, TOTAL_GWS).map((g) => `<option value="${g}" ${g === from ? "selected" : ""}>From GW${g}</option>`).join("")}
+        </select>
+        <select id="fdrToSel" aria-label="To gameweek">
+          ${gwOptions(from, TOTAL_GWS).map((g) => `<option value="${g}" ${g === to ? "selected" : ""}>To GW${g}</option>`).join("")}
         </select>
         <select id="fdrSort" aria-label="Sort teams">
           <option value="avg" ${sort === "avg" ? "selected" : ""}>Easiest run first</option>
@@ -66,8 +81,20 @@ export function renderFixtures(root) {
       <b style="color:var(--chalk)">${MODE_COPY[mode].title}.</b> ${MODE_COPY[mode].caption}
     </p>
 
+    <p class="hint" style="margin:0 0 8px">Focus on specific clubs, or leave all selected to see the full division.</p>
+    <div class="team-focus-row">
+      ${S.teamList
+        .map(
+          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-focus="${t.id}">
+            ${teamCrest(t.id, 14)}<span>${esc(t.short)}</span>
+          </button>`
+        )
+        .join("")}
+      ${focus.size ? `<button class="team-focus-clear" data-focus-clear>Clear focus (${focus.size})</button>` : ""}
+    </div>
+
     <div class="cards">
-      ${card("Kindest run", best?.team.name, f2(best?.avg ?? 0), `avg over GW${S.nextGw}–${S.nextGw + span - 1}`, true)}
+      ${card("Kindest run", best?.team.name, f2(best?.avg ?? 0), `avg over GW${from}–${to}`, true)}
       ${card("Toughest run", worst?.team.name, f2(worst?.avg ?? 0), "avoid the defence here")}
       ${card("Double gameweeks", doubles.length ? doubles.map((d) => d.team.short).join(" ") : "None scheduled", "", doubles.length ? "extra fixture in the window" : "in this window")}
       ${card("Blanks", blanks.length ? blanks.map((d) => d.team.short).join(" ") : "None scheduled", "", blanks.length ? "no fixture in the window" : "in this window")}
@@ -100,6 +127,12 @@ export function renderFixtures(root) {
   wire(root);
 }
 
+function gwOptions(from, to) {
+  const out = [];
+  for (let g = from; g <= to; g++) out.push(g);
+  return out;
+}
+
 function card(lab, big, small, foot, accent = false) {
   const size = String(big || "").length > 12 ? "font-size:17px" : "";
   return `<div class="card${accent ? " accent" : ""}">
@@ -129,7 +162,7 @@ function tickerRow(r, mode) {
     .join("");
 
   return `<tr>
-    <td class="team-c">${esc(r.team.name)}<span class="avg">${f2(r.avg)}</span></td>
+    <td class="team-c">${teamCrest(r.team.id, 18)}<span class="team-c-name">${esc(r.team.name)}</span><span class="avg">${f2(r.avg)}</span></td>
     ${cells}
   </tr>`;
 }
@@ -141,16 +174,37 @@ function wire(root) {
       renderFixtures(root);
     };
   });
-  const span = $("#fdrSpan", root);
-  if (span)
-    span.onchange = () => {
-      S.ui.fdrSpan = +span.value;
+  const fromSel = $("#fdrFrom", root);
+  if (fromSel)
+    fromSel.onchange = () => {
+      S.ui.fdrFrom = +fromSel.value;
+      if (S.ui.fdrTo < S.ui.fdrFrom) S.ui.fdrTo = S.ui.fdrFrom;
+      renderFixtures(root);
+    };
+  const toSel = $("#fdrToSel", root);
+  if (toSel)
+    toSel.onchange = () => {
+      S.ui.fdrTo = +toSel.value;
       renderFixtures(root);
     };
   const sort = $("#fdrSort", root);
   if (sort)
     sort.onchange = () => {
       S.ui.fdrSort = sort.value;
+      renderFixtures(root);
+    };
+  $$("[data-focus]", root).forEach((b) => {
+    b.onclick = () => {
+      const id = +b.dataset.focus;
+      if (S.ui.fdrFocus.has(id)) S.ui.fdrFocus.delete(id);
+      else S.ui.fdrFocus.add(id);
+      renderFixtures(root);
+    };
+  });
+  const clearFocus = $("[data-focus-clear]", root);
+  if (clearFocus)
+    clearFocus.onclick = () => {
+      S.ui.fdrFocus.clear();
       renderFixtures(root);
     };
 }

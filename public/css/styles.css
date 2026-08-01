@@ -276,6 +276,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   position: sticky; left: 0; z-index: 1; background: var(--panel);
   border-bottom: 1px solid var(--line-soft); padding: 5px 10px 5px 12px;
   font-weight: 600; font-size: 13px; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
 }
 .ticker td.team-c .avg {
   font-family: "JetBrains Mono", monospace; font-size: 10.5px; color: var(--muted); margin-left: 8px;
@@ -310,6 +311,20 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .legend { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-top: 12px; font-size: 11px; color: var(--muted); }
 .legend .swatches { display: flex; gap: 3px; }
 .legend .sw { width: 22px; height: 14px; border-radius: 3px; }
+
+/* Team-focus filter: pick a handful of clubs to narrow the Ticker down to. */
+.team-focus-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 14px; }
+.team-focus-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 20px; padding: 4px 10px 4px 6px; font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.team-focus-tag.on { background: var(--raise); border-color: var(--gold-deep); color: var(--gold); }
+.team-focus-clear {
+  background: transparent; border: none; color: var(--muted); font-size: 11px;
+  text-decoration: underline; cursor: pointer; padding: 4px 2px; font-family: inherit;
+}
+.team-focus-clear:hover { color: var(--gold); }
 
 /* ---------------- Squad pitch ---------------- */
 .squad-pitch {
@@ -506,6 +521,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 
 .fdr-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 .team-crest { display: block; object-fit: contain; flex: none; }
+.hub-team-cell { display: inline-flex; align-items: center; gap: 6px; }
 
 .hub-fx-day-h {
   font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);

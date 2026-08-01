@@ -39,8 +39,10 @@ export const S = {
     fWatchOnly: false,
     // Ticker
     fdrMode: "official",
-    fdrSpan: 6,
+    fdrFrom: null,   // null = defaults to the next gameweek on first render
+    fdrTo: null,
     fdrSort: "avg",
+    fdrFocus: new Set(), // team ids to focus on; empty = show every team
     // Transfer scratchpad
     swapOut: null,
     swapIn: null,
@@ -78,6 +80,17 @@ function bandify(values) {
   return (v) => (v <= b[0] ? 1 : v <= b[1] ? 2 : v <= b[2] ? 3 : v <= b[3] ? 4 : 5);
 }
 
+/** Maps a raw value to its percentile rank (0-1, highest value = 1) within `values`. */
+function percentileOf(values) {
+  const sorted = [...values].sort((a, b) => a - b);
+  return (v) => {
+    if (sorted.length <= 1) return 0.5;
+    let idx = sorted.findIndex((x) => x >= v);
+    if (idx === -1) idx = sorted.length - 1;
+    return idx / (sorted.length - 1);
+  };
+}
+
 /* =========================================================
    Load + build
    ========================================================= */
@@ -91,6 +104,7 @@ export async function load({ onProgress = () => {} } = {}) {
   buildGameweeks(boot);
   buildPlayers(boot);
   buildFixtureIndex(fixtures);
+  buildCurrentStrength();
 
   onProgress("Reading the last six gameweeks…");
   try {
@@ -121,12 +135,6 @@ function buildTeams(boot) {
     S.teams[t.id] = team;
     return team;
   });
-
-  // Normalise the six strength ratings into 1–5 difficulty bands.
-  const atk = S.teamList.flatMap((t) => [t.strength_attack_home, t.strength_attack_away]).map(n);
-  const def = S.teamList.flatMap((t) => [t.strength_defence_home, t.strength_defence_away]).map(n);
-  S.bandAttack = bandify(atk);
-  S.bandDefence = bandify(def);
 }
 
 function buildGameweeks(boot) {
@@ -325,23 +333,135 @@ function buildFixtureIndex(fixtures) {
 }
 
 /* =========================================================
+   Team results and current strength
+   ========================================================= */
+/** Match results for a team across a gameweek range, from finished fixtures already indexed. */
+export function teamResults(teamId, { from = 1, to = 38 } = {}) {
+  let gp = 0, w = 0, d = 0, l = 0, gf = 0, ga = 0;
+  const byGw = S.fxByTeamGw[teamId] || {};
+  for (const gw of Object.keys(byGw)) {
+    const gwNum = +gw;
+    if (gwNum < from || gwNum > to) continue;
+    for (const fx of byGw[gwNum]) {
+      if (!fx.finished) continue;
+      const gfN = n(fx.gf);
+      const gaN = n(fx.ga);
+      gp++; gf += gfN; ga += gaN;
+      if (gfN > gaN) w++;
+      else if (gfN === gaN) d++;
+      else l++;
+    }
+  }
+  return { gp, w, d, l, gf, ga, gd: gf - ga, pts: w * 3 + d };
+}
+
+/** Season-to-date expected goals for and (minutes-scaled) against, for a team. */
+export function teamSeasonXG(teamId) {
+  let xg = 0, xgcRaw = 0, mins = 0;
+  for (const p of S.players) {
+    if (p.teamId !== teamId) continue;
+    xg += p.xg;
+    xgcRaw += p.xgc;
+    mins += p.minutes;
+  }
+  const { gp } = teamResults(teamId);
+  // Player xGC is measured while that player is on the pitch, so summing it
+  // counts each match roughly eleven times - scale back to a team total.
+  const teamMatches90 = mins / 90;
+  const xgc = teamMatches90 > 0 ? (xgcRaw / teamMatches90) * gp : 0;
+  return { xg, xgc, gp };
+}
+
+/**
+ * Blends each team's static preseason strength rating with two real-time
+ * signals: results from its last 6 gameweeks, and season-to-date expected
+ * goals. FPL's own strength ratings ship once in August and barely move, so
+ * left alone a team on a hot or cold streak reads exactly the same in
+ * November as it did on day one.
+ *
+ * Every signal is converted to a league-wide percentile (0-1, best team = 1)
+ * before blending, so home/away strength, recent goals, and xG all land on
+ * the same scale. The static rating always anchors at least half the score;
+ * form and underlying numbers only earn weight once there's enough recent
+ * data to trust them, fully phased in by 6 games played - so a brand-new
+ * season behaves exactly like the old static-only bands did.
+ */
+function buildCurrentStrength() {
+  const ramp = (gp) => Math.min(1, gp / 6);
+
+  const teamStats = S.teamList.map((t) => {
+    const recent = teamResults(t.id, { from: Math.max(1, S.currentGw - 5), to: S.currentGw });
+    const season = teamSeasonXG(t.id);
+    return {
+      t,
+      recentGF: recent.gp ? recent.gf / recent.gp : 0,
+      recentGA: recent.gp ? recent.ga / recent.gp : 0,
+      xgFor: season.gp ? season.xg / season.gp : 0,
+      xgAgainst: season.gp ? season.xgc / season.gp : 0,
+      ramp: ramp(recent.gp),
+    };
+  });
+
+  const pctStaticAtkHome = percentileOf(S.teamList.map((t) => n(t.strength_attack_home)));
+  const pctStaticAtkAway = percentileOf(S.teamList.map((t) => n(t.strength_attack_away)));
+  const pctStaticDefHome = percentileOf(S.teamList.map((t) => n(t.strength_defence_home)));
+  const pctStaticDefAway = percentileOf(S.teamList.map((t) => n(t.strength_defence_away)));
+  const pctRecentGF = percentileOf(teamStats.map((s) => s.recentGF));
+  const pctRecentGA = percentileOf(teamStats.map((s) => s.recentGA));
+  const pctXgFor = percentileOf(teamStats.map((s) => s.xgFor));
+  const pctXgAgainst = percentileOf(teamStats.map((s) => s.xgAgainst));
+
+  const atkHome = [], atkAway = [], defHome = [], defAway = [];
+
+  teamStats.forEach((s) => {
+    const formW = 0.25 * s.ramp;
+    const xgW = 0.25 * s.ramp;
+    const staticW = 1 - formW - xgW;
+
+    const blendAttack = (staticPct) => staticW * staticPct + formW * pctRecentGF(s.recentGF) + xgW * pctXgFor(s.xgFor);
+    // Conceding more goals or xG means a weaker defence, so those two invert.
+    const blendDefence = (staticPct) =>
+      staticW * staticPct + formW * (1 - pctRecentGA(s.recentGA)) + xgW * (1 - pctXgAgainst(s.xgAgainst));
+
+    const aHome = blendAttack(pctStaticAtkHome(n(s.t.strength_attack_home)));
+    const aAway = blendAttack(pctStaticAtkAway(n(s.t.strength_attack_away)));
+    const dHome = blendDefence(pctStaticDefHome(n(s.t.strength_defence_home)));
+    const dAway = blendDefence(pctStaticDefAway(n(s.t.strength_defence_away)));
+
+    s.t.currentAttackHome = aHome;
+    s.t.currentAttackAway = aAway;
+    s.t.currentDefenceHome = dHome;
+    s.t.currentDefenceAway = dAway;
+
+    atkHome.push(aHome); atkAway.push(aAway);
+    defHome.push(dHome); defAway.push(dAway);
+  });
+
+  // Normalise the blended ratings into 1–5 difficulty bands, home and away together.
+  S.bandAttack = bandify([...atkHome, ...atkAway]);
+  S.bandDefence = bandify([...defHome, ...defAway]);
+}
+
+/* =========================================================
    Difficulty
    ========================================================= */
 /**
  * Difficulty of one fixture for one team, 1 (easiest) to 5 (hardest).
  *  official — the rating the FPL game ships with
- *  attack   — how hard it is to SCORE, from the opponent's defensive strength
- *  defence  — how hard it is to KEEP A CLEAN SHEET, from their attack
+ *  attack   — how hard it is to SCORE, from the opponent's current defensive strength
+ *  defence  — how hard it is to KEEP A CLEAN SHEET, from their current attack
+ * "Current" strength blends FPL's preseason rating with recent form and
+ * season-to-date xG - see buildCurrentStrength() above.
  */
 export function difficultyOf(fx, mode = "official") {
   const opp = S.teams[fx.opp];
   if (!opp) return fx.fdr || 3;
   if (mode === "attack") {
     // Opponent defends at home when we are away.
-    return S.bandDefence(n(fx.home ? opp.strength_defence_away : opp.strength_defence_home));
+    return S.bandDefence(fx.home ? opp.currentDefenceAway : opp.currentDefenceHome);
   }
   if (mode === "defence") {
-    return S.bandAttack(n(fx.home ? opp.strength_attack_away : opp.strength_attack_home));
+    return S.bandAttack(fx.home ? opp.currentAttackAway : opp.currentAttackHome);
   }
   return fx.fdr || 3;
 }

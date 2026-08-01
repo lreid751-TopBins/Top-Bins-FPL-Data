@@ -1,4 +1,4 @@
-import { S, n, f1, f2, signed } from "../store.js";
+import { S, n, f1, f2, signed, teamResults, teamSeasonXG } from "../store.js";
 import { $$, esc, statCard, availabilityFlag, teamCrest } from "../ui.js";
 import { projectPlayer } from "../projection.js";
 import { aggregate } from "./teams.js";
@@ -23,6 +23,7 @@ export function renderHub(root) {
     </div>
 
     <div class="hub-grid">
+      ${leagueTableWidget()}
       ${fixturesWidget()}
       ${captaincyWidget()}
       ${rankWidget()}
@@ -36,6 +37,55 @@ export function renderHub(root) {
   $$("[data-goto]", root).forEach((el) => {
     el.onclick = () => goTo(el.dataset.goto);
   });
+}
+
+/* ---------------- Live Premier League table ---------------- */
+function leagueTableWidget() {
+  const rows = S.teamList
+    .map((t) => {
+      const r = teamResults(t.id, { from: 1, to: S.currentGw || 38 });
+      const x = teamSeasonXG(t.id);
+      return { team: t, ...r, xgd: x.xg - x.xgc };
+    })
+    .sort((a, b) => b.pts - a.pts || b.gd - a.gd || b.gf - a.gf);
+
+  return `<div class="chart-box hub-w hub-w-wide">
+    <h3>Premier League table</h3>
+    <p class="cap">
+      Live standings from finished fixtures. xGD is xG created minus xGC conceded, season to date - a big gap
+      from GD is a team the table is flattering or shortchanging versus their underlying numbers.
+    </p>
+    <div class="twrap" style="max-height:52vh">
+      <table>
+        <thead>
+          <tr>
+            <th style="text-align:left">Team</th>
+            <th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th>
+            <th title="xG created minus xGC conceded, season to date">xGD</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map(
+              (r, i) => `<tr>
+            <td class="name">
+              <span class="hub-team-cell">
+                <span class="sub-t">${i + 1}</span>${teamCrest(r.team.id, 18)}${esc(r.team.name)}
+                <span class="sub-t">${esc(r.team.short)}</span>
+              </span>
+            </td>
+            <td>${r.gp}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td>
+            <td class="${r.gd >= 0 ? "pos" : "neg"}">${signed(r.gd)}</td>
+            <td style="color:var(--gold);font-weight:700">${r.pts}</td>
+            <td class="${r.xgd >= 0 ? "pos" : "neg"}">${signed(+f2(r.xgd))}</td>
+          </tr>`
+            )
+            .join("")}
+        </tbody>
+      </table>
+    </div>
+    <button class="hub-goto" data-goto="teams" style="margin-top:12px">See the full Team Data Room →</button>
+  </div>`;
 }
 
 /* ---------------- Fixtures for the gameweek ---------------- */

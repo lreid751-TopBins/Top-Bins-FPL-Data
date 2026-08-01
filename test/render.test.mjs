@@ -106,7 +106,7 @@ const origError = console.error;
 console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
-const { S, load, runDifficulty, difficultyOf } = await import("../public/js/store.js");
+const { S, load, runDifficulty, difficultyOf, teamResults } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub } = await import("../public/js/views/hub.js");
@@ -175,6 +175,27 @@ check("difficulty bands stay in range", () => {
   return "all three models bounded 1–5";
 });
 
+check("current strength blends recent form and xG into every team, not just static ratings", () => {
+  for (const t of S.teamList) {
+    for (const key of ["currentAttackHome", "currentAttackAway", "currentDefenceHome", "currentDefenceAway"]) {
+      const v = t[key];
+      if (!(v >= 0 && v <= 1)) throw new Error(`${t.short}.${key} = ${v}, expected a 0-1 percentile`);
+    }
+  }
+  const bandValues = new Set(S.teamList.map((t) => difficultyOf({ home: true, opp: t.id }, "attack")));
+  if (bandValues.size < 2) throw new Error("every team produced the same attack difficulty band - blend isn't differentiating teams");
+  return `${S.teamList.length} teams blended, ${bandValues.size} distinct attack bands`;
+});
+
+check("teamResults totals are internally consistent", () => {
+  const t = S.teamList[0];
+  const r = teamResults(t.id, { from: 1, to: S.currentGw || 38 });
+  if (r.w + r.d + r.l !== r.gp) throw new Error(`W+D+L (${r.w + r.d + r.l}) should equal games played (${r.gp})`);
+  if (r.pts !== r.w * 3 + r.d) throw new Error(`points ${r.pts} don't match ${r.w}*3 + ${r.d}`);
+  if (r.gd !== r.gf - r.ga) throw new Error(`GD ${r.gd} should be GF-GA`);
+  return `${t.short}: ${r.gp}gp ${r.w}W-${r.d}D-${r.l}L, ${r.pts}pts`;
+});
+
 const panel = (id) => document.getElementById(id);
 
 check("hub renders every widget with no undefined or NaN", () => {
@@ -183,10 +204,30 @@ check("hub renders every widget with no undefined or NaN", () => {
   if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
   if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
   const widgets = [...panel("panel-hub").querySelectorAll(".chart-box h3")].map((h) => h.textContent);
-  for (const title of ["Fixtures", "Captaincy shortlist", "Your season", "Best performers", "Team shape", "Availability watch", "Price movers"]) {
+  for (const title of ["Premier League table", "Fixtures", "Captaincy shortlist", "Your season", "Best performers", "Team shape", "Availability watch", "Price movers"]) {
     if (!widgets.some((w) => w.includes(title))) throw new Error(`missing the "${title}" widget`);
   }
   return `${widgets.length} widgets rendered`;
+});
+
+check("hub league table shows all 20 teams sorted by points, with crests and xGD", () => {
+  renderHub(panel("panel-hub"));
+  const table = [...panel("panel-hub").querySelectorAll(".chart-box")].find((box) =>
+    box.querySelector("h3")?.textContent.includes("Premier League table")
+  );
+  if (!table) throw new Error("league table widget not found");
+
+  const rows = table.querySelectorAll("tbody tr");
+  if (rows.length !== 20) throw new Error(`expected 20 teams, got ${rows.length}`);
+
+  const crests = table.querySelectorAll(".hub-team-cell .team-crest");
+  if (crests.length !== 20) throw new Error(`expected 20 crests, got ${crests.length}`);
+
+  const pts = [...rows].map((r) => Number(r.children[6].textContent));
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i] > pts[i - 1]) throw new Error(`table isn't sorted by points: ${pts[i - 1]} then ${pts[i]}`);
+  }
+  return `20 teams, top on ${pts[0]}pts, bottom on ${pts[pts.length - 1]}pts`;
 });
 
 check("hub prompts to connect a team before showing rank, not a crash", () => {
@@ -223,12 +264,49 @@ check("hub captaincy shortlist matches the Planner's own projection engine", () 
 });
 
 check("fixture ticker renders", () => {
+  S.ui.fdrFrom = null;
+  S.ui.fdrTo = null;
+  S.ui.fdrFocus.clear();
   renderFixtures(panel("panel-fixtures"));
   const rows = panel("panel-fixtures").querySelectorAll(".ticker tbody tr");
   if (rows.length !== 20) throw new Error(`expected 20 rows, got ${rows.length}`);
   const cells = panel("panel-fixtures").querySelectorAll(".cell");
   if (!cells.length) throw new Error("no difficulty cells");
-  return `${rows.length} rows, ${cells.length} cells`;
+  const crests = panel("panel-fixtures").querySelectorAll(".ticker .team-crest");
+  if (crests.length !== 20) throw new Error(`expected 20 team crests in the ticker, got ${crests.length}`);
+  return `${rows.length} rows, ${cells.length} cells, ${crests.length} crests`;
+});
+
+check("fixture ticker team-focus filter narrows the table down", () => {
+  const [a, b] = S.teamList;
+  S.ui.fdrFocus = new Set([a.id, b.id]);
+  renderFixtures(panel("panel-fixtures"));
+  const rows = panel("panel-fixtures").querySelectorAll(".ticker tbody tr");
+  if (rows.length !== 2) throw new Error(`expected 2 focused rows, got ${rows.length}`);
+  const clearBtn = panel("panel-fixtures").querySelector("[data-focus-clear]");
+  if (!clearBtn) throw new Error("expected a clear-focus control once teams are focused");
+
+  clearBtn.click();
+  const allRows = panel("panel-fixtures").querySelectorAll(".ticker tbody tr");
+  if (allRows.length !== 20) throw new Error(`clearing focus should show all 20 teams again, got ${allRows.length}`);
+  return `focused to 2, cleared back to ${allRows.length}`;
+});
+
+check("fixture ticker gameweek range picker supports a past range", () => {
+  S.ui.fdrFocus.clear();
+  S.ui.fdrFrom = 1;
+  S.ui.fdrTo = 4;
+  renderFixtures(panel("panel-fixtures"));
+  const headers = [...panel("panel-fixtures").querySelectorAll(".ticker thead th")].map((th) => th.textContent);
+  for (const gw of ["GW1", "GW2", "GW3", "GW4"]) {
+    if (!headers.includes(gw)) throw new Error(`expected a ${gw} column, got ${headers.join(", ")}`);
+  }
+  if (headers.includes("GW5")) throw new Error("range should stop at GW4");
+  const html = panel("panel-fixtures").innerHTML;
+  if (html.includes("undefined") || html.includes("NaN")) throw new Error("undefined/NaN in a past-range render");
+  S.ui.fdrFrom = null;
+  S.ui.fdrTo = null;
+  return "GW1-4 rendered cleanly";
 });
 
 check("player finder renders", () => {
@@ -396,7 +474,7 @@ check("hub shows crests, rank and mini-leagues once a manager is connected", () 
   if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
   if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
 
-  const crests = panel("panel-hub").querySelectorAll(".team-crest");
+  const crests = panel("panel-hub").querySelectorAll(".hub-fx-team .team-crest");
   if (!crests.length) throw new Error("no team crests rendered in the fixtures widget");
   // Regression: teamCrest() used to render with class="crest", which
   // collides with the masthead logo's .crest rule (fixed 40x40) - CSS
