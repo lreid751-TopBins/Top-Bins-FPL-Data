@@ -108,6 +108,8 @@ console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 /* ---------------- Run ---------------- */
 const { S, load, runDifficulty, difficultyOf } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
+const { projectPlayer } = await import("../public/js/projection.js");
+const { renderHub } = await import("../public/js/views/hub.js");
 const { renderScout } = await import("../public/js/views/scout.js");
 const { renderFixtures } = await import("../public/js/views/fixtures.js");
 const { renderTeams } = await import("../public/js/views/teams.js");
@@ -174,6 +176,42 @@ check("difficulty bands stay in range", () => {
 });
 
 const panel = (id) => document.getElementById(id);
+
+check("hub renders every widget with no undefined or NaN", () => {
+  renderHub(panel("panel-hub"));
+  const html = panel("panel-hub").innerHTML;
+  if (html.includes("undefined")) throw new Error("undefined leaked into the hub");
+  if (html.includes("NaN")) throw new Error("NaN leaked into the hub");
+  const widgets = [...panel("panel-hub").querySelectorAll(".chart-box h3")].map((h) => h.textContent);
+  for (const title of ["Fixtures", "Captaincy shortlist", "Best performers", "Team shape", "Availability watch", "Price movers"]) {
+    if (!widgets.some((w) => w.includes(title))) throw new Error(`missing the "${title}" widget`);
+  }
+  return `${widgets.length} widgets rendered`;
+});
+
+check("hub captaincy shortlist matches the Planner's own projection engine", () => {
+  renderHub(panel("panel-hub"));
+
+  const gw = S.nextGw || S.currentGw || 1;
+  const best = S.players
+    // Same floors as captaincyWidget(): expected to start, and enough season
+    // minutes that xg90/xa90 aren't a tiny, noisy sample.
+    .filter((p) => p.xMin >= 60 && p.minutes >= 270)
+    .map((p) => ({ p, total: projectPlayer(p, 1, gw).total }))
+    .sort((a, b) => b.total - a.total)[0];
+
+  const firstVal = panel("panel-hub").querySelector(".hub-val.gold")?.textContent;
+  if (firstVal !== best.total.toFixed(1)) {
+    throw new Error(`top captaincy pick should be ${best.p.name} at ${best.total.toFixed(1)}, hub shows ${firstVal}`);
+  }
+  if (best.total > 100) {
+    throw new Error(`top captaincy pick projects ${best.total.toFixed(1)} pts in one gameweek - the small-sample-size guard isn't working`);
+  }
+
+  const nav = panel("panel-hub").querySelectorAll("[data-goto]");
+  if (nav.length < 2) throw new Error("expected at least 2 cross-tab nav links (fixtures, teams)");
+  return `top pick ${best.p.name} at ${firstVal}pts, ${nav.length} nav links`;
+});
 
 check("fixture ticker renders", () => {
   renderFixtures(panel("panel-fixtures"));

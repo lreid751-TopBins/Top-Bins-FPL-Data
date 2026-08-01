@@ -32,7 +32,7 @@ function windowRange() {
   return { from, to };
 }
 
-function aggregate(range) {
+export function aggregate(range) {
   const acc = {};
   S.teamList.forEach((t) => {
     acc[t.id] = {

@@ -25,7 +25,7 @@ export const S = {
   history: null,
 
   ui: {
-    tab: "squad",
+    tab: "hub",
     managerId: localStorage.getItem("tb:managerId") || "",
     watchlist: new Set(JSON.parse(localStorage.getItem("tb:watchlist") || "[]")),
     // Scout

@@ -1,5 +1,6 @@
 import { S, load } from "./store.js";
 import { $, $$, untilDeadline } from "./ui.js";
+import { renderHub } from "./views/hub.js";
 import { renderSquad, loadManager } from "./views/squad.js";
 import { renderScout } from "./views/scout.js";
 import { renderFixtures } from "./views/fixtures.js";
@@ -8,6 +9,7 @@ import { renderJournal } from "./views/journal.js";
 import { renderPlanner } from "./views/planner.js";
 
 const PANELS = {
+  hub: { el: () => $("#panel-hub"), render: renderHub },
   squad: { el: () => $("#panel-squad"), render: renderSquad },
   scout: { el: () => $("#panel-scout"), render: renderScout },
   fixtures: { el: () => $("#panel-fixtures"), render: renderFixtures },
@@ -59,8 +61,8 @@ async function boot() {
   } catch (err) {
     hideOverlay();
     setStatus("err", "Couldn't load FPL data");
-    $("#panel-squad").hidden = false;
-    $("#panel-squad").innerHTML = `<div class="empty">
+    $("#panel-hub").hidden = false;
+    $("#panel-hub").innerHTML = `<div class="empty">
       <div class="anton">The FPL API didn't answer</div>
       <p style="max-width:440px;margin:0 auto">This is usually the API being briefly unavailable around a deadline,
       or the server losing its connection. Reload to try again.</p>
