@@ -977,6 +977,16 @@ textarea::placeholder { color: var(--muted-2); }
 .planner-grid {
   display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start;
 }
+/* Editing (the squad you're building) and analysis (what it projects to)
+   are two different mental modes on one screen. No background fill here -
+   the slots/tables/chart-box children inside already use --panel/--panel-2
+   for their own contrast, so filling this wrapper with either would wash
+   them out. A border-only boundary instead: an open, outlined workspace
+   that reads as one zone, set against .totals-card's solid, sealed-report
+   treatment on the analysis side. */
+.planner-build {
+  border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+}
 @media (max-width: 900px) { .planner-grid { grid-template-columns: 1fr; } }
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 
