@@ -26,9 +26,9 @@ export function renderHub(root) {
       ${leagueTableWidget()}
       ${fixturesWidget()}
       ${captaincyWidget()}
+      ${teamShapeWidget()}
       ${rankWidget()}
       ${performersWidget()}
-      ${teamShapeWidget()}
       ${availabilityWidget()}
       ${priceMoversWidget()}
     </div>

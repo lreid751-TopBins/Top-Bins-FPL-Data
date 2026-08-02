@@ -210,6 +210,27 @@ check("hub renders every widget with no undefined or NaN", () => {
   return `${widgets.length} widgets rendered`;
 });
 
+check("hub widget order leaves no empty cell in the two-column grid", () => {
+  // .hub-grid is a plain 2-column CSS grid with no explicit placement, so the
+  // DOM order alone decides which widget lands under which. "Team shape" and
+  // "Your season" are both narrow (one column) and sit side by side on
+  // purpose, immediately after the narrow Fixtures/Captaincy row - if either
+  // one moved without the other, the wide "Best performers" row after them
+  // can't backfill the gap that leaves (it needs both columns at once), so
+  // the row before it renders lopsided with a blank cell.
+  renderHub(panel("panel-hub"));
+  const widgets = [...panel("panel-hub").querySelectorAll(".hub-grid > .chart-box")].map(
+    (box) => box.querySelector("h3")?.textContent
+  );
+  const order = ["Premier League table", "Fixtures", "Captaincy shortlist", "Team shape", "Your season", "Best performers", "Availability watch", "Price movers"];
+  for (let i = 0; i < order.length; i++) {
+    if (!widgets[i]?.includes(order[i])) {
+      throw new Error(`expected "${order[i]}" at position ${i}, got "${widgets[i]}" - order: ${widgets.join(" | ")}`);
+    }
+  }
+  return "Team shape and Your season pair up under Fixtures/Captaincy with no gap";
+});
+
 check("hub league table shows all 20 teams sorted by points, with crests and xGD", () => {
   renderHub(panel("panel-hub"));
   const table = [...panel("panel-hub").querySelectorAll(".chart-box")].find((box) =>
