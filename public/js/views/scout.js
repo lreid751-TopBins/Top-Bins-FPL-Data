@@ -39,6 +39,8 @@ function viewData() {
       (p) =>
         p.minutes >= u.fMinMins &&
         p.price <= u.fMaxPrice &&
+        p.total_points >= u.fMinPoints &&
+        p.defcon90 >= u.fMinDefcon90 &&
         (!u.fPos || p.pos === u.fPos) &&
         (!u.fTeam || String(p.teamId) === String(u.fTeam)) &&
         (!u.fWatchOnly || u.watchlist.has(p.id)) &&
@@ -90,9 +92,18 @@ export function renderScout(root) {
       </select>
       <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="17" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
       <span class="range">Min mins<input type="range" id="sMins" min="0" max="2500" step="90" value="${u.fMinMins}"><b class="mono" id="sMinsV">${u.fMinMins}</b></span>
+      <span class="range">Min points<input type="range" id="sPoints" min="0" max="250" step="5" value="${u.fMinPoints}"><b class="mono" id="sPointsV">${u.fMinPoints}</b></span>
+      <span class="range">Min DC/90<input type="range" id="sDefcon90" min="0" max="20" step="0.5" value="${u.fMinDefcon90}"><b class="mono" id="sDefcon90V">${f1(u.fMinDefcon90)}</b></span>
       <button class="btn ghost" id="sWatch" aria-pressed="${u.fWatchOnly}">
         ${u.fWatchOnly ? "★ Watchlist only" : "☆ Watchlist only"}
       </button>
+      <span class="sort-by">
+        <label for="sSortKey">Sort by</label>
+        <select id="sSortKey" aria-label="Sort by">
+          ${cols.map((c) => `<option value="${c.k}" ${c.k === k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
+        </select>
+        <button class="btn ghost" id="sSortDir" aria-label="Reverse sort direction" title="${dir === 1 ? "Ascending — click to reverse" : "Descending — click to reverse"}">${dir === 1 ? "▲" : "▼"}</button>
+      </span>
       <span class="hint">${data.length} players</span>
     </div>
 
@@ -262,8 +273,40 @@ function wire(root) {
       re();
     };
 
+  const minPoints = $("#sPoints", root);
+  if (minPoints)
+    minPoints.oninput = () => {
+      u.fMinPoints = +minPoints.value;
+      $("#sPointsV", root).textContent = u.fMinPoints;
+      re();
+    };
+
+  const minDefcon90 = $("#sDefcon90", root);
+  if (minDefcon90)
+    minDefcon90.oninput = () => {
+      u.fMinDefcon90 = +minDefcon90.value;
+      $("#sDefcon90V", root).textContent = f1(u.fMinDefcon90);
+      re();
+    };
+
   const watch = $("#sWatch", root);
   if (watch) watch.onclick = () => { u.fWatchOnly = !u.fWatchOnly; re(); };
+
+  // Sort by the filter bar directly, not just by clicking a column header -
+  // both write to the same u.scoutSort state as the header-click handler
+  // below, so either way of sorting stays in sync with the other.
+  const sortKey = $("#sSortKey", root);
+  if (sortKey)
+    sortKey.onchange = () => {
+      const key = sortKey.value;
+      const text = key === "name" || key === "short" || key === "pos";
+      u.scoutSort.k = key;
+      u.scoutSort.dir = text ? 1 : -1;
+      re();
+    };
+
+  const sortDir = $("#sSortDir", root);
+  if (sortDir) sortDir.onclick = () => { u.scoutSort.dir = -u.scoutSort.dir; re(); };
 
   $$("[data-star]", root).forEach((b) => {
     b.onclick = (ev) => {

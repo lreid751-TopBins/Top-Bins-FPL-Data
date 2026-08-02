@@ -479,6 +479,69 @@ check("player finder filters", () => {
   return `${chips.length} midfielders after filtering`;
 });
 
+// Finds a Player Finder column by its header text rather than a fixed
+// nth-child position - a column-index test breaks the moment a column is
+// added or reordered (see the CLAUDE.md gotcha this project already
+// learned the hard way).
+function scoutColIdx(headerText) {
+  const headers = [...panel("panel-scout").querySelectorAll("thead th")].map((h) => h.textContent.trim());
+  const i = headers.findIndex((h) => h === headerText);
+  if (i === -1) throw new Error(`no "${headerText}" column found in the Player Finder table`);
+  return i + 1; // nth-child is 1-based
+}
+
+check("player finder filters by minimum total points", () => {
+  const maxPts = Math.max(...S.players.map((p) => p.total_points));
+  const threshold = Math.max(1, Math.round(maxPts * 0.6));
+  S.ui.fMinPoints = threshold;
+  renderScout(panel("panel-scout"));
+  const shown = [...panel("panel-scout").querySelectorAll("tbody tr")].length;
+  const expected = S.players.filter((p) => p.minutes >= S.ui.fMinMins && p.total_points >= threshold).length;
+  if (shown !== Math.min(expected, 300)) throw new Error(`expected ${Math.min(expected, 300)} rows at >= ${threshold} points, got ${shown}`);
+  const ptsCol = scoutColIdx("Pts");
+  const cells = [...panel("panel-scout").querySelectorAll(`tbody tr td:nth-child(${ptsCol})`)].map((c) => +c.textContent);
+  if (cells.some((v) => v < threshold)) throw new Error("a player below the points threshold leaked through");
+  S.ui.fMinPoints = 0;
+  return `${shown} players at or above ${threshold} points`;
+});
+
+check("player finder filters by minimum DEFCON/90", () => {
+  const maxDc90 = Math.max(...S.players.map((p) => p.defcon90));
+  const threshold = Math.max(0.5, +(maxDc90 * 0.5).toFixed(1));
+  S.ui.fMinDefcon90 = threshold;
+  renderScout(panel("panel-scout"));
+  const rows = [...panel("panel-scout").querySelectorAll("tbody tr")].length;
+  const expected = S.players.filter((p) => p.minutes >= S.ui.fMinMins && p.defcon90 >= threshold).length;
+  if (rows !== Math.min(expected, 300)) throw new Error(`expected ${Math.min(expected, 300)} rows at >= ${threshold} DEFCON/90, got ${rows}`);
+  S.ui.fMinDefcon90 = 0;
+  return `${rows} players at or above ${threshold} DEFCON/90`;
+});
+
+check("sort-by dropdown sorts the same way as clicking a column header", () => {
+  renderScout(panel("panel-scout"));
+  const sel = panel("panel-scout").querySelector("#sSortKey");
+  if (!sel) throw new Error("no sort-by dropdown rendered");
+  const options = [...sel.options].map((o) => o.value);
+  if (!options.includes("total_points")) throw new Error("total points isn't a sort option");
+  if (!options.includes("defcon90") && !options.includes("defcon")) throw new Error("DEFCON isn't a sort option");
+
+  sel.value = "price";
+  sel.dispatchEvent(new window.Event("change"));
+  if (S.ui.scoutSort.k !== "price") throw new Error("choosing a sort field from the dropdown didn't update the sort");
+  const priceCol = scoutColIdx("£");
+  const prices = [...panel("panel-scout").querySelectorAll(`tbody tr td:nth-child(${priceCol})`)].map((c) => +c.textContent);
+  const sortedDesc = prices.every((v, i) => i === 0 || prices[i - 1] >= v);
+  if (!sortedDesc) throw new Error("table isn't actually sorted by the field chosen in the dropdown");
+
+  const dirBtn = panel("panel-scout").querySelector("#sSortDir");
+  const dirBefore = S.ui.scoutSort.dir;
+  dirBtn.click();
+  if (S.ui.scoutSort.dir !== -dirBefore) throw new Error("direction toggle button didn't reverse the sort");
+
+  S.ui.scoutSort = { k: "total_points", dir: -1 };
+  return "dropdown and direction toggle both drive the same sort state as the column headers";
+});
+
 check("per-90 toggle", () => {
   S.ui.per90 = true;
   renderScout(panel("panel-scout"));

@@ -36,6 +36,8 @@ export const S = {
     fTeam: "",
     fMaxPrice: 17,
     fMinMins: 270,
+    fMinPoints: 0,
+    fMinDefcon90: 0,
     fQuery: "",
     fWatchOnly: false,
     // Ticker
