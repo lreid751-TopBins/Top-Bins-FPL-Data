@@ -362,7 +362,7 @@ function patternsTab() {
         : ""
     }
 
-    <div class="chart-box">
+    <div class="chart-box hero">
       <h3>By how sure you were</h3>
       <p class="cap">Average points won or lost against the best option, grouped by the confidence you logged at the time.
       A healthy journal slopes upward: the calls you were surest about should be the ones that pay.

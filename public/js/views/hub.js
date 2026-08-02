@@ -274,7 +274,7 @@ function rankWidget() {
 
   const leagues = (S.entry.leagues?.classic || []).slice(0, 6);
 
-  return `<div class="chart-box hub-w">
+  return `<div class="chart-box hub-w hero">
     <h3>Your season</h3>
     <p class="cap">${esc(S.entry.name || "My Team")}</p>
     <div class="hub-rank-head">

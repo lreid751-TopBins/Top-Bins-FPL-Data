@@ -528,10 +528,24 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   padding: 14px; margin-bottom: 16px;
 }
 .chart-box h3 {
-  font-family: "Anton", sans-serif; font-size: 15px; text-transform: uppercase;
-  letter-spacing: 0.06em; color: var(--chalk); margin-bottom: 3px;
+  /* Sized and spaced to read as a label, not a headline - the widget's own
+     numbers should be the loudest thing in the box, not its title. */
+  font-family: "Anton", sans-serif; font-size: 13.5px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: var(--chalk); margin-bottom: 3px;
 }
 .chart-box .cap { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+
+/* Hero widget: reserved for the one or two numbers that should anchor the
+   eye on a page of otherwise equally-weighted boxes (Hub's own rank, the
+   Journal's headline calibration chart) - a raised panel and a thin top
+   accent, not a full restyle. */
+.chart-box.hero {
+  background: var(--raise); border-color: var(--gold-deep); position: relative;
+}
+.chart-box.hero::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  border-radius: 12px 12px 0 0; background: linear-gradient(90deg, var(--gold), var(--gold-2));
+}
 .chart-box svg { width: 100%; height: auto; display: block; overflow: visible; }
 .axis line { stroke: var(--line); stroke-width: 1; }
 .axis text { fill: var(--muted-2); font-size: 9px; font-family: "JetBrains Mono", monospace; }
@@ -593,6 +607,15 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 
 /* ---------------- Empty / loading / error ---------------- */
 .empty { text-align: center; padding: 44px 16px; color: var(--muted); }
+/* A quiet goal-frame-and-net motif so "nothing here" reads as designed
+   rather than a bare error page. Purely decorative (aria-hidden via the
+   fact it's a background image, not real content), one icon covers every
+   .empty call site - loading, genuinely empty, and error alike. */
+.empty::before {
+  content: ""; display: block; width: 54px; height: 40px; margin: 0 auto 14px;
+  opacity: 0.5;
+  background: no-repeat center / contain url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 48'%3E%3Cg fill='none' stroke='%237e9f8b' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M4 4h56M4 4v40M60 4v40'/%3E%3Cpath d='M4 4L20 14M4 16L20 22M4 28L20 34M60 4L44 14M60 16L44 22M60 28L44 34'/%3E%3C/g%3E%3C/svg%3E");
+}
 .empty .anton { font-size: 20px; color: var(--chalk); margin-bottom: 8px; text-transform: uppercase; }
 .empty .btn { margin-top: 14px; }
 
@@ -703,7 +726,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 
 .hub-rank-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 2px; }
-.hub-rank-big { font-family: "Anton", sans-serif; font-size: 26px; color: var(--gold); line-height: 1; }
+.hub-rank-big { font-family: "Anton", sans-serif; font-size: 34px; color: var(--gold); line-height: 1; }
 .hub-trend { flex: none; }
 
 /* ---------------- Responsive ---------------- */
