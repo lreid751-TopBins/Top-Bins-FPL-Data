@@ -6,6 +6,10 @@
 
 :root {
   --pitch: #08170e;
+  /* The stand: a cool graphite, deliberately not pitch green, so the pitch
+     itself reads as an object sitting inside the app rather than more of
+     the same colour. Scoped to My Team's pitch for now - see CLAUDE.md. */
+  --stand: #12181c;
   --panel: #0c2013;
   --panel-2: #0f2a19;
   --raise: #123521;
@@ -19,6 +23,13 @@
   --gold: #e7c15e;
   --gold-2: #f3d888;
   --gold-deep: #b58f35;
+  /* Text/icon colour sitting on a solid --gold fill (captain badge, primary
+     button, active chip...). Its own token because a club theme can swap
+     --gold for a colour dark enough that this needs to flip light. */
+  --ink: #1a1200;
+  /* Same colour as --gold, as an r,g,b triplet - lets a couple of subtle
+     glow backgrounds tint themselves without hardcoding the hex twice. */
+  --gold-rgb: 231, 193, 94;
 
   --pos: #5fd3a2;
   --neg: #ea8a6a;
@@ -34,6 +45,88 @@
   --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.7);
   --r: 14px;
 }
+
+/* ---------------------------------------------------------------
+   Club colour themes
+   Optional per-viewer skin: swaps the same --gold/--gold-2/--gold-deep/
+   --ink tokens every existing component already reads, so nothing else
+   needs to change to re-skin. The turf itself never changes - a themed
+   pitch is still a pitch. Colours are inspired by each club's identity,
+   not official branding (see the footer disclaimer).
+--------------------------------------------------------------- */
+:root[data-theme="ARS"] { /* Arsenal */
+  --gold: #ff4d4d; --gold-2: #ff8a8a; --gold-deep: #8c1620; --ink: #2b0000; --gold-rgb: 255, 77, 77;
+}
+:root[data-theme="AVL"] { /* Aston Villa */
+  --gold: #c6547e; --gold-2: #e39bb5; --gold-deep: #5c1030; --ink: #2b0011; --gold-rgb: 198, 84, 126;
+}
+:root[data-theme="BOU"] { /* Bournemouth */
+  --gold: #ff6b5c; --gold-2: #ffa69c; --gold-deep: #7a1810; --ink: #2b0700; --gold-rgb: 255, 107, 92;
+}
+:root[data-theme="BRE"] { /* Brentford */
+  --gold: #ff6b78; --gold-2: #ffa8b0; --gold-deep: #7a0f1c; --ink: #2b0004; --gold-rgb: 255, 107, 120;
+}
+:root[data-theme="BHA"] { /* Brighton */
+  --gold: #6fa8f0; --gold-2: #afcdf7; --gold-deep: #0d3570; --ink: #04101f; --gold-rgb: 111, 168, 240;
+}
+:root[data-theme="BUR"] { /* Burnley */
+  --gold: #d998be; --gold-2: #ebc2da; --gold-deep: #420f2b; --ink: #2b0018; --gold-rgb: 217, 152, 190;
+}
+:root[data-theme="CHE"] { /* Chelsea */
+  --gold: #7ca8e0; --gold-2: #b0cbef; --gold-deep: #163a6b; --ink: #03101f; --gold-rgb: 124, 168, 224;
+}
+:root[data-theme="CRY"] { /* Crystal Palace */
+  --gold: #ff6685; --gold-2: #ffa0b3; --gold-deep: #700a1f; --ink: #2b0009; --gold-rgb: 255, 102, 133;
+}
+:root[data-theme="EVE"] { /* Everton */
+  --gold: #6fa0f0; --gold-2: #afc8f7; --gold-deep: #0d3070; --ink: #04101f; --gold-rgb: 111, 160, 240;
+}
+:root[data-theme="FUL"] { /* Fulham */
+  --gold: #b8bec7; --gold-2: #dadee3; --gold-deep: #3a3d42; --ink: #0d0e10; --gold-rgb: 184, 190, 199;
+}
+:root[data-theme="LEE"] { /* Leeds */
+  --gold: #7b9df5; --gold-2: #b3c6f9; --gold-deep: #0e2670; --ink: #040a1f; --gold-rgb: 123, 157, 245;
+}
+:root[data-theme="LIV"] { /* Liverpool */
+  --gold: #ff6b7a; --gold-2: #ffa5ae; --gold-deep: #6b0817; --ink: #2b0004; --gold-rgb: 255, 107, 122;
+}
+:root[data-theme="MCI"] { /* Man City */
+  --gold: #8cc5ee; --gold-2: #c3e2f8; --gold-deep: #245e8a; --ink: #03141f; --gold-rgb: 140, 197, 238;
+}
+:root[data-theme="MUN"] { /* Man Utd */
+  --gold: #ff6b70; --gold-2: #ffa5a8; --gold-deep: #700106; --ink: #2b0002; --gold-rgb: 255, 107, 112;
+}
+:root[data-theme="NEW"] { /* Newcastle */
+  --gold: #a8b9c9; --gold-2: #cdd8e2; --gold-deep: #3d4750; --ink: #0a0d10; --gold-rgb: 168, 185, 201;
+}
+:root[data-theme="NFO"] { /* Nott'm Forest */
+  --gold: #ff5c5c; --gold-2: #ff9e9e; --gold-deep: #700000; --ink: #2b0000; --gold-rgb: 255, 92, 92;
+}
+:root[data-theme="SUN"] { /* Sunderland */
+  --gold: #ff6e7c; --gold-2: #ffa5ae; --gold-deep: #7a0c16; --ink: #2b0004; --gold-rgb: 255, 110, 124;
+}
+:root[data-theme="TOT"] { /* Tottenham */
+  --gold: #7f9bd8; --gold-2: #b4c6ea; --gold-deep: #1a2747; --ink: #02060f; --gold-rgb: 127, 155, 216;
+}
+:root[data-theme="WHU"] { /* West Ham */
+  --gold: #d9899e; --gold-2: #ebbfc9; --gold-deep: #4d0f1f; --ink: #2b0007; --gold-rgb: 217, 137, 158;
+}
+:root[data-theme="WOL"] { /* Wolves */
+  --gold: #e8971e; --gold-2: #f5bc66; --gold-deep: #7a4a08; --ink: #2b1700; --gold-rgb: 232, 151, 30;
+}
+
+/* Brentford's one extra touch: a very faint bee pattern in the page
+   background - never on the pitch, low enough opacity to read as texture
+   rather than wallpaper. z-index: -1 keeps it behind every normal-flow
+   element; without it an absolutely positioned pseudo-element paints ABOVE
+   static siblings regardless of DOM order. */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  opacity: 0; transition: opacity 0.4s ease;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='none' stroke='%23ff6b78' stroke-width='1.6'%3E%3Cellipse cx='100' cy='100' rx='13' ry='9' /%3E%3Cpath d='M89 95h22M89 100h22M89 105h22' /%3E%3Cpath d='M87 93c-7-7-14-5-16 2M113 93c7-7 14-5 16 2' stroke-width='1.3'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 200px 200px;
+}
+:root[data-theme="BRE"] body::before { opacity: 0.05; }
 
 * { box-sizing: border-box; }
 
@@ -132,7 +225,7 @@ select {
 input:focus, select:focus, button:focus-visible, a:focus-visible {
   outline: 2px solid var(--gold); outline-offset: 1px;
 }
-.btn.primary { background: var(--gold); color: #1a1200; border-color: var(--gold); font-weight: 700; }
+.btn.primary { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 700; }
 .btn.ghost { background: transparent; }
 .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
 
@@ -335,13 +428,31 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .team-focus-clear:hover { color: var(--gold); }
 
+/* Club colour theme picker - same pill language as the team-focus filter above. */
+.theme-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+.theme-pick {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 20px; padding: 5px 12px 5px 8px; font-size: 12px; font-family: inherit; cursor: pointer;
+}
+.theme-pick.on { background: var(--raise); border-color: var(--gold-deep); color: var(--chalk); }
+.theme-dot { width: 12px; height: 12px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,0.25); }
+
 /* ---------------- Squad pitch ---------------- */
+/* The stand: everything around the pitch (not the pitch itself) sits on
+   this cool graphite instead of the panel green every other card uses -
+   that contrast is what makes the turf below read as an actual pitch. */
+.pitch-stand {
+  background: var(--stand); border-radius: 16px; padding: 18px 12px; margin-bottom: 16px;
+}
 .squad-pitch {
   position: relative; overflow: hidden;
   background:
-    repeating-linear-gradient(180deg, rgba(255,255,255,.012) 0 44px, transparent 44px 88px),
-    linear-gradient(180deg, var(--panel-2), var(--panel));
-  border: 1px solid var(--line); border-radius: 14px; padding: 18px 12px; margin-bottom: 16px;
+    repeating-linear-gradient(180deg, rgba(255,255,255,.025) 0 40px, transparent 40px 80px),
+    radial-gradient(130% 90% at 50% 0%, rgba(255,255,255,.05), transparent 55%),
+    linear-gradient(180deg, #0b2814, #082010);
+  border: 1px solid var(--line); border-radius: 14px; padding: 18px 12px;
+  box-shadow: var(--shadow);
 }
 /* Painted pitch markings, drawn faint and behind the cards — a real formation
    read without competing with the data. Bottom-anchored so they scale with
@@ -390,7 +501,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 3px;
 }
 .plr .tag {
-  position: absolute; top: -7px; right: -6px; background: var(--gold); color: #1a1200;
+  position: absolute; top: -7px; right: -6px; background: var(--gold); color: var(--ink);
   font-size: 9px; font-weight: 700; border-radius: 20px; padding: 1px 6px;
   font-family: "JetBrains Mono", monospace;
 }
@@ -667,7 +778,7 @@ textarea::placeholder { color: var(--muted-2); }
   font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--line);
   background: transparent; color: var(--muted); border-radius: 14px; padding: 4px 9px;
 }
-.chip .pick.on { background: var(--gold); color: #1a1200; border-color: var(--gold); font-weight: 700; }
+.chip .pick.on { background: var(--gold); color: var(--ink); border-color: var(--gold); font-weight: 700; }
 .chip .x { background: transparent; border: none; color: var(--muted); font-size: 17px; line-height: 1; padding: 0 4px; }
 .chip .x:hover { color: var(--neg); }
 
@@ -722,7 +833,7 @@ textarea::placeholder { color: var(--muted-2); }
 .rung .pts { font-family: "Anton", sans-serif; font-size: 16px; min-width: 30px; text-align: right; }
 .crown { color: var(--gold); font-size: 11px; }
 .you {
-  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #1a1200;
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink);
   background: var(--gold); border-radius: 10px; padding: 1px 6px; font-weight: 700;
 }
 
@@ -747,7 +858,7 @@ textarea::placeholder { color: var(--muted-2); }
 /* ---------------- Patterns ---------------- */
 .insight {
   border: 1px solid var(--gold-deep); border-radius: 12px; padding: 14px 16px;
-  background: linear-gradient(180deg, rgba(231, 193, 94, 0.07), transparent);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.07), transparent);
   margin-bottom: 18px;
 }
 .insight-l {
@@ -793,7 +904,7 @@ textarea::placeholder { color: var(--muted-2); }
   vertical-align: middle;
 }
 .sp-flag.pen {
-  background: var(--gold); color: #1a1200; border-color: var(--gold);
+  background: var(--gold); color: var(--ink); border-color: var(--gold);
 }
    Squad Planner
    ========================================================= */
@@ -858,7 +969,7 @@ textarea::placeholder { color: var(--muted-2); }
 .slot-x { background: transparent; border: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0; }
 .slot-x:hover { color: var(--neg); }
 .cap-badge { font-size: 9px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
-.cap-badge.c { background: var(--gold); color: #1a1200; }
+.cap-badge.c { background: var(--gold); color: var(--ink); }
 .cap-badge.v { background: var(--raise); color: var(--gold); border: 1px solid var(--line); }
 .slot-jersey { width: 46px; height: auto; margin: 2px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
 .slot-name { font-size: 12px; font-weight: 600; line-height: 1.1; margin-top: 4px;
@@ -871,7 +982,7 @@ textarea::placeholder { color: var(--muted-2); }
   background: transparent; border: 1px solid var(--line); color: var(--muted);
   border-radius: 6px; font-size: 10px; font-weight: 700; padding: 2px 7px;
 }
-.slot-cap .mini.on { background: var(--gold); color: #1a1200; border-color: var(--gold); }
+.slot-cap .mini.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 
 /* Squad/lineup cards on narrow screens: the position label moves above the
    strip instead of eating a fixed 64px column beside it, and the cards
@@ -910,7 +1021,7 @@ textarea::placeholder { color: var(--muted-2); }
 /* ---------------- Projection headline (Planner) ---------------- */
 .proj-headline {
   border: 1px solid var(--gold-deep); border-radius: 10px; padding: 12px 14px;
-  background: linear-gradient(180deg, rgba(231,193,94,0.09), transparent);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.09), transparent);
   margin-bottom: 10px; text-align: center;
 }
 .proj-num { font-family: "Anton", sans-serif; font-size: 38px; line-height: 1; color: var(--gold); }
@@ -962,6 +1073,6 @@ textarea::placeholder { color: var(--muted-2); }
 .compare-vs { text-align: center; }
 .compare-delta { font-family: "Anton", sans-serif; font-size: 22px; line-height: 1; }
 .compare-sub { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12px; color: var(--muted); margin: 14px 0 8px; }
-.compare-log { text-align: center; margin: 14px 0; padding: 14px; border: 1px solid var(--gold-deep); border-radius: 10px; background: linear-gradient(180deg, rgba(231,193,94,0.09), transparent); }
+.compare-log { text-align: center; margin: 14px 0; padding: 14px; border: 1px solid var(--gold-deep); border-radius: 10px; background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.09), transparent); }
 .compare-log .btn { margin-bottom: 6px; }
 @media (max-width: 640px) { .compare-heads { grid-template-columns: 1fr; } .compare-vs { order: 2; } }

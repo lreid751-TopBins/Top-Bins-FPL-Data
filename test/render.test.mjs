@@ -231,6 +231,43 @@ check("hub widget order leaves no empty cell in the two-column grid", () => {
   return "Team shape and Your season pair up under Fixtures/Captaincy with no gap";
 });
 
+check("every club theme has a matching team and a CSS block", () => {
+  renderHub(panel("panel-hub"));
+  const picks = [...panel("panel-hub").querySelectorAll(".theme-pick")];
+  // Classic Top Bins (empty code) plus one per club.
+  if (picks.length !== 21) throw new Error(`expected 21 theme options, got ${picks.length}`);
+
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  const codes = picks.map((b) => b.dataset.themePick).filter(Boolean);
+  const missingTeam = codes.filter((c) => !S.teamList.some((t) => t.short === c));
+  if (missingTeam.length) throw new Error(`no matching team for: ${missingTeam.join(", ")}`);
+  const missingCss = codes.filter((c) => !css.includes(`:root[data-theme="${c}"]`));
+  if (missingCss.length) throw new Error(`no CSS theme block for: ${missingCss.join(", ")}`);
+  return `${codes.length} club themes, all matched to a real team and a CSS block`;
+});
+
+check("picking a club theme persists and applies data-theme", () => {
+  renderHub(panel("panel-hub"));
+  const btn = panel("panel-hub").querySelector('[data-theme-pick="BRE"]');
+  if (!btn) throw new Error("Brentford theme option not found");
+  btn.click();
+
+  if (S.ui.theme !== "BRE") throw new Error(`expected S.ui.theme to be BRE, got ${S.ui.theme}`);
+  if (localStorage.getItem("tb:theme") !== "BRE") throw new Error("theme choice wasn't persisted to localStorage");
+  if (document.documentElement.getAttribute("data-theme") !== "BRE") {
+    throw new Error("data-theme attribute wasn't applied to <html>");
+  }
+
+  const reselected = panel("panel-hub").querySelector('[data-theme-pick="BRE"]');
+  if (!reselected.classList.contains("on")) throw new Error("re-render didn't mark the picked theme as on");
+
+  // Reset back to classic so later tests/screenshots see the default.
+  panel("panel-hub").querySelector('[data-theme-pick=""]').click();
+  if (S.ui.theme !== "") throw new Error("switching back to Top Bins should clear S.ui.theme");
+  if (document.documentElement.hasAttribute("data-theme")) throw new Error("data-theme should be removed for the classic look");
+  return "BRE applied and persisted, then reset to classic";
+});
+
 check("hub league table shows all 20 teams sorted by points, with crests and xGD", () => {
   renderHub(panel("panel-hub"));
   const table = [...panel("panel-hub").querySelectorAll(".chart-box")].find((box) =>

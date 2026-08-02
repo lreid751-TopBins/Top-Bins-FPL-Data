@@ -1,4 +1,4 @@
-import { S, n, f1, f2, signed, teamResults, teamSeasonXG } from "../store.js";
+import { S, n, f1, f2, signed, teamResults, teamSeasonXG, saveTheme } from "../store.js";
 import { $$, esc, statCard, availabilityFlag, teamCrest } from "../ui.js";
 import { projectPlayer } from "../projection.js";
 import { aggregate } from "./teams.js";
@@ -31,12 +31,56 @@ export function renderHub(root) {
       ${performersWidget()}
       ${availabilityWidget()}
       ${priceMoversWidget()}
+      ${themeWidget()}
     </div>
   `;
 
   $$("[data-goto]", root).forEach((el) => {
     el.onclick = () => goTo(el.dataset.goto);
   });
+  $$("[data-theme-pick]", root).forEach((el) => {
+    el.onclick = () => { saveTheme(el.dataset.themePick); renderHub(root); };
+  });
+}
+
+/* ---------------- Club colour theme picker ---------------- */
+// Codes match S.teamList's short names. Colours are inspired by each
+// club's identity, not official branding - see styles.css for the palette
+// and the footer's "not affiliated" note.
+const CLUB_THEMES = [
+  { code: "ARS", name: "Arsenal" }, { code: "AVL", name: "Aston Villa" },
+  { code: "BOU", name: "Bournemouth" }, { code: "BRE", name: "Brentford" },
+  { code: "BHA", name: "Brighton" }, { code: "BUR", name: "Burnley" },
+  { code: "CHE", name: "Chelsea" }, { code: "CRY", name: "Crystal Palace" },
+  { code: "EVE", name: "Everton" }, { code: "FUL", name: "Fulham" },
+  { code: "LEE", name: "Leeds" }, { code: "LIV", name: "Liverpool" },
+  { code: "MCI", name: "Man City" }, { code: "MUN", name: "Man Utd" },
+  { code: "NEW", name: "Newcastle" }, { code: "NFO", name: "Nott'm Forest" },
+  { code: "SUN", name: "Sunderland" }, { code: "TOT", name: "Tottenham" },
+  { code: "WHU", name: "West Ham" }, { code: "WOL", name: "Wolves" },
+];
+
+function themeWidget() {
+  const current = S.ui.theme;
+  const pick = (code, label, crestHtml) => `<button class="theme-pick ${current === code ? "on" : ""}" data-theme-pick="${code}">
+    ${crestHtml}<span>${esc(label)}</span>
+  </button>`;
+
+  return `<div class="chart-box hub-w hub-w-wide">
+    <h3>Club colours</h3>
+    <p class="cap">
+      Swap the gold accent for your club's - the badge, captain armband, buttons, wherever gold shows up.
+      The pitch always stays green; this is inspired by each club's colours, not their official branding.
+    </p>
+    <div class="theme-picker">
+      ${pick("", "Top Bins", `<span class="theme-dot" style="background:#e7c15e"></span>`)}
+      ${CLUB_THEMES.map((c) => {
+        const team = S.teamList.find((t) => t.short === c.code);
+        const crest = team ? teamCrest(team.id, 16) : `<span class="theme-dot"></span>`;
+        return pick(c.code, c.name, crest);
+      }).join("")}
+    </div>
+  </div>`;
 }
 
 /* ---------------- Live Premier League table ---------------- */

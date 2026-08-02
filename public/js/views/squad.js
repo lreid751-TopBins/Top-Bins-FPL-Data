@@ -179,25 +179,27 @@ export function renderSquad(root) {
       ${statCard("Transfers", eh.event_transfers ?? 0, chip ? `${chipName(chip)} active` : "no chip active")}
     </div>
 
-    <div class="squad-pitch">
-      <div class="pitch-lines" aria-hidden="true">
-        <span class="pl-touch"></span>
-        <span class="pl-goal"></span>
-        <span class="pl-six"></span>
-        <span class="pl-box"></span>
-        <span class="pl-half"></span>
-        <span class="pl-circle"></span>
-      </div>
-      ${["GKP", "DEF", "MID", "FWD"]
-        .map((pos) => {
-          const line = starters.filter((p) => S.playerById[p.element]?.pos === pos);
-          if (!line.length) return "";
-          return `<div class="row-line">${line.map((p) => playerCard(p, false)).join("")}</div>`;
-        })
-        .join("")}
-      <div class="bench-line">
-        <div class="bench-label">Bench</div>
-        <div class="row-line">${bench.map((p) => playerCard(p, true)).join("")}</div>
+    <div class="pitch-stand">
+      <div class="squad-pitch">
+        <div class="pitch-lines" aria-hidden="true">
+          <span class="pl-touch"></span>
+          <span class="pl-goal"></span>
+          <span class="pl-six"></span>
+          <span class="pl-box"></span>
+          <span class="pl-half"></span>
+          <span class="pl-circle"></span>
+        </div>
+        ${["GKP", "DEF", "MID", "FWD"]
+          .map((pos) => {
+            const line = starters.filter((p) => S.playerById[p.element]?.pos === pos);
+            if (!line.length) return "";
+            return `<div class="row-line">${line.map((p) => playerCard(p, false)).join("")}</div>`;
+          })
+          .join("")}
+        <div class="bench-line">
+          <div class="bench-label">Bench</div>
+          <div class="row-line">${bench.map((p) => playerCard(p, true)).join("")}</div>
+        </div>
       </div>
     </div>
 

@@ -1,4 +1,4 @@
-import { S, load } from "./store.js";
+import { S, load, applyTheme } from "./store.js";
 import { $, $$, untilDeadline } from "./ui.js";
 import { renderHub } from "./views/hub.js";
 import { renderSquad, loadManager } from "./views/squad.js";
@@ -101,4 +101,7 @@ async function boot() {
   }, 90_000);
 }
 
+// Apply a saved club theme immediately, before the FPL fetch even starts -
+// a returning visitor shouldn't see a flash of the default gold first.
+applyTheme();
 boot();

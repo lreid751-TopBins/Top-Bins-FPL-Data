@@ -28,6 +28,7 @@ export const S = {
     tab: "hub",
     managerId: localStorage.getItem("tb:managerId") || "",
     watchlist: new Set(JSON.parse(localStorage.getItem("tb:watchlist") || "[]")),
+    theme: localStorage.getItem("tb:theme") || "", // "" = classic Top Bins gold
     // Scout
     scoutSort: { k: "total_points", dir: -1 },
     per90: false,
@@ -55,6 +56,20 @@ export function saveWatchlist() {
 export function saveManagerId(id) {
   S.ui.managerId = String(id || "");
   localStorage.setItem("tb:managerId", S.ui.managerId);
+}
+
+/** Puts S.ui.theme's club code onto <html> as data-theme, which every club
+    colour override in styles.css keys off. Call after any change to
+    S.ui.theme, and once at boot to restore whatever was saved last time. */
+export function applyTheme() {
+  if (S.ui.theme) document.documentElement.setAttribute("data-theme", S.ui.theme);
+  else document.documentElement.removeAttribute("data-theme");
+}
+
+export function saveTheme(code) {
+  S.ui.theme = code || "";
+  localStorage.setItem("tb:theme", S.ui.theme);
+  applyTheme();
 }
 
 /* =========================================================
