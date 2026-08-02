@@ -220,10 +220,16 @@ function playerCard(pick, benched) {
   const stats = liveById[pick.element] || {};
   const pts = n(stats.total_points) * (benched ? 1 : pick.multiplier || 1);
   const playing = n(stats.minutes) > 0;
+  // A tiny armband glyph rather than just a bare letter - currentColor so
+  // it inherits the tag's own colour (ink on gold for captain, gold on the
+  // vice's outline pill).
+  const armband = `<svg class="armband" width="10" height="8" viewBox="0 0 16 12" fill="none" aria-hidden="true">
+    <path d="M1 9a7 7 0 0 1 14 0" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/>
+  </svg>`;
   const tag = pick.is_captain
-    ? `<span class="tag">${pick.multiplier === 3 ? "TC" : "C"}</span>`
+    ? `<span class="tag">${armband}${pick.multiplier === 3 ? "TC" : "C"}</span>`
     : pick.is_vice_captain
-    ? `<span class="tag v">V</span>`
+    ? `<span class="tag v">${armband}V</span>`
     : "";
 
   const jersey = p.jersey

@@ -495,6 +495,9 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .plr {
   width: 104px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
   padding: 8px 6px; text-align: center; position: relative;
+  /* Lifts the card off the pitch/stand rather than letting it sit flush,
+     now that the pitch has its own background separate from the page. */
+  box-shadow: 0 8px 16px -10px rgba(0, 0, 0, 0.6);
 }
 .plr .pts {
   font-family: "Anton", sans-serif; font-size: 22px; line-height: 1; color: var(--gold);
@@ -510,8 +513,10 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   position: absolute; top: -7px; right: -6px; background: var(--gold); color: var(--ink);
   font-size: 9px; font-weight: 700; border-radius: 20px; padding: 1px 6px;
   font-family: "JetBrains Mono", monospace;
+  display: inline-flex; align-items: center; gap: 3px;
 }
 .plr .tag.v { background: var(--raise); color: var(--gold); border: 1px solid var(--line); }
+.plr .tag .armband { flex: none; }
 .plr.benched { opacity: 0.6; }
 .plr.playing { border-color: var(--gold-deep); }
 .plr .fx { display: flex; gap: 2px; justify-content: center; margin-top: 5px; }
