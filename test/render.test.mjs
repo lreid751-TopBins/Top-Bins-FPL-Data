@@ -1015,6 +1015,23 @@ check("squad table view shows the same 15 with a remove action", () => {
   });
 }
 
+check("mobile .slot width override survives the cascade", () => {
+  // Regression: an earlier @media(max-width:720px) .slot{width:100px} rule
+  // silently never applied, because a later, unconditional .slot{width:160px}
+  // base rule (added after it, same specificity) won on source order - jsdom
+  // doesn't apply external stylesheets, so this can't be caught with
+  // getComputedStyle; it has to be a source-order check on the raw CSS text.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  const baseIdx = css.indexOf("width: 160px; min-height: 156px;");
+  const mobileIdx = css.indexOf(".slot { width: 140px; min-height: 148px; }");
+  if (baseIdx === -1) throw new Error("base .slot rule not found - did it move or get renamed?");
+  if (mobileIdx === -1) throw new Error("mobile .slot override not found - did it move or get renamed?");
+  if (mobileIdx < baseIdx) {
+    throw new Error("mobile .slot override appears before the base rule - it will lose the cascade tie again");
+  }
+  return "mobile override correctly comes after the base rule";
+});
+
 /* ---------------- Report ---------------- */
 console.log("");
 for (const [state, name, note] of results) {

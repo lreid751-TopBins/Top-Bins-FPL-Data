@@ -582,10 +582,15 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   .brand .wm { font-size: 19px; }
   .section-head h2 { font-size: 22px; }
   .tab { padding: 10px 12px; font-size: 12px; }
+  /* The tab bar has always scrolled sideways past this width - it just never
+     hinted that. Fading the last stretch signals there's more without a
+     dedicated arrow or scrollbar. */
+  .tabs {
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  }
   .board { padding: 14px 12px; }
   .plr { width: 88px; }
-  .slot { width: 100px; min-height: 128px; }
-  .slot-jersey { width: 36px; }
   .pl-six { width: 130px; height: 26px; }
   .pl-box { width: 220px; height: 56px; }
   .pl-circle { width: 90px; height: 90px; }
@@ -845,6 +850,21 @@ textarea::placeholder { color: var(--muted-2); }
   border-radius: 6px; font-size: 10px; font-weight: 700; padding: 2px 7px;
 }
 .slot-cap .mini.on { background: var(--gold); color: #1a1200; border-color: var(--gold); }
+
+/* Squad/lineup cards on narrow screens: the position label moves above the
+   strip instead of eating a fixed 64px column beside it, and the cards
+   themselves shrink - together that's the difference between one huge card
+   per row and two readable ones. This has to come after the rules above:
+   an earlier .slot{width:100px} in the global responsive block used to lose
+   this exact fight, same specificity, earlier in the file, so it silently
+   never applied. */
+@media (max-width: 720px) {
+  .pos-row { grid-template-columns: 1fr; }
+  .pos-label { flex-direction: row; align-items: center; gap: 8px; padding-top: 0; }
+  .slot-strip { justify-content: flex-start; }
+  .slot { width: 140px; min-height: 148px; }
+  .slot-jersey { width: 38px; }
+}
 
 /* Add row */
 .add-row { margin-top: 4px; }
