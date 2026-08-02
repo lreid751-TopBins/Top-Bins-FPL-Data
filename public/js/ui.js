@@ -62,7 +62,9 @@ export function fixtureStrip(teamId, span = 5, mode = null) {
       const d = difficultyOf(f, m);
       const opp = S.teams[f.opp]?.short || "?";
       const label = `GW${r.gw}: ${opp} (${f.home ? "H" : "A"})${r.list.length > 1 ? " +1" : ""}`;
-      return `<i class="fxi" style="background:var(--fdr-${d})" title="${label}"></i>`;
+      // The width band is a non-colour cue for the difficulty itself (harder
+      // = wider) - the colour alone isn't readable to every colour vision.
+      return `<i class="fxi d${d}" style="background:var(--fdr-${d})" title="${label}"></i>`;
     })
     .join("");
 }

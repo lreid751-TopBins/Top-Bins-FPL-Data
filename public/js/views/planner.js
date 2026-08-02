@@ -201,7 +201,7 @@ function filledSlot(p) {
 }
 
 function emptySlot(posKey) {
-  return `<div class="slot empty" data-addpos="${posKey}">
+  return `<div class="slot empty" data-addpos="${posKey}" tabindex="0" role="button" aria-label="Add a ${posKey}">
     <div class="slot-plus">+</div>
     <div class="slot-meta">${posKey}</div>
   </div>`;
@@ -265,7 +265,8 @@ function lineupSlot(p, starting, gw) {
   const jersey = p.jersey
     ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : "";
-  return `<div class="slot filled ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}">
+  return `<div class="slot filled ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
+    tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap">
     <div class="slot-top">
       ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : "<span></span>"}
     </div>
@@ -484,14 +485,18 @@ function wire(root, rerender) {
     };
   });
 
-  // Empty slot click → focus search
+  // Empty slot click → focus search. These are divs, not buttons (they hold
+  // no single semantic role beyond "activate"), so Enter/Space needs wiring
+  // by hand alongside the tabindex that makes them reachable at all.
   $$("[data-addpos]", root).forEach((s) => {
-    s.onclick = () => { const el = $("#plSearch", root); if (el) el.focus(); };
+    const go = () => { const el = $("#plSearch", root); if (el) el.focus(); };
+    s.onclick = go;
+    s.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
   });
 
   // Lineup: click a player, then one from the other side (bench/starting) to swap
   $$("[data-lineup]", root).forEach((el) => {
-    el.onclick = (e) => {
+    const activate = (e) => {
       if (e.target.closest("[data-cap],[data-vice]")) return;
       const id = +el.dataset.lineup;
       if (PL.lineupSelect == null) {
@@ -505,6 +510,8 @@ function wire(root, rerender) {
       }
       rerender();
     };
+    el.onclick = activate;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(e); } };
   });
 
   // Starting XI gameweek navigator

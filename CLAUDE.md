@@ -98,26 +98,24 @@ says this; keep it that way. Bonus/saves/cards are approximated or omitted.
 
 ## Roadmap (agreed order)
 
-We are building the branching feature in three parts, engine-first:
+We built the branching feature in three parts, engine-first:
 
 1. **[DONE, deployed] Projection engine** — live projected-points figure in the
    Planner analysis panel, adjustable window. Marina validated the numbers.
-2. **[NEXT] Lineup layer** — set the starting XI from the 15 (manual, like FPL's
-   "pick team"). Enforce a legal formation (1 GK, 3–5 DEF, 2–5 MID, 1–3 FWD).
-   Projection runs on the chosen XI; captain doubled. The Planner should feel
-   like a **live optimization surface**: projected points + underlying stats
-   update on every swap, so Marina optimizes while building.
-3. **[THEN] Branching** — clone a squad, swap one player, compare two versions
-   side by side over a chosen window: each squad's projected total, per-GW
-   breakdown, the delta, and which players drive it. `compareSquads()` is
-   already built in projection.js. The real use case: "Foden vs Cunha for GW1,
-   how does my team look by GW5?"
-4. **[THEN] Planner → Journal wiring** — when Marina annotates a planned transfer
-   as a real, considered decision, it feeds the journal (prompting for
-   confidence + reasoning at that moment, pre-filled with the players). The
-   deliberate annotation IS the validation gate — experimenting does nothing to
-   the journal until she consciously logs it. Manual journal entry stays too.
-5. **[THEN] Design pass** — holistic, whole app. Direction (Marina's words):
+2. **[DONE, deployed] Lineup layer** — set the starting XI from the 15 (manual,
+   like FPL's "pick team"). Enforces a legal formation (1 GK, 3–5 DEF, 2–5 MID,
+   1–3 FWD). Projection runs on the chosen XI; captain doubled. Projected
+   points + underlying stats update on every swap.
+3. **[DONE, deployed] Branching** — clone a squad, swap one player, compare two
+   versions side by side over a chosen window: each squad's projected total,
+   per-GW breakdown, the delta, and which players drive it.
+4. **[DONE, deployed] Planner → Journal wiring** — when Marina annotates a
+   planned transfer as a real, considered decision, it feeds the journal
+   (prompting for confidence + reasoning at that moment, pre-filled with the
+   players). The deliberate annotation IS the validation gate — experimenting
+   does nothing to the journal until she consciously logs it. Manual journal
+   entry stays too.
+5. **[IN PROGRESS] Design pass** — holistic, whole app. Direction (Marina's words):
    **"Top Bins palette with calm, data-forward discipline."** Her own channel
    colours (floodlit pitch green, gold, chalk white; USMNT red/white/blue accent
    available), executed with restraint and whitespace. Inspired by the *calm,
@@ -125,6 +123,9 @@ We are building the branching feature in three parts, engine-first:
    a clone** — it must look distinctly like Top Bins. A screenshot should read as
    hers before a word is read. Pitch view for the squad (understated dark pitch,
    data leads). She WILL show this on the podcast, so it must look like the show.
+   Underway: separating the pitch background from the page background so the
+   pitch reads as its own object, plus an optional club-colour theme (accent
+   swaps to match a favourite club, turf always stays green).
 
 ## Hard-won gotchas (don't relearn these)
 

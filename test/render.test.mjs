@@ -412,10 +412,23 @@ check("fixture strip pills are self-sized, not dependent on an ancestor selector
   const html = fixtureStrip(S.players[0].teamId, 5);
   const count = (html.match(/<i /g) || []).length;
   if (!count) throw new Error("fixtureStrip produced no pills");
-  if ((html.match(/class="fxi"/g) || []).length !== count) {
+  // A difficulty pill also carries a .d1-.d5 band class alongside .fxi (the
+  // non-colour width cue), so match "fxi" as a class rather than the whole
+  // attribute verbatim.
+  if ((html.match(/class="fxi(\s|")/g) || []).length !== count) {
     throw new Error("every fixture pill needs the .fxi class to be visible");
   }
   return `${count} pills, all self-sized`;
+});
+
+check("difficulty pills carry a non-colour size band, not colour alone", () => {
+  // Accessibility: a colourblind viewer can't tell var(--fdr-1) from
+  // var(--fdr-5) by hue. Each pill's width should still separate them.
+  const html = fixtureStrip(S.players[0].teamId, 5);
+  const bands = [...html.matchAll(/class="fxi d(\d)"/g)].map((m) => m[1]);
+  if (!bands.length) throw new Error("no banded (non-blank) fixture pills found in this sample");
+  if (!bands.every((b) => "12345".includes(b))) throw new Error(`unexpected band value among ${bands.join(",")}`);
+  return `${bands.length} pills banded d${bands.join(",d")}`;
 });
 
 check("player finder filters", () => {
@@ -863,6 +876,30 @@ check("a legal lineup swap moves both players and clears the outgoing captain", 
   if (startingPlayers().some((p) => p.id === startP.id)) throw new Error("starting player did not move to the bench");
   if (PL.draft.captain === startP.id) throw new Error("captain should be cleared once benched");
   return `swapped ${benchP.name} in for ${startP.name}`;
+});
+
+check("lineup and empty-slot cards are keyboard-reachable, not just clickable", () => {
+  // Regression: these are divs with an onclick, not real buttons or links -
+  // with no tabindex a keyboard user could never reach them at all, no
+  // matter how visible a :focus-visible ring might be.
+  renderPlanner(panel("panel-planner"));
+
+  const lineupSlot = panel("panel-planner").querySelector(".slot[data-lineup]");
+  if (!lineupSlot) throw new Error("no lineup slot found - is the squad complete in this test run?");
+  if (lineupSlot.getAttribute("tabindex") !== "0") throw new Error("lineup slot isn't in the tab order");
+  if (lineupSlot.getAttribute("role") !== "button") throw new Error("lineup slot has no button role for screen readers");
+
+  const id = +lineupSlot.dataset.lineup;
+  lineupSlot.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  if (PL.lineupSelect !== id) throw new Error("Enter key didn't select the lineup slot the way a click does");
+  lineupSlot.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); // deselect, tidy up
+
+  const emptySlot = panel("panel-planner").querySelector(".slot.empty[data-addpos]");
+  if (emptySlot) {
+    if (emptySlot.getAttribute("tabindex") !== "0") throw new Error("empty slot isn't in the tab order");
+    if (emptySlot.getAttribute("role") !== "button") throw new Error("empty slot has no button role for screen readers");
+  }
+  return "lineup slot and empty slot both reachable and Enter-activatable";
 });
 
 check("squad projection runs on the starting XI, not the full 15", () => {

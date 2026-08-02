@@ -89,10 +89,13 @@ async function boot() {
 
   // Keep live scores fresh while a gameweek is in play, but never redraw
   // the page while someone is mid-keystroke or has the tab in the background.
+  // Hub gets the same refresh as My Team - its "Your season" card reads the
+  // same S.entry/S.history this call updates, so it can otherwise sit stale
+  // for as long as Marina leaves the tab open during a live gameweek.
   setInterval(() => {
     const typing = ["INPUT", "SELECT", "TEXTAREA"].includes(document.activeElement?.tagName);
     if (document.hidden || typing) return;
-    if (S.ui.tab === "squad" && S.ui.managerId && S.entry) {
+    if ((S.ui.tab === "squad" || S.ui.tab === "hub") && S.ui.managerId && S.entry) {
       loadManager(S.ui.managerId, () => renderActive());
     }
   }, 90_000);

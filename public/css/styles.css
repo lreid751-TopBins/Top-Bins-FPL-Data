@@ -403,6 +403,13 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
    context (table cell, card, detail panel) without depending on an ancestor
    selector happening to match. */
 .fxi { width: 12px; height: 5px; border-radius: 2px; display: inline-block; }
+/* Width doubles as a colour-independent read on difficulty: easier is
+   narrow, harder is wide. A blank fixture (no .d class) keeps the base width. */
+.fxi.d1 { width: 7px; }
+.fxi.d2 { width: 10px; }
+.fxi.d3 { width: 13px; }
+.fxi.d4 { width: 16px; }
+.fxi.d5 { width: 19px; }
 
 /* ---------------- Charts ---------------- */
 .chart-box {
@@ -529,6 +536,14 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .hub-goto:hover { color: var(--gold-2); }
 
 .fdr-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
+/* Same idea as .fxi: size rises with difficulty so the dot doesn't rely on
+   colour alone. Higher specificity than the base rule above, so this always
+   wins regardless of source order. */
+.fdr-dot.d1 { width: 5px; height: 5px; }
+.fdr-dot.d2 { width: 6px; height: 6px; }
+.fdr-dot.d3 { width: 7px; height: 7px; }
+.fdr-dot.d4 { width: 8.5px; height: 8.5px; }
+.fdr-dot.d5 { width: 10px; height: 10px; }
 .team-crest { display: block; object-fit: contain; flex: none; }
 .hub-team-cell { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -834,6 +849,10 @@ textarea::placeholder { color: var(--muted-2); }
   border-style: dashed; cursor: pointer; justify-content: center; color: var(--muted-2);
 }
 .slot.empty:hover { border-color: var(--gold-deep); color: var(--gold); }
+/* These slots are divs, not buttons, so they don't pick up the global
+   button:focus-visible rule - reachable via tabindex, but still need their
+   own visible ring. */
+.slot[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .slot-plus { font-size: 26px; line-height: 1; }
 .slot-top { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 16px; }
 .slot-x { background: transparent; border: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0; }
@@ -917,6 +936,18 @@ textarea::placeholder { color: var(--muted-2); }
 .gw-nav-btn:hover:not(:disabled) { border-color: var(--gold-deep); color: var(--gold); }
 .gw-nav-btn:disabled { opacity: 0.35; cursor: default; }
 .gw-nav-label { font-size: 12.5px; color: var(--chalk); min-width: 46px; text-align: center; }
+
+/* A handful of controls were sized for a mouse pointer - fine on desktop,
+   tight on a real thumb. Bigger hit area here, same look on desktop. Placed
+   after every base rule it touches - the exact mistake that made the mobile
+   .slot width fix necessary earlier would otherwise repeat itself here. */
+@media (max-width: 720px) {
+  .gw-nav-btn { width: 34px; height: 34px; font-size: 13px; }
+  .slot-cap .mini { padding: 6px 10px; font-size: 11px; }
+  .slot-x { padding: 6px; font-size: 18px; }
+  .chip .x { padding: 8px; font-size: 19px; }
+  .squad-tab .st-x, .squad-tab .st-branch { padding: 8px 6px; }
+}
 .slot[data-lineup] { cursor: pointer; }
 .slot[data-lineup]:hover { border-color: var(--gold-deep); }
 .slot.bench { opacity: 0.65; }

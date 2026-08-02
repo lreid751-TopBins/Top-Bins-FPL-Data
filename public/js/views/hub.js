@@ -109,10 +109,16 @@ function fixturesWidget() {
     days.get(key).push(f);
   }
 
-  const team = (id, difficulty) => `<span class="hub-fx-team">
+  const team = (id, difficulty) => {
+    const d = difficulty || 3;
+    // Size rides along with colour so difficulty still reads without
+    // relying on hue - a bigger dot is a harder fixture regardless of
+    // colour vision.
+    return `<span class="hub-fx-team">
     ${teamCrest(id, 22)}
-    <i class="fdr-dot" style="background:var(--fdr-${difficulty || 3})" title="Official difficulty"></i>${esc(S.teams[id]?.short || "?")}
+    <i class="fdr-dot d${d}" style="background:var(--fdr-${d})" title="Official difficulty: ${d}/5"></i>${esc(S.teams[id]?.short || "?")}
   </span>`;
+  };
 
   return `<div class="chart-box hub-w">
     <h3>Fixtures — GW${g}</h3>
