@@ -658,6 +658,22 @@ check("hub shows crests, rank and mini-leagues once a manager is connected", () 
   return `${crests.length} crests, rank ${rankBig.textContent.trim()}, ${leagueNames.length} leagues`;
 });
 
+check("a changed rank flashes the number, an unchanged one doesn't", () => {
+  renderHub(panel("panel-hub")); // baseline render at whatever rank is already showing
+  const before = panel("panel-hub").querySelector(".hub-rank-big .metric-flash");
+  if (before) throw new Error("shouldn't flash on a render where the value hasn't changed");
+
+  const original = S.entry.summary_overall_rank;
+  S.entry.summary_overall_rank = original - 500; // simulate a rank improving after a live refresh
+  renderHub(panel("panel-hub"));
+  const flashed = panel("panel-hub").querySelector(".hub-rank-big .metric-flash");
+  if (!flashed) throw new Error("rank should flash when it changes between renders");
+
+  S.entry.summary_overall_rank = original; // restore for later tests
+  renderHub(panel("panel-hub"));
+  return "flashes only when the value actually changes, not on every render";
+});
+
 await loadManager("999", () => renderSquad(panel("panel-squad")));
 check("manager ID keydown handler never blocks typing", () => {
   // Regression guard: the handler must not return false, which would call

@@ -149,6 +149,20 @@ export function emptyState(title, body, action = "") {
   return `<div class="empty"><div class="anton">${esc(title)}</div>${body}${action}</div>`;
 }
 
+/* ---------------- Metric change flash ----------------
+   Auto-refresh (and manual reloads) replace a whole panel's HTML at once,
+   which can bury a genuinely changed number in a wall of otherwise-
+   identical text. Wrapping a value in metricFlash() remembers what it
+   showed last time under the same key and, only if this render differs,
+   wraps it in a class that briefly glows - drawing the eye to exactly
+   what moved instead of making Marina re-scan the whole card. */
+const lastMetric = new Map();
+export function metricFlash(key, value, html) {
+  const prev = lastMetric.has(key) ? lastMetric.get(key) : value;
+  lastMetric.set(key, value);
+  return `<span class="${prev !== value ? "metric-flash" : ""}">${html}</span>`;
+}
+
 /* ---------------- Deadline countdown ---------------- */
 export function untilDeadline(iso) {
   if (!iso) return "";

@@ -44,12 +44,23 @@ function renderActive() {
   PANELS[tab].render(PANELS[tab].el());
 }
 
+// A short fade-in when a tab is actually switched to - kept out of
+// renderActive() itself, since that also runs on the 90s live-score
+// refresh, and re-fading a panel the user is already reading would read
+// as a flicker rather than a transition.
+function playPanelEnter(el) {
+  el.classList.remove("panel-enter");
+  void el.offsetWidth; // force reflow so the animation restarts
+  el.classList.add("panel-enter");
+}
+
 function wireTabs() {
   $$(".tab").forEach((t) => {
     t.onclick = () => {
       S.ui.tab = t.dataset.tab;
       $$(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       renderActive();
+      playPanelEnter(PANELS[t.dataset.tab].el());
     };
   });
 }

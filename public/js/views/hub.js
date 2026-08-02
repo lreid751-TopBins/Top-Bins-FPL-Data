@@ -1,5 +1,5 @@
 import { S, n, f1, f2, signed, teamResults, teamSeasonXG, saveTheme } from "../store.js";
-import { $$, esc, statCard, availabilityFlag, teamCrest } from "../ui.js";
+import { $$, esc, statCard, availabilityFlag, teamCrest, metricFlash } from "../ui.js";
 import { projectPlayer } from "../projection.js";
 import { aggregate } from "./teams.js";
 import { fmtRank } from "./squad.js";
@@ -279,7 +279,7 @@ function rankWidget() {
     <p class="cap">${esc(S.entry.name || "My Team")}</p>
     <div class="hub-rank-head">
       <div>
-        <div class="hub-rank-big">${fmtRank(rank)}</div>
+        <div class="hub-rank-big">${metricFlash("hub-rank", rank, fmtRank(rank))}</div>
         <div class="hint">overall rank${delta != null ? ` · <span class="${delta >= 0 ? "pos" : "neg"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toLocaleString()}</span> last GW` : ""}</div>
       </div>
       ${rankTrendSvg(history)}

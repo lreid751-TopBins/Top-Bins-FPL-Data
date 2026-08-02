@@ -2,7 +2,7 @@ import { S, saveManagerId, runDifficulty, n, f1, f2, signed } from "../store.js"
 import { api } from "../api.js";
 import {
   $, $$, esc, statCard, emptyState, fixtureStrip,
-  availabilityFlag, playerSearchResults, dropdownHTML, sparkline,
+  availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash,
 } from "../ui.js";
 
 let liveById = {};
@@ -169,7 +169,7 @@ export function renderSquad(root) {
     <div class="cards">
       ${statCard(
         `GW${S.picksGw} points`,
-        `<span style="color:var(--gold)">${gwPoints}</span>`,
+        metricFlash("squad-gw-points", gwPoints, `<span style="color:var(--gold)">${gwPoints}</span>`),
         `${benchPoints} on the bench${n(eh.event_transfers_cost) ? ` · −${eh.event_transfers_cost} hit` : ""}`
       )}
       ${statCard("Overall rank", fmtRank(S.entry.summary_overall_rank),

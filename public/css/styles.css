@@ -658,6 +658,29 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .foot-src a { color: var(--muted); }
 
+/* ---------------- Tab-switch transition ---------------- */
+@keyframes panelEnter {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.panel-enter { animation: panelEnter 0.18s ease; }
+
+/* ---------------- Metric change flash ----------------
+   A quiet glow, not a colour change, so it works regardless of whatever
+   colour the number already is (pos/neg deltas, themed gold, plain
+   chalk...). Triggered only when a value actually differs from what it
+   showed last render - see metricFlash() in ui.js. */
+@keyframes metricGlow {
+  0% { text-shadow: 0 0 0 rgba(var(--gold-rgb), 0); }
+  25% { text-shadow: 0 0 14px rgba(var(--gold-rgb), 0.85); }
+  100% { text-shadow: 0 0 0 rgba(var(--gold-rgb), 0); }
+}
+.metric-flash { animation: metricGlow 1.2s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-enter, .metric-flash { animation: none; }
+}
+
 /* ---------------- Hub ---------------- */
 .hub-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
 .hub-w { margin-bottom: 0; }
