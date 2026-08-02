@@ -156,13 +156,15 @@ function captaincyWidget() {
     .filter((p) => p.xMin >= 60 && p.minutes >= MIN_MINS)
     .map((p) => ({ p, total: projectPlayer(p, 1, g).total }))
     .sort((a, b) => b.total - a.total)
-    .slice(0, 6);
+    // Eight, not six - a longer shortlist so this widget runs about the same
+    // length as Fixtures next to it, rather than leaving a short column.
+    .slice(0, 8);
 
   return `<div class="chart-box hub-w">
     <h3>Captaincy shortlist</h3>
     <p class="cap">
       Top projected points for GW${g} alone, from the same engine the Planner uses.
-      Trend is net transfers in or out over the last day.
+      Ownership is season-to-date; the arrow is net transfers in or out over the last day.
     </p>
     <div class="hub-list">
       ${rows
@@ -173,7 +175,10 @@ function captaincyWidget() {
             : "";
           return `<div class="hub-row">
         <span class="hub-rank">${i + 1}</span>
-        <span class="hub-name">${esc(r.p.name)}${availabilityFlag(r.p)} <span class="sub-t">${esc(r.p.short)}</span> ${trend}</span>
+        <span class="hub-name-col">
+          <span class="hub-name-top">${esc(r.p.name)}${availabilityFlag(r.p)}</span>
+          <span class="hub-name-sub sub-t">${esc(r.p.short)} · ${f1(r.p.selected)}% owned ${trend}</span>
+        </span>
         <span class="hub-val gold">${r.total.toFixed(1)}</span>
       </div>`;
         })

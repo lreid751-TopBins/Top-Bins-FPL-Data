@@ -296,7 +296,7 @@ check("captaincy shortlist shows a riser/faller trend from today's net transfers
     .filter((p) => p.xMin >= 60 && p.minutes >= 270)
     .map((p) => ({ p, total: projectPlayer(p, 1, gw).total }))
     .sort((a, b) => b.total - a.total)
-    .slice(0, 6);
+    .slice(0, 8);
   const expectedTags = shortlist.filter((r) => r.p.netTransfers).length;
 
   const tags = box.querySelectorAll(".hub-trend-tag");
@@ -306,6 +306,27 @@ check("captaincy shortlist shows a riser/faller trend from today's net transfers
   const posOrNeg = [...tags].every((t) => t.classList.contains("pos") || t.classList.contains("neg"));
   if (!posOrNeg) throw new Error("every trend tag should be colored pos or neg");
   return `${tags.length} of ${shortlist.length} shortlisted players trending`;
+});
+
+check("captaincy shortlist runs 8 deep with ownership shown, to match Fixtures' height", () => {
+  renderHub(panel("panel-hub"));
+  const box = [...panel("panel-hub").querySelectorAll(".chart-box")].find((b) =>
+    b.querySelector("h3")?.textContent.includes("Captaincy shortlist")
+  );
+  const rows = box.querySelectorAll(".hub-row");
+  if (rows.length !== 8) throw new Error(`expected 8 rows, got ${rows.length}`);
+
+  const subs = [...box.querySelectorAll(".hub-name-sub")];
+  if (subs.length !== 8) throw new Error(`expected an ownership/trend line on all 8 rows, got ${subs.length}`);
+  const missingOwnership = subs.filter((s) => !/%\s*owned/.test(s.textContent));
+  if (missingOwnership.length) throw new Error(`${missingOwnership.length} rows are missing "% owned"`);
+
+  const fixturesBox = [...panel("panel-hub").querySelectorAll(".chart-box")].find((b) =>
+    b.querySelector("h3")?.textContent.includes("Fixtures")
+  );
+  const captaincyH = box.getBoundingClientRect().height;
+  const fixturesH = fixturesBox.getBoundingClientRect().height;
+  return `8 rows with ownership shown (captaincy ${Math.round(captaincyH)}px vs fixtures ${Math.round(fixturesH)}px)`;
 });
 
 check("fixture ticker renders", () => {

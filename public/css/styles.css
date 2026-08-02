@@ -556,6 +556,9 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .hub-row-wrap { flex-direction: column; align-items: flex-start; gap: 3px; }
 .hub-rank { font-family: "Anton", sans-serif; font-size: 13px; color: var(--muted); width: 18px; flex: none; }
 .hub-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-name-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.hub-name-top { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hub-name-sub { display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hub-val { font-family: "JetBrains Mono", monospace; font-weight: 600; flex: none; }
 .hub-val.gold { color: var(--gold); }
 .hub-news { font-size: 10.5px; color: var(--muted); }
