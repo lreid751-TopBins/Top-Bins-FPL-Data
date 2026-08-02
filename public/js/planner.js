@@ -47,6 +47,7 @@ export const PL = {
   lineupError: "",    // reason the last swap attempt was rejected
   lineupGw: null,     // gameweek the Starting XI is showing fixtures for; null = defaults to next GW
   squadView: "cards", // "cards" (jerseys) or "table" (dense stats) for the squad list
+  browsePos: null,    // position tab shown in the add-player browse list; null = defaults to first still needed
 };
 
 export function blankDraft() {

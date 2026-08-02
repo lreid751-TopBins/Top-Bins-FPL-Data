@@ -50,9 +50,9 @@ export function renderPlanner(root) {
     <div class="planner-grid">
       <div class="planner-build">
         ${draftHeader()}
+        ${addRow()}
         ${budgetBar(left)}
         ${squadSection()}
-        ${addRow()}
         ${lineupSection(complete)}
       </div>
       <aside class="planner-side">
@@ -152,7 +152,7 @@ function squadTable() {
     return `<p class="hint" style="margin-bottom:16px">No players yet — search below to start building.</p>`;
   }
 
-  return `<div class="twrap" style="margin-bottom:16px">
+  return `<div class="twrap squad-twrap" style="margin-bottom:16px">
     <table>
       <thead><tr>
         <th style="text-align:left">Player</th><th>Team</th><th>Pos</th><th>£</th>
@@ -289,14 +289,64 @@ function lineupSlot(p, starting, gw) {
   </div>`;
 }
 
-/* ---------------- Add-player search ---------------- */
+/* ---------------- Add-player search + browse-by-position ----------------
+   Search-by-name only works if you already know who you want. The browse
+   list below it shows every remaining player in a position, sorted by
+   total points, so there's no need to search your memory first. */
 function addRow() {
-  return `<div class="add-row">
-    <div class="cand-search">
-      <input id="plSearch" placeholder="Search a player to add…" autocomplete="off" aria-label="Add player">
-      <div id="plDrop"></div>
+  if (!POSITION_ORDER.includes(PL.browsePos)) {
+    PL.browsePos = needed()[0]?.pos || "GKP";
+  }
+  return `<div class="add-row" id="addRow">
+    <div class="add-row-head">
+      <div class="cand-search">
+        <input id="plSearch" placeholder="Search a player to add…" autocomplete="off" aria-label="Add player">
+        <div id="plDrop"></div>
+      </div>
+      <div class="seg" role="group" aria-label="Browse a position">
+        ${POSITION_ORDER.map(
+          (pk) => `<button data-browsepos="${pk}" aria-pressed="${PL.browsePos === pk}">${pk}</button>`
+        ).join("")}
+      </div>
     </div>
+    ${browseList()}
   </div>`;
+}
+
+function browseList() {
+  const posKey = PL.browsePos;
+  const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
+  const candidates = S.players
+    .filter((p) => p.pos === posKey && !inSquad.has(p.id))
+    .sort((a, b) => b.total_points - a.total_points);
+
+  if (!candidates.length) {
+    return `<p class="hint" style="margin-top:10px">No ${posKey} left to add — every eligible player is already in this squad.</p>`;
+  }
+
+  return `<div class="twrap browse-wrap">
+    <table>
+      <thead><tr>
+        <th style="text-align:left">Player</th><th>Team</th><th>£</th>
+        <th>xMin</th><th>xGI</th><th>Next 5</th><th></th>
+      </tr></thead>
+      <tbody>${candidates.map(browseRow).join("")}</tbody>
+    </table>
+  </div>`;
+}
+
+function browseRow(p) {
+  const check = canAdd(p);
+  return `<tr>
+    <td class="name">${esc(p.name)}${availabilityFlag(p)}</td>
+    <td class="sub-t">${esc(p.short)}</td>
+    <td>£${f1(p.price)}</td>
+    <td>${p.xMin}'</td>
+    <td>${f2(p.xgi)}</td>
+    <td><span style="display:inline-flex;gap:3px">${fixtureChips(p.teamId, 5)}</span></td>
+    <td><button class="btn ghost" data-browseadd="${p.id}" ${check.ok ? "" : "disabled"}
+      title="${esc(check.ok ? "Add to squad" : check.reason)}">+ Add</button></td>
+  </tr>`;
 }
 
 /* ---------------- Totals / analysis panel ---------------- */
@@ -485,13 +535,32 @@ function wire(root, rerender) {
     };
   });
 
-  // Empty slot click → focus search. These are divs, not buttons (they hold
-  // no single semantic role beyond "activate"), so Enter/Space needs wiring
-  // by hand alongside the tabindex that makes them reachable at all.
+  // Empty slot click → jump to the browse panel already filtered to that
+  // position, since the search/browse row now lives at the top of the
+  // column, above the squad it's filling in. These are divs, not buttons
+  // (they hold no single semantic role beyond "activate"), so Enter/Space
+  // needs wiring by hand alongside the tabindex that makes them reachable.
   $$("[data-addpos]", root).forEach((s) => {
-    const go = () => { const el = $("#plSearch", root); if (el) el.focus(); };
+    const go = () => {
+      PL.browsePos = s.dataset.addpos;
+      rerender();
+      $("#addRow", root)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
+      $("#plSearch", root)?.focus();
+    };
     s.onclick = go;
     s.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
+
+  // Browse-by-position tabs
+  $$("[data-browsepos]", root).forEach((b) => {
+    b.onclick = () => { PL.browsePos = b.dataset.browsepos; rerender(); };
+  });
+
+  // Add straight from the browse table (as opposed to the search dropdown,
+  // which is wired separately below since its contents replace #plDrop
+  // without a full rerender).
+  $$("[data-browseadd]", root).forEach((b) => {
+    b.onclick = () => { const p = S.playerById[b.dataset.browseadd]; if (p) addPlayer(p); rerender(); };
   });
 
   // Lineup: click a player, then one from the other side (bench/starting) to swap

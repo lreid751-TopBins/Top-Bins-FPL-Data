@@ -999,9 +999,12 @@ textarea::placeholder { color: var(--muted-2); }
   .slot-jersey { width: 38px; }
 }
 
-/* Add row */
-.add-row { margin-top: 4px; }
-.add-row .cand-search { max-width: 360px; }
+/* Add row: search + browse-by-position, pinned to the top of the build column */
+.add-row { margin-bottom: 16px; }
+.add-row-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
+.add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
+.twrap.browse-wrap { max-height: 320px; }
+.browse-wrap .btn { padding: 5px 9px; font-size: 12px; }
 
 /* Totals panel */
 .totals-card {

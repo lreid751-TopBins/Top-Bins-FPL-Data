@@ -999,15 +999,69 @@ check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
   return `defaulted to GW${S.nextGw}, moved forward, chips updated`;
 });
 
+check("add-player row sits above the squad, with a full browse-by-position list", () => {
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  const html = panel("panel-planner").innerHTML;
+  const addRowAt = html.indexOf('id="addRow"');
+  const squadAt = html.indexOf('class="pos-rows"');
+  if (addRowAt === -1 || squadAt === -1 || addRowAt > squadAt) {
+    throw new Error("add-player row should render above the squad list");
+  }
+
+  // No position picked yet -> defaults to the first position still needed.
+  const pressed = panel("panel-planner").querySelector('[data-browsepos][aria-pressed="true"]');
+  if (!pressed) throw new Error("no browse-position tab is marked active by default");
+
+  const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
+  const posKey = pressed.dataset.browsepos;
+  const expectedCount = S.players.filter((p) => p.pos === posKey && !inSquad.has(p.id)).length;
+  const rows = panel("panel-planner").querySelectorAll(".browse-wrap tbody tr");
+  if (rows.length !== expectedCount) {
+    throw new Error(`expected every eligible ${posKey} listed (${expectedCount}), got ${rows.length}`);
+  }
+
+  // Switching tabs swaps the list to the new position.
+  const otherTab = panel("panel-planner").querySelector('[data-browsepos="FWD"]');
+  otherTab.click();
+  const fwdInSquad = new Set(PL.draft.picks.map((pk) => pk.id));
+  const expectedFwd = S.players.filter((p) => p.pos === "FWD" && !fwdInSquad.has(p.id)).length;
+  const fwdRows = panel("panel-planner").querySelectorAll(".browse-wrap tbody tr");
+  if (fwdRows.length !== expectedFwd) throw new Error("browse list didn't switch to FWD");
+
+  return `add row above squad, ${rows.length} ${posKey} shown by default, switched to ${fwdRows.length} FWD`;
+});
+
+check("clicking an empty slot jumps the browse list to that position", () => {
+  PL.browsePos = "FWD";
+  // The draft built up by earlier tests is a complete 15 - free up one GKP
+  // slot to click, then put the same player straight back so later tests
+  // (which expect a full, legal squad) see no lasting change.
+  const gkpPick = PL.draft.picks.find((pk) => S.playerById[pk.id]?.pos === "GKP");
+  if (!gkpPick) throw new Error("no GKP in the draft to free up for this test");
+  const gkp = S.playerById[gkpPick.id];
+  removePlayer(gkp.id);
+  renderPlanner(panel("panel-planner"));
+  const gkSlot = panel("panel-planner").querySelector('[data-addpos="GKP"]');
+  if (!gkSlot) throw new Error("no empty GKP slot rendered after removing one");
+  gkSlot.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  if (PL.browsePos !== "GKP") throw new Error(`expected browse tab to jump to GKP, got ${PL.browsePos}`);
+  const pressed = panel("panel-planner").querySelector('[data-browsepos][aria-pressed="true"]');
+  if (pressed.dataset.browsepos !== "GKP") throw new Error("GKP tab isn't shown as active after the jump");
+  addPlayer(gkp); // restore the squad to 15/15 for later tests
+  PL.browsePos = null; // reset for later tests
+  return "empty GKP slot switched the browse list to GKP";
+});
+
 check("squad table view shows the same 15 with a remove action", () => {
   PL.squadView = "table";
   renderPlanner(panel("panel-planner"));
   const html = panel("panel-planner").innerHTML;
   if (html.includes("undefined")) throw new Error("undefined leaked into the squad table");
   if (html.includes("NaN")) throw new Error("NaN leaked into the squad table");
-  const rows = panel("panel-planner").querySelectorAll(".twrap tbody tr");
+  const rows = panel("panel-planner").querySelectorAll(".squad-twrap tbody tr");
   if (rows.length !== 15) throw new Error(`expected 15 rows, got ${rows.length}`);
-  const removeButtons = panel("panel-planner").querySelectorAll(".twrap [data-remove]");
+  const removeButtons = panel("panel-planner").querySelectorAll(".squad-twrap [data-remove]");
   if (removeButtons.length !== 15) throw new Error("each row should still be removable");
   PL.squadView = "cards";
   renderPlanner(panel("panel-planner"));
