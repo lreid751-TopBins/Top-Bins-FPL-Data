@@ -122,9 +122,10 @@ export function renderTeams(root) {
   const luckiest = top("gmxg");
   const unlucky = top("gmxg", true);
 
+  const windowLoading = !!range && (win.loading || (stale && !win.error));
   const windowHint = !range
     ? "Season to date, all competitions excluded — Premier League only."
-    : win.loading || (stale && !win.error)
+    : windowLoading
     ? `Loading GW${range.from}–${range.to}…`
     : win.error
     ? win.error
@@ -151,7 +152,7 @@ export function renderTeams(root) {
       ${statCard("Due a correction", `<span style="font-size:20px">${esc(unlucky.name || "—")}</span>`, `${signed(+f2(unlucky.gmxg || 0))} G−xG`)}
     </div>
 
-    <div class="twrap">
+    <div class="twrap ${windowLoading ? "is-loading" : ""}">
       <table>
         <thead><tr>${COLS.map((c) => th(c, k, dir)).join("")}</tr></thead>
         <tbody>${data.map(row).join("")}</tbody>
@@ -163,7 +164,7 @@ export function renderTeams(root) {
       on the pitch, so this scales that total back down by team minutes played. Treat it as a ranking, not a precise number.
     </p>
 
-    <div class="chart-box" style="margin-top:20px">
+    <div class="chart-box ${windowLoading ? "is-loading" : ""}" style="margin-top:20px">
       <h3>Attack vs defence</h3>
       <p class="cap">
         Underlying output${range ? ` over GW${range.from}–${range.to}` : " this season"}, not results — xG created going

@@ -2,7 +2,7 @@ import { S, n, f1, f2, signed, teamResults, teamSeasonXG, saveTheme } from "../s
 import { $$, esc, statCard, availabilityFlag, teamCrest, metricFlash } from "../ui.js";
 import { projectPlayer } from "../projection.js";
 import { aggregate } from "./teams.js";
-import { fmtRank } from "./squad.js";
+import { fmtRank, isManagerLoading } from "./squad.js";
 
 const MIN_MINS = 270; // same floor Player Finder defaults to, keeps small-sample noise out
 
@@ -274,7 +274,7 @@ function rankWidget() {
 
   const leagues = (S.entry.leagues?.classic || []).slice(0, 6);
 
-  return `<div class="chart-box hub-w hero">
+  return `<div class="chart-box hub-w hero ${isManagerLoading() ? "is-loading" : ""}">
     <h3>Your season</h3>
     <p class="cap">${esc(S.entry.name || "My Team")}</p>
     <div class="hub-rank-head">

@@ -551,7 +551,9 @@ check("teams tab shows a loading state while a gameweek window fetches", () => {
   if (!html.includes("Loading GW")) throw new Error("expected a loading hint while the window fetch is in flight");
   const rows = panel("panel-teams").querySelectorAll("tbody tr");
   if (rows.length !== 20) throw new Error("should still show all 20 teams (season totals) while loading");
-  return "loading hint shown, table still usable";
+  if (!panel("panel-teams").querySelector(".twrap.is-loading")) throw new Error("table should carry a loading cue, not just the text hint");
+  if (!panel("panel-teams").querySelector(".chart-box.is-loading")) throw new Error("chart should carry a loading cue too");
+  return "loading hint shown, table and chart still usable and visibly dimmed";
 });
 
 await new Promise((resolve) => setTimeout(resolve, 20));
@@ -596,6 +598,29 @@ check("captain multiplier applied", () => {
   const want = live.stats.total_points * 2;
   if (!html.includes(`>${want}</div>`)) throw new Error(`captain points ${want} not shown doubled`);
   return `captain shown as ${want}`;
+});
+
+// Regression: loadManager() is also called every 90s by the live-score
+// refresh in app.js while a team is already showing. It used to set the
+// same `loading` flag that gates a full "Fetching your team" wipe on first
+// load, so a routine refresh briefly blanked the whole panel every time.
+// Once S.entry already exists, a refresh should just dim what's already
+// there instead. loadManager's own rerender() runs synchronously with
+// loading=true before its first await, so the DOM already reflects the
+// in-flight state before this needs to await anything.
+const pendingRefresh = loadManager("1234567", () => renderSquad(panel("panel-squad")));
+check("a background refresh dims the cards instead of wiping the whole team away", () => {
+  const html = panel("panel-squad").innerHTML;
+  if (html.includes("Fetching your team")) throw new Error("a refresh of an already-loaded team wiped the panel back to the first-load message");
+  const cards = panel("panel-squad").querySelectorAll(".plr");
+  if (cards.length !== 15) throw new Error(`expected the stale 15 player cards to stay visible while refreshing, got ${cards.length}`);
+  if (!panel("panel-squad").querySelector(".cards.is-loading")) throw new Error("stat cards should show a loading cue while refreshing");
+  return "stayed visible and dimmed while refreshing";
+});
+await pendingRefresh;
+check("loading cue clears once the background refresh finishes", () => {
+  if (panel("panel-squad").querySelector(".is-loading")) throw new Error("loading cue should clear once the refresh finishes");
+  return "cleared after refresh completed";
 });
 
 check("player cards show this gameweek's actual opponent, not the next one", () => {

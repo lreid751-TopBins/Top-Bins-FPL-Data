@@ -8,6 +8,12 @@ import {
 let liveById = {};
 let loadError = "";
 let loading = false;
+// Hub's "Your season" widget shows the same manager data and refreshes on
+// the same 90s tick, but lives in its own module with no other way to know
+// a fetch is in flight.
+export function isManagerLoading() {
+  return loading;
+}
 
 /* =========================================================
    Loading
@@ -70,7 +76,11 @@ export async function loadManager(id, rerender) {
 export function renderSquad(root) {
   const rerender = () => renderSquad(root);
 
-  if (loading) {
+  // Only wipe the whole panel for a first load - once a team is already
+  // showing, the 90s live-score refresh calls this same loadManager(), and
+  // replacing everything with a bare loading message every 90 seconds would
+  // be far more disruptive than just quietly re-fetching in the background.
+  if (loading && !S.entry) {
     root.innerHTML = `<div class="empty"><div class="anton">Fetching your team</div>Reading picks, live scores and fixtures.</div>`;
     return;
   }
@@ -166,7 +176,7 @@ export function renderSquad(root) {
       </div>
     </div>
 
-    <div class="cards">
+    <div class="cards ${loading ? "is-loading" : ""}">
       ${statCard(
         `GW${S.picksGw} points`,
         metricFlash("squad-gw-points", gwPoints, `<span style="color:var(--gold)">${gwPoints}</span>`),

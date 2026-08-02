@@ -701,6 +701,25 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   .panel-enter, .metric-flash { animation: none; }
 }
 
+/* ---------------- Mid-session loading (not first boot) ----------------
+   For a widget/table re-fetching data it already has a stale copy of (a
+   Teams gameweek window, a live-score refresh) - dim the last-known
+   content and say so, rather than either doing nothing or wiping the
+   whole thing back to a blank loading screen like a first load does.
+   Pure CSS (no extra markup needed at each call site): just add the
+   .is-loading class and this handles the rest. */
+.is-loading { position: relative; }
+.is-loading > * { opacity: 0.4; transition: opacity 0.2s ease; }
+.is-loading::after {
+  content: "Updating…"; position: absolute; top: 10px; right: 12px;
+  font-family: "JetBrains Mono", monospace; font-size: 10px; letter-spacing: 0.05em;
+  color: var(--muted); animation: loadingPulse 1.2s ease-in-out infinite;
+}
+@keyframes loadingPulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .is-loading::after { animation: none; }
+}
+
 /* ---------------- Hub ---------------- */
 .hub-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
 .hub-w { margin-bottom: 0; }
