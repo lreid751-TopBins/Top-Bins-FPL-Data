@@ -533,7 +533,15 @@ check("teams tab plots an attack-vs-defence quadrant for every team", () => {
   const quadLines = panel("panel-teams").querySelectorAll(".chart-box .paritys");
   if (quadLines.length !== 2) throw new Error(`expected a 2-line quadrant crosshair, got ${quadLines.length}`);
   if (panel("panel-teams").innerHTML.includes("NaN")) throw new Error("NaN in the quadrant chart");
-  return `${dots.length} teams plotted`;
+
+  // Every point gets a styled hover tooltip alongside the dot, and the two
+  // unambiguous corners (top-right good, bottom-left bad) get a quiet tint.
+  const tips = panel("panel-teams").querySelectorAll(".chart-box .tip");
+  if (tips.length !== dots.length) throw new Error(`expected one tooltip per dot, got ${tips.length} for ${dots.length} dots`);
+  const tints = panel("panel-teams").querySelectorAll('.chart-box svg > rect[fill="var(--pos)"], .chart-box svg > rect[fill="var(--neg)"]');
+  if (tints.length !== 2) throw new Error(`expected 2 quadrant tint rects (good/bad corners), got ${tints.length}`);
+
+  return `${dots.length} teams plotted, each with a tooltip, quadrant corners tinted`;
 });
 
 check("teams tab shows a loading state while a gameweek window fetches", () => {
@@ -1216,6 +1224,21 @@ check("mobile .slot width override survives the cascade", () => {
     throw new Error("mobile .slot override appears before the base rule - it will lose the cascade tie again");
   }
   return "mobile override correctly comes after the base rule";
+});
+
+check("table zebra striping comes before the hover rule in the cascade", () => {
+  // Same equal-specificity trap as the mobile .slot rule above: zebra and
+  // hover both target "tbody tr:... td" (same specificity), so whichever is
+  // written LAST in the file wins ties - hover needs to win on an even row.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  const zebraIdx = css.indexOf("tbody tr:nth-child(even) td { background: var(--panel); }");
+  const hoverIdx = css.indexOf("tbody tr:hover td { background: var(--panel-2); }");
+  if (zebraIdx === -1) throw new Error("zebra striping rule not found - did it move or get renamed?");
+  if (hoverIdx === -1) throw new Error("row hover rule not found - did it move or get renamed?");
+  if (hoverIdx < zebraIdx) {
+    throw new Error("hover rule appears before the zebra rule - an even row's hover will lose the cascade tie");
+  }
+  return "hover correctly comes after zebra striping, so it wins on even rows too";
 });
 
 /* ---------------- Report ---------------- */

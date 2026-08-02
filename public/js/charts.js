@@ -88,6 +88,15 @@ export function scatter(points, opts = {}) {
        <line class="paritys" x1="${PAD.l}" y1="${py(midY)}" x2="${W - PAD.r}" y2="${py(midY)}"/>`
     : "";
 
+  // A quiet background tint for the two unambiguous corners - every current
+  // caller of quadrant:true orients its axes so top-right is "good on both"
+  // and bottom-left is "bad on both" (the other two corners are a mixed bag,
+  // so they stay untinted). Drawn first so grid/axes/dots sit on top of it.
+  const quadTint = quadrant
+    ? `<rect x="${px(midX)}" y="${PAD.t}" width="${W - PAD.r - px(midX)}" height="${py(midY) - PAD.t}" fill="var(--pos)" fill-opacity="0.07"/>
+       <rect x="${PAD.l}" y="${py(midY)}" width="${px(midX) - PAD.l}" height="${H - PAD.b - py(midY)}" fill="var(--neg)" fill-opacity="0.07"/>`
+    : "";
+
   // Label only the most interesting points so the chart stays readable.
   const ranked = [...points].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, labelTop);
   const labelled = new Set(ranked.map((p) => p.id));
@@ -97,17 +106,32 @@ export function scatter(points, opts = {}) {
       const cx = px(p.x);
       const cy = py(p.y);
       const show = labelled.has(p.id);
-      return `<g class="pt">
-        <circle cx="${cx}" cy="${cy}" r="${show ? 5 : 3.5}" fill="${p.color || "var(--gold)"}"
-          fill-opacity="${show ? 0.95 : 0.55}" stroke="var(--pitch)" stroke-width="1"/>
-        <title>${esc(p.label)}</title>
-        ${show ? `<text class="pt-lab" x="${cx + 8}" y="${cy + 3.5}">${esc(p.short || p.label)}</text>` : ""}
+      // A real styled tooltip, not just the browser's native <title> (which
+      // is slow to appear and unstyleable) - a CSS-only reveal via the
+      // general sibling combinator, so no JS wiring is needed here. <title>
+      // stays too, as a fallback for touch/assistive tech that won't hover.
+      const tw = Math.min(230, 16 + p.label.length * 5.3);
+      const th = 22;
+      const tx = Math.max(4, Math.min(W - tw - 4, cx - tw / 2));
+      const above = cy - 34 >= PAD.t;
+      const ty = above ? cy - 34 : cy + 12;
+      return `<g class="pt-wrap">
+        <g class="pt">
+          <circle cx="${cx}" cy="${cy}" r="${show ? 5 : 3.5}" fill="${p.color || "var(--gold)"}"
+            fill-opacity="${show ? 0.95 : 0.55}" stroke="var(--pitch)" stroke-width="1"/>
+          <title>${esc(p.label)}</title>
+          ${show ? `<text class="pt-lab" x="${cx + 8}" y="${cy + 3.5}">${esc(p.short || p.label)}</text>` : ""}
+        </g>
+        <g class="tip">
+          <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5"/>
+          <text x="${tx + tw / 2}" y="${ty + 14.5}" text-anchor="middle">${esc(p.label)}</text>
+        </g>
       </g>`;
     })
     .join("");
 
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">
-    ${grid}${quad}${parityLine}${axes}${dots}
+    ${quadTint}${grid}${quad}${parityLine}${axes}${dots}
   </svg>`;
 }
 

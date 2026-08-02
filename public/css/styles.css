@@ -320,6 +320,12 @@ tbody td {
   padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line-soft);
   font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap;
 }
+/* Zebra striping so a long table (Player Finder in particular) is easier
+   to scan without relying on hover alone. Written before the hover rules
+   below so hover always wins the cascade tie on an even row too. */
+tbody tr:nth-child(even) td { background: var(--panel); }
+tbody tr:nth-child(even) td:first-child { background: var(--panel-2); }
+
 tbody tr:hover td { background: var(--panel-2); }
 tbody tr:hover td:first-child { background: var(--raise); }
 tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
@@ -555,6 +561,15 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .pt circle { transition: r 0.12s ease; }
 .pt:hover circle { r: 6.5; }
 .pt-lab { fill: var(--chalk); font-size: 9.5px; font-family: "Archivo", sans-serif; pointer-events: none; }
+
+/* Styled scatter-point tooltip: a sibling of .pt within the same .pt-wrap
+   group (see charts.js), revealed on hover via the general sibling
+   combinator - no JS event wiring needed for a chart that otherwise has
+   none. Native <title> stays underneath as a touch/assistive-tech fallback. */
+.tip { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
+.pt:hover ~ .tip { opacity: 1; }
+.tip rect { fill: var(--raise); stroke: var(--line); stroke-width: 1; }
+.tip text { fill: var(--chalk); font-size: 10px; font-family: "Archivo", sans-serif; }
 
 /* ---------------- Transfer scratchpad ---------------- */
 .swap {
