@@ -291,12 +291,23 @@ function lineupSlot(p, starting, gw) {
 
 /* ---------------- Add-player search + browse-by-position ----------------
    Search-by-name only works if you already know who you want. The browse
-   list below it shows every remaining player in a position, sorted by
-   total points, so there's no need to search your memory first. */
+   list below it shows every remaining player in a position - sortable and
+   filterable by points and DEFCON/90, not fixed to one order - so there's
+   no need to search your memory first. */
+const BROWSE_SORT_COLS = [
+  { k: "total_points", l: "Points" },
+  { k: "defcon90", l: "DEFCON/90" },
+  { k: "price", l: "Price" },
+  { k: "xMin", l: "xMin" },
+  { k: "xgi", l: "xGI" },
+  { k: "name", l: "Name" },
+];
+
 function addRow() {
   if (!POSITION_ORDER.includes(PL.browsePos)) {
     PL.browsePos = needed()[0]?.pos || "GKP";
   }
+  const { k, dir } = PL.browseSort;
   return `<div class="add-row" id="addRow">
     <div class="add-row-head">
       <div class="cand-search">
@@ -309,26 +320,44 @@ function addRow() {
         ).join("")}
       </div>
     </div>
+    <div class="add-row-head" style="margin-top:8px">
+      <span class="range">Min points<input type="range" id="plMinPoints" min="0" max="250" step="5" value="${PL.browseMinPoints}"><b class="mono" id="plMinPointsV">${PL.browseMinPoints}</b></span>
+      <span class="range">Min DC/90<input type="range" id="plMinDefcon90" min="0" max="20" step="0.5" value="${PL.browseMinDefcon90}"><b class="mono" id="plMinDefcon90V">${f1(PL.browseMinDefcon90)}</b></span>
+      <span class="sort-by">
+        <label for="plBrowseSort">Sort by</label>
+        <select id="plBrowseSort" aria-label="Sort by">
+          ${BROWSE_SORT_COLS.map((c) => `<option value="${c.k}" ${c.k === k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
+        </select>
+        <button class="btn ghost" id="plBrowseSortDir" aria-label="Reverse sort direction" title="${dir === 1 ? "Ascending — click to reverse" : "Descending — click to reverse"}">${dir === 1 ? "▲" : "▼"}</button>
+      </span>
+    </div>
     ${browseList()}
   </div>`;
 }
 
 function browseList() {
   const posKey = PL.browsePos;
+  const { k, dir } = PL.browseSort;
   const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
   const candidates = S.players
-    .filter((p) => p.pos === posKey && !inSquad.has(p.id))
-    .sort((a, b) => b.total_points - a.total_points);
+    .filter(
+      (p) =>
+        p.pos === posKey &&
+        !inSquad.has(p.id) &&
+        p.total_points >= PL.browseMinPoints &&
+        p.defcon90 >= PL.browseMinDefcon90
+    )
+    .sort((a, b) => (k === "name" ? String(a[k]).localeCompare(String(b[k])) * -dir : (a[k] - b[k]) * dir));
 
   if (!candidates.length) {
-    return `<p class="hint" style="margin-top:10px">No ${posKey} left to add — every eligible player is already in this squad.</p>`;
+    return `<p class="hint" style="margin-top:10px">No ${posKey} clears these filters — try lowering the points or DEFCON/90 minimums.</p>`;
   }
 
   return `<div class="twrap browse-wrap">
     <table>
       <thead><tr>
         <th style="text-align:left">Player</th><th>Team</th><th>£</th>
-        <th>xMin</th><th>xGI</th><th>Next 5</th><th></th>
+        <th>xMin</th><th>xGI</th><th>Pts</th><th>DC/90</th><th>Next 5</th><th></th>
       </tr></thead>
       <tbody>${candidates.map(browseRow).join("")}</tbody>
     </table>
@@ -343,6 +372,8 @@ function browseRow(p) {
     <td>£${f1(p.price)}</td>
     <td>${p.xMin}'</td>
     <td>${f2(p.xgi)}</td>
+    <td>${p.total_points}</td>
+    <td>${f1(p.defcon90)}</td>
     <td><span style="display:inline-flex;gap:3px">${fixtureChips(p.teamId, 5)}</span></td>
     <td><button class="btn ghost" data-browseadd="${p.id}" ${check.ok ? "" : "disabled"}
       title="${esc(check.ok ? "Add to squad" : check.reason)}">+ Add</button></td>
@@ -561,6 +592,27 @@ function wire(root, rerender) {
   // without a full rerender).
   $$("[data-browseadd]", root).forEach((b) => {
     b.onclick = () => { const p = S.playerById[b.dataset.browseadd]; if (p) addPlayer(p); rerender(); };
+  });
+
+  // Browse list filters and sort
+  bind("#plMinPoints", "oninput", (e) => {
+    PL.browseMinPoints = +e.target.value;
+    $("#plMinPointsV", root).textContent = PL.browseMinPoints;
+    rerender();
+  });
+  bind("#plMinDefcon90", "oninput", (e) => {
+    PL.browseMinDefcon90 = +e.target.value;
+    $("#plMinDefcon90V", root).textContent = f1(PL.browseMinDefcon90);
+    rerender();
+  });
+  bind("#plBrowseSort", "onchange", (e) => {
+    PL.browseSort.k = e.target.value;
+    PL.browseSort.dir = e.target.value === "name" ? 1 : -1;
+    rerender();
+  });
+  bind("#plBrowseSortDir", "onclick", () => {
+    PL.browseSort.dir = -PL.browseSort.dir;
+    rerender();
   });
 
   // Lineup: click a player, then one from the other side (bench/starting) to swap

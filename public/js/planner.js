@@ -48,6 +48,9 @@ export const PL = {
   lineupGw: null,     // gameweek the Starting XI is showing fixtures for; null = defaults to next GW
   squadView: "cards", // "cards" (jerseys) or "table" (dense stats) for the squad list
   browsePos: null,    // position tab shown in the add-player browse list; null = defaults to first still needed
+  browseSort: { k: "total_points", dir: -1 }, // sort applied to the browse list
+  browseMinPoints: 0,   // browse list filter: minimum total points
+  browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
 };
 
 export function blankDraft() {

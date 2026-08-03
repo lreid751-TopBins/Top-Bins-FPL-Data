@@ -1165,6 +1165,87 @@ check("clicking an empty slot jumps the browse list to that position", () => {
   return "empty GKP slot switched the browse list to GKP";
 });
 
+// Finds a Planner browse-list column by its header text rather than a
+// fixed nth-child position - see CLAUDE.md's own gotcha about brittle
+// column-index tests.
+function browseColIdx(headerText) {
+  const headers = [...panel("panel-planner").querySelectorAll(".browse-wrap thead th")].map((h) => h.textContent.trim());
+  const i = headers.findIndex((h) => h === headerText);
+  if (i === -1) throw new Error(`no "${headerText}" column found in the Planner browse list`);
+  return i + 1;
+}
+
+check("Planner browse list filters by minimum points and DEFCON/90", () => {
+  const savedDraft = PL.draft;
+  newDraft(); // an empty draft so the browse list isn't excluding anyone
+  PL.browsePos = "MID";
+
+  const eligible = () => S.players.filter((p) => p.pos === "MID");
+  const maxPts = Math.max(...eligible().map((p) => p.total_points));
+  const threshold = Math.max(1, Math.round(maxPts * 0.6));
+  PL.browseMinPoints = threshold;
+  renderPlanner(panel("panel-planner"));
+  const ptsCol = browseColIdx("Pts");
+  const ptsVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+    (r) => +r.querySelector(`td:nth-child(${ptsCol})`).textContent.trim()
+  );
+  if (ptsVals.some((v) => v < threshold)) throw new Error("a MID below the points threshold leaked into the browse list");
+  const expectedCount = eligible().filter((p) => p.total_points >= threshold).length;
+  if (ptsVals.length !== expectedCount) throw new Error(`expected ${expectedCount} MIDs at >= ${threshold} points, got ${ptsVals.length}`);
+
+  PL.browseMinPoints = 0;
+  const maxDc90 = Math.max(...eligible().map((p) => p.defcon90));
+  const dcThreshold = Math.max(0.5, +(maxDc90 * 0.5).toFixed(1));
+  PL.browseMinDefcon90 = dcThreshold;
+  renderPlanner(panel("panel-planner"));
+  const dcCol = browseColIdx("DC/90");
+  const dcVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+    (r) => +r.querySelector(`td:nth-child(${dcCol})`).textContent.trim()
+  );
+  if (dcVals.some((v) => v < dcThreshold)) throw new Error("a MID below the DEFCON/90 threshold leaked into the browse list");
+
+  PL.browseMinPoints = 0;
+  PL.browseMinDefcon90 = 0;
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `filtered to ${ptsVals.length} at >= ${threshold} points, ${dcVals.length} at >= ${dcThreshold} DEFCON/90`;
+});
+
+check("Planner browse list sort-by dropdown sorts the list", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "MID";
+  renderPlanner(panel("panel-planner"));
+
+  const sel = panel("panel-planner").querySelector("#plBrowseSort");
+  if (!sel) throw new Error("no sort-by dropdown rendered in the Planner browse list");
+  const options = [...sel.options].map((o) => o.value);
+  if (!options.includes("total_points")) throw new Error("total points isn't a sort option");
+  if (!options.includes("defcon90")) throw new Error("DEFCON/90 isn't a sort option");
+
+  sel.value = "price";
+  sel.dispatchEvent(new window.Event("change"));
+  if (PL.browseSort.k !== "price") throw new Error("choosing a sort field from the dropdown didn't update the sort");
+  const priceCol = browseColIdx("£");
+  const prices = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+    (r) => +r.querySelector(`td:nth-child(${priceCol})`).textContent.replace("£", "")
+  );
+  const sortedDesc = prices.every((v, i) => i === 0 || prices[i - 1] >= v);
+  if (!sortedDesc) throw new Error("browse list isn't actually sorted by the field chosen in the dropdown");
+
+  const dirBtn = panel("panel-planner").querySelector("#plBrowseSortDir");
+  const dirBefore = PL.browseSort.dir;
+  dirBtn.click();
+  if (PL.browseSort.dir !== -dirBefore) throw new Error("direction toggle button didn't reverse the sort");
+
+  PL.browseSort = { k: "total_points", dir: -1 };
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return "dropdown and direction toggle both drive the browse list sort";
+});
+
 check("squad table view shows the same 15 with a remove action", () => {
   PL.squadView = "table";
   renderPlanner(panel("panel-planner"));
