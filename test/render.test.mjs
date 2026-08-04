@@ -685,6 +685,61 @@ check("clicking a player's name on My Team opens their profile drawer", () => {
   return `opened ${p.name}'s profile, closed it again`;
 });
 
+check("clicking a different player's name while the drawer is open switches straight to them", () => {
+  const names = [...panel("panel-squad").querySelectorAll(".plr .nm[data-playerid]")];
+  if (names.length < 2) throw new Error("need at least two player names on My Team to test switching");
+  const [first, second] = names;
+  const firstId = +first.dataset.playerid;
+  const secondId = +second.dataset.playerid;
+
+  first.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== firstId) throw new Error("first click should open that player's profile");
+
+  // The click on the second name bubbles all the way to document (same as
+  // it would in a real browser) - this used to get treated as a click
+  // outside the drawer and close it right back down, requiring a second
+  // click to actually open the new profile.
+  second.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== secondId)
+    throw new Error(`clicking a second player's name should switch the drawer to them, got PD.openId=${PD.openId}`);
+  const drawer = document.getElementById("playerDetail");
+  if (drawer.hidden) throw new Error("drawer should still be open after switching profiles");
+
+  document.getElementById("pdClose").click();
+  return `switched from #${firstId} to #${secondId} in one click each, no intermediate close`;
+});
+
+check("a click outside the drawer closes it, and every player-name trigger shows a view-profile hint", () => {
+  const nameEl = panel("panel-squad").querySelector(".plr .nm[data-playerid]");
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId == null) throw new Error("setup: drawer didn't open");
+
+  document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== null) throw new Error("clicking outside the drawer should still close it");
+
+  const hintless = [...panel("panel-squad").querySelectorAll("[data-playerid]")]
+    .filter((el) => !el.querySelector(".pd-hint"));
+  if (hintless.length) throw new Error("every player-name trigger should show the view-profile hint icon");
+
+  return "outside click closes the drawer; hint icon present on every player-name trigger";
+});
+
+// closePlayerDetail() sets PD.openId = null synchronously, then 300ms later
+// checks PD.openId again to decide whether to actually restore the hidden
+// attribute (skipped only if something reopened the drawer in the
+// meantime). That check used to be inverted, so it always bailed out on a
+// normal close and the panel silently never re-hid. Needs a real wait past
+// the animation, so this bridges past check()'s synchronous fn with a
+// top-level await, same pattern as the async wait above (line ~623).
+await new Promise((resolve) => setTimeout(resolve, 320));
+
+check("the drawer's hidden attribute is actually restored once the close animation finishes", () => {
+  const drawer = document.getElementById("playerDetail");
+  if (!drawer.hidden)
+    throw new Error("drawer should be hidden again ~300ms after closing, not left visible off-screen forever");
+  return "hidden attribute correctly restored after the close transition completes";
+});
+
 check("player profile drawer shows a photo, grouped stats, and vertical fixture/result lists", () => {
   const nameEl = panel("panel-squad").querySelector(".plr .nm[data-playerid]");
   const id = +nameEl.dataset.playerid;
@@ -1642,6 +1697,42 @@ check("each position row (GKP/DEF/MID/FWD, and the bench) stays on one line", ()
     throw new Error(".slot-strip must never wrap - a row that doesn't fit should scroll sideways, not spill onto a second line");
   }
   return "slot-strip is nowrap with a horizontal-scroll fallback, not wrap";
+});
+
+check("player photo is constrained to its box, not rendered at full resolution", () => {
+  // inset:0 alone stretches a non-replaced element (a div) to fill its
+  // positioned parent, but a replaced element (img) keeps its own
+  // intrinsic size regardless of inset - without an explicit
+  // width/height:100%, a real photo (e.g. 220x280) renders at full size
+  // instead of the intended 64x84 box. jsdom doesn't apply external
+  // stylesheets or compute replaced-element sizing, so this is a check on
+  // the raw CSS text rather than getComputedStyle.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  if (!css.includes(".pd-photo, .pd-photo-placeholder { position: absolute; inset: 0; width: 100%; height: 100%;")) {
+    throw new Error(".pd-photo needs explicit width/height:100% - inset:0 alone doesn't size a replaced <img> element");
+  }
+  return "pd-photo has explicit width/height:100%, so a large source image is actually constrained";
+});
+
+check("Planner browse list rows can open a player's profile before they're added to the squad", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const nameEl = panel("panel-planner").querySelector(".browse-row [data-playerid]");
+  if (!nameEl) throw new Error("no clickable player name found in the Planner browse list");
+  const id = +nameEl.dataset.playerid;
+
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== id) throw new Error("clicking a browse-row name should open that player's profile");
+  if (PL.draft.picks.some((pk) => pk.id === id))
+    throw new Error("viewing a browse-row player's profile shouldn't add them to the squad");
+
+  document.getElementById("pdClose").click();
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `opened browse candidate #${id}'s profile without adding them`;
 });
 
 check("table zebra striping comes before the hover rule in the cascade", () => {

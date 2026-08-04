@@ -42,6 +42,15 @@ export function setPieceFlag(p) {
   return "";
 }
 
+/* ---------------- Profile-view hint ----------------
+   A quiet always-visible cue next to a clickable player name - the click
+   target itself works without it (cursor + hover state already say
+   "clickable"), but neither of those show up until you're already hovering,
+   so this gives an at-a-glance signal that a profile is a click away. */
+export function profileHint() {
+  return ` <span class="pd-hint" aria-hidden="true">ⓘ</span>`;
+}
+
 /* ---------------- Form sparkline ----------------
    Bars, not a line: gameweek points are discrete events, and a bar
    makes a blank (didn't play) visibly different from a zero. */

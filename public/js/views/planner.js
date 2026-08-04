@@ -8,7 +8,7 @@ import {
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
-import { $, $$, esc, fixtureChips, availabilityFlag, sparkline } from "../ui.js";
+import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint } from "../ui.js";
 import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
@@ -227,7 +227,7 @@ function squadTable() {
 
 function squadTableRow(p) {
   return `<tr>
-    <td class="name">${esc(p.name)}${availabilityFlag(p)}</td>
+    <td class="name"><span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</span></td>
     <td class="sub-t">${esc(p.short)}</td>
     <td><span class="pos-chip pos-${p.pos}">${p.pos}</span></td>
     <td>£${f1(p.price)}</td>
@@ -251,7 +251,7 @@ function filledSlot(p) {
       <button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
     </div>
     ${jersey}
-    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
     <div class="slot-stats">
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
@@ -281,7 +281,7 @@ function lineupSlot(p, starting, gw) {
       ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : "<span></span>"}
     </div>
     ${jersey}
-    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
     <div class="slot-stats">
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
@@ -428,7 +428,7 @@ function browseRow(p, extraCol) {
   const check = canAdd(p);
   return `<tr class="browse-row${check.ok ? " addable" : ""}" data-browserow="${p.id}"
     ${check.ok ? 'title="Double-click to add to your squad"' : ""}>
-    <td class="name">${esc(p.name)}${availabilityFlag(p)}</td>
+    <td class="name"><span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</span></td>
     <td class="sub-t">${esc(p.short)}</td>
     ${extraCol ? `<td>${formatBrowseStat(p, extraCol.k)}</td>` : ""}
     <td>£${f1(p.price)}</td>

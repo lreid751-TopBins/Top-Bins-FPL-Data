@@ -2,7 +2,7 @@ import { S, saveManagerId, runDifficulty, n, f1, f2, signed } from "../store.js"
 import { api } from "../api.js";
 import {
   $, $$, esc, statCard, emptyState, fixtureStrip,
-  availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash,
+  availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash, profileHint,
 } from "../ui.js";
 import { openPlayerDetail } from "../playerDetail.js";
 
@@ -252,7 +252,7 @@ function playerCard(pick, benched) {
     ${tag}
     ${jersey}
     <div class="pts">${pts}</div>
-    <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     <div class="nx">${gwOpponent(p.teamId, S.picksGw)}</div>
     <div class="fx">${fixtureStrip(p.teamId, 5)}</div>
   </div>`;
@@ -358,9 +358,9 @@ function wire(root, rerender, picks) {
   // Player name → profile drawer. A div, not a button, so Enter/Space
   // needs wiring by hand alongside the tabindex that makes it reachable.
   $$("[data-playerid]", root).forEach((el) => {
-    const go = () => openPlayerDetail(+el.dataset.playerid);
+    const go = (e) => { e.stopPropagation(); openPlayerDetail(+el.dataset.playerid); };
     el.onclick = go;
-    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
   });
 
   const sw = $("#mgrSwitch", root);

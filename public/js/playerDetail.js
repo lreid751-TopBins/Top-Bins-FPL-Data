@@ -47,12 +47,12 @@ export function closePlayerDetail() {
   panel.classList.remove("show");
   backdrop.classList.remove("show");
   panel.setAttribute("aria-hidden", "true");
+  PD.openId = null;
   window.setTimeout(() => {
-    if (PD.openId == null) return; // reopened before the close animation finished
+    if (PD.openId != null) return; // reopened before the close animation finished
     panel.hidden = true;
     backdrop.hidden = true;
   }, 300);
-  PD.openId = null;
 }
 
 function statBlock(label, value, help = "", cls = "") {
@@ -198,11 +198,20 @@ function render() {
 }
 
 // Wired once, at module load - the panel has no view of its own to run a
-// per-render wire() pass, so its own dismiss interactions (backdrop click,
+// per-render wire() pass, so its own dismiss interactions (click outside,
 // Escape) are set up as soon as this module is first imported.
 if (typeof document !== "undefined") {
+  // The backdrop is pointer-events:none (visual dim only), so a click
+  // anywhere outside the drawer itself bubbles here uninterrupted - close
+  // it, unless the click is on another [data-playerid] trigger, in which
+  // case that's a switch to a (possibly different) profile, not a dismiss.
+  // Checked directly here rather than trusted to every caller's own click
+  // handler stopping propagation - one stray missing stopPropagation()
+  // elsewhere would otherwise close the drawer the instant it opens.
   document.addEventListener("click", (e) => {
-    if (e.target.id === "pdBackdrop") closePlayerDetail();
+    if (PD.openId == null) return;
+    if (e.target.closest("#playerDetail") || e.target.closest("[data-playerid]")) return;
+    closePlayerDetail();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && PD.openId != null) closePlayerDetail();
