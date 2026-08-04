@@ -1,4 +1,4 @@
-import { S, f1, f2 } from "../store.js";
+import { S, f1, f2, runDifficulty } from "../store.js";
 import {
   PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
   draftPlayers, spend, canAdd, addPlayer,
@@ -11,6 +11,7 @@ import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { $, $$, esc, fixtureChips, availabilityFlag, sparkline } from "../ui.js";
 import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
+import { projectPlayer } from "../projection.js";
 
 const TOTAL_GWS = 38;
 // How far the search/analysis column can be dragged, as a % of the layout's
@@ -304,13 +305,46 @@ function lineupSlot(p, starting, gw) {
    filterable by points and DEFCON/90, not fixed to one order - so there's
    no need to search your memory first. */
 const BROWSE_SORT_COLS = [
-  { k: "total_points", l: "Points" },
-  { k: "defcon90", l: "DEFCON/90" },
-  { k: "price", l: "Price" },
-  { k: "xMin", l: "xMin" },
-  { k: "xgi", l: "xGI" },
-  { k: "name", l: "Name" },
+  { k: "projected", l: "Projected pts", dir: -1 },
+  { k: "total_points", l: "Points", dir: -1 },
+  { k: "form", l: "Form", dir: -1 },
+  { k: "ppm", l: "Pts/£m", dir: -1 },
+  { k: "defcon90", l: "DEFCON/90", dir: -1 },
+  { k: "fixtureEase", l: "Fixture ease", short: "Fixture ease", dir: 1 },
+  { k: "selected", l: "Owned %", short: "Owned", dir: -1 },
+  { k: "price", l: "Price", dir: -1 },
+  { k: "xMin", l: "xMin", dir: -1 },
+  { k: "xgi", l: "xGI", dir: -1 },
+  { k: "name", l: "Name", dir: 1 },
 ];
+// Sort keys already shown as their own fixed column below - anything else
+// (projected/form/ppm/fixtureEase/selected) gets one extra column inserted
+// so sorting by it is never a black box, without permanently widening the
+// table for stats that aren't the active sort.
+const BROWSE_NATIVE_COLS = new Set(["total_points", "defcon90", "price", "xMin", "xgi", "name"]);
+const BROWSE_EXTRA_HELP = {
+  projected: () => `Projected points, next ${PL.projWindow} GWs`,
+  form: () => "Points per match, last 30 days",
+  ppm: () => "Total points per million spent",
+  fixtureEase: () => `Avg fixture difficulty, next ${PL.projWindow} GWs — lower is kinder`,
+  selected: () => "Selected by",
+};
+
+// The value a browse row is sorted/displayed by. Two of these (projected,
+// fixtureEase) aren't plain fields on the player object - they depend on the
+// squad analysis window, so they're computed on the fly from the same
+// projection engine and difficulty model the rest of the Planner uses.
+function browseStat(p, k) {
+  if (k === "projected") return projectPlayer(p, PL.projWindow).total;
+  if (k === "fixtureEase") return runDifficulty(p.teamId, PL.projWindow, S.ui.fdrMode);
+  return p[k];
+}
+function formatBrowseStat(p, k) {
+  const v = browseStat(p, k);
+  if (k === "selected") return f1(v) + "%";
+  if (k === "fixtureEase") return f2(v);
+  return f1(v);
+}
 
 function addRow() {
   if (!POSITION_ORDER.includes(PL.browsePos)) {
@@ -365,28 +399,38 @@ function browseList() {
         p.total_points >= PL.browseMinPoints &&
         p.defcon90 >= PL.browseMinDefcon90
     )
-    .sort((a, b) => (k === "name" ? String(a[k]).localeCompare(String(b[k])) * -dir : (a[k] - b[k]) * dir));
+    .sort((a, b) =>
+      k === "name"
+        ? String(a.name).localeCompare(b.name) * -dir
+        : (browseStat(a, k) - browseStat(b, k)) * dir
+    );
 
   if (!candidates.length) {
     return `<p class="hint" style="margin-top:10px">No ${posKey} clears these filters — try lowering the points or DEFCON/90 minimums.</p>`;
   }
 
+  const extraCol = BROWSE_NATIVE_COLS.has(k) ? null : BROWSE_SORT_COLS.find((c) => c.k === k);
+
   return `<div class="twrap browse-wrap">
     <table>
       <thead><tr>
-        <th style="text-align:left">Player</th><th>Team</th><th>£</th>
+        <th style="text-align:left">Player</th><th>Team</th>
+        ${extraCol ? `<th title="${esc(BROWSE_EXTRA_HELP[extraCol.k]())}">${esc(extraCol.short || extraCol.l)}</th>` : ""}
+        <th>£</th>
         <th>xMin</th><th>xGI</th><th>Pts</th><th>DC/90</th><th>Next 5</th><th></th>
       </tr></thead>
-      <tbody>${candidates.map(browseRow).join("")}</tbody>
+      <tbody>${candidates.map((p) => browseRow(p, extraCol)).join("")}</tbody>
     </table>
   </div>`;
 }
 
-function browseRow(p) {
+function browseRow(p, extraCol) {
   const check = canAdd(p);
-  return `<tr>
+  return `<tr class="browse-row${check.ok ? " addable" : ""}" data-browserow="${p.id}"
+    ${check.ok ? 'title="Double-click to add to your squad"' : ""}>
     <td class="name">${esc(p.name)}${availabilityFlag(p)}</td>
     <td class="sub-t">${esc(p.short)}</td>
+    ${extraCol ? `<td>${formatBrowseStat(p, extraCol.k)}</td>` : ""}
     <td>£${f1(p.price)}</td>
     <td>${p.xMin}'</td>
     <td>${f2(p.xgi)}</td>
@@ -670,6 +714,19 @@ function wire(root, rerender) {
     b.onclick = () => { const p = S.playerById[b.dataset.browseadd]; if (p) addPlayer(p); rerender(); };
   });
 
+  // Double-click anywhere on a browse row to add that player - faster than
+  // hunting for the small + Add button once you already know who you want.
+  // Guarded against the button's own click so a double-click there doesn't
+  // attempt to add twice.
+  $$("[data-browserow]", root).forEach((row) => {
+    row.ondblclick = (e) => {
+      if (e.target.closest("[data-browseadd]")) return;
+      const p = S.playerById[row.dataset.browserow];
+      if (p) addPlayer(p);
+      rerender();
+    };
+  });
+
   // Browse list filters and sort
   bind("#plBrowseTeam", "onchange", (e) => {
     PL.browseTeam = e.target.value;
@@ -687,7 +744,11 @@ function wire(root, rerender) {
   });
   bind("#plBrowseSort", "onchange", (e) => {
     PL.browseSort.k = e.target.value;
-    PL.browseSort.dir = e.target.value === "name" ? 1 : -1;
+    // Each column has its own sensible default direction (e.g. fixture ease
+    // sorts ascending - lowest/kindest difficulty first - while everything
+    // else sorts best-value-first), rather than assuming descending for
+    // everything except name.
+    PL.browseSort.dir = BROWSE_SORT_COLS.find((c) => c.k === e.target.value)?.dir ?? -1;
     rerender();
   });
   bind("#plBrowseSortDir", "onclick", () => {

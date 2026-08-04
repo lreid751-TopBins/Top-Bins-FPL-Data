@@ -1161,6 +1161,9 @@ textarea::placeholder { color: var(--muted-2); }
 .add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
 .twrap.browse-wrap { max-height: 320px; }
 .browse-wrap .btn { padding: 5px 9px; font-size: 12px; }
+/* Double-click anywhere on an addable row to add that player - cursor cue
+   only where it's actually legal, same rows that leave + Add enabled. */
+.browse-row.addable { cursor: pointer; }
 
 /* Totals panel - stickiness now lives on .col-search itself, which holds
    this alongside the search/browse panel above it. */

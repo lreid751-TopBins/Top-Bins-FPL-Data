@@ -1400,6 +1400,71 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   return `${rows.length} ${liverpool.name} midfielders, all correctly filtered`;
 });
 
+check("double-clicking a browse row adds that player to the squad being built", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const row = panel("panel-planner").querySelector(".browse-row[data-browserow]");
+  if (!row) throw new Error("no addable browse row rendered");
+  const id = +row.dataset.browserow;
+
+  row.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
+  if (!PL.draft.picks.some((pk) => pk.id === id))
+    throw new Error("double-clicking a browse row should add that player to the draft");
+
+  const stillListed = [...panel("panel-planner").querySelectorAll("[data-browserow]")]
+    .some((r) => +r.dataset.browserow === id);
+  if (stillListed) throw new Error("player should drop out of the browse list once they're in the squad");
+
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `GKP #${id} added to the draft by double-click`;
+});
+
+check("Planner browse list can sort by projected points, form, value, fixture ease and ownership", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "MID";
+  renderPlanner(panel("panel-planner"));
+
+  const sel = panel("panel-planner").querySelector("#plBrowseSort");
+  const options = [...sel.options].map((o) => o.value);
+  ["projected", "form", "ppm", "fixtureEase", "selected"].forEach((k) => {
+    if (!options.includes(k)) throw new Error(`"${k}" isn't offered as a browse-list sort option`);
+  });
+
+  // Projected points: a stat computed from the projection engine, not a
+  // plain field - also checks a dedicated column appears since it isn't
+  // one of the table's fixed columns.
+  sel.value = "projected";
+  sel.dispatchEvent(new window.Event("change"));
+  if (PL.browseSort.dir !== -1) throw new Error("projected points should default to highest-first");
+  const projCol = browseColIdx("Projected pts");
+  if (!projCol) throw new Error("no Projected pts column rendered while sorted by projected points");
+  const projRows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
+  const projVals = projRows.map((r) => +r.querySelector(`td:nth-child(${projCol})`).textContent);
+  if (!projVals.every((v, i) => i === 0 || projVals[i - 1] >= v))
+    throw new Error("browse list isn't actually sorted by projected points");
+
+  // Fixture ease: lower difficulty is kinder, so this one should default to
+  // ascending (easiest run first) unlike everything else.
+  sel.value = "fixtureEase";
+  sel.dispatchEvent(new window.Event("change"));
+  if (PL.browseSort.dir !== 1) throw new Error("fixture ease should default to easiest-first (ascending)");
+  const fixCol = browseColIdx("Fixture ease");
+  const fixVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+    (r) => +r.querySelector(`td:nth-child(${fixCol})`).textContent
+  );
+  if (!fixVals.every((v, i) => i === 0 || fixVals[i - 1] <= v))
+    throw new Error("browse list isn't actually sorted by fixture ease, easiest first");
+
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return "all five new sort options present; projected points and fixture ease verified end to end";
+});
+
 check("Planner browse list sort-by dropdown sorts the list", () => {
   const savedDraft = PL.draft;
   newDraft();
