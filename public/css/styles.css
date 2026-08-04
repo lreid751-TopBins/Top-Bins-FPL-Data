@@ -412,23 +412,25 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .cell.dbl { box-shadow: inset 0 0 0 2px var(--gold); }
 
 /* Full-season mini ticker (Planner) - the same .ticker/.cell markup as the
-   Fixture Ticker tab (tickerRow() is reused directly), just shrunk enough
-   that all 38 gameweeks read as a compact reference strip under the team
-   rather than a second full-size ticker. Overrides win on specificity
-   (two classes vs one), so source order relative to the base rules above
-   doesn't matter. */
+   Fixture Ticker tab (tickerRow() is reused directly), sized so roughly the
+   first 10 gameweeks fill the team column's width and the rest scrolls
+   into view - not shrunk to force all 38 to fit at once. table-layout is
+   auto (the default), so with width:100% inherited from .ticker as a
+   floor rather than a cap, 38 columns at this min-width simply overflow
+   .ticker-wrap's own overflow:auto once they exceed the container, no
+   extra scroll wiring needed. Overrides win on specificity (two classes vs
+   one), so source order relative to the base rules above doesn't matter. */
 .ticker-wrap.mini { max-height: 46vh; }
 .ticker.mini { min-width: 0; }
-.ticker.mini th { font-size: 8px; padding: 5px 2px; letter-spacing: 0.04em; }
-.ticker.mini td { padding: 2px 1px; }
-.ticker.mini td.team-c { padding: 3px 6px 3px 8px; font-size: 10.5px; }
-.ticker.mini td.team-c .avg { font-size: 9px; margin-left: 5px; }
+.ticker.mini th { font-size: 9.5px; padding: 6px 3px; letter-spacing: 0.04em; }
+.ticker.mini td { padding: 3px 2px; }
+.ticker.mini td.team-c { padding: 4px 8px 4px 10px; font-size: 12px; }
+.ticker.mini td.team-c .avg { font-size: 10px; margin-left: 6px; }
 .ticker.mini .cell {
-  min-height: 20px; min-width: 20px; gap: 0; padding: 2px 1px;
-  font-size: 7px; border-radius: 3px;
+  min-height: 32px; min-width: 38px; gap: 1px; padding: 3px 4px;
+  font-size: 10px; border-radius: 5px;
 }
-.ticker.mini .cell .ha { font-size: 5.5px; }
-.ticker.mini .cell.blank { font-size: 0; } /* "blank" text doesn't fit at this size - the hatching alone reads fine */
+.ticker.mini .cell .ha { font-size: 7.5px; }
 
 /* Fixture chip: a shrunk .cell for cards and table cells - same difficulty
    colours, small enough to sit five-in-a-row next to a player. */
