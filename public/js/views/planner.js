@@ -355,11 +355,19 @@ function lineupSlot(p, starting, gw) {
   const jersey = p.jersey
     ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : "";
+  // C/V used to be a separate button row below the fixture chip - moved up
+  // into the corners of .slot-top instead, doubling as both the control and
+  // the "who's captain" indicator (no more separate read-only badge), so a
+  // starting card no longer needs its own extra row of height. Bench
+  // players can't captain, so their corners stay empty rather than showing
+  // dead buttons.
+  const capControls = starting
+    ? `<button class="cap-corner c ${isC ? "on" : ""}" data-cap="${p.id}" aria-label="${isC ? "Captain — click to unset" : "Set as captain"}">C</button>
+       <button class="cap-corner v ${isV ? "on" : ""}" data-vice="${p.id}" aria-label="${isV ? "Vice-captain — click to unset" : "Set as vice-captain"}">V</button>`
+    : `<span></span><span></span>`;
   return `<div class="slot filled ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
     tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap">
-    <div class="slot-top">
-      ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : "<span></span>"}
-    </div>
+    <div class="slot-top">${capControls}</div>
     ${jersey}
     <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
@@ -368,14 +376,6 @@ function lineupSlot(p, starting, gw) {
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
     <div class="slot-fx slot-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>
-    ${
-      starting
-        ? `<div class="slot-cap">
-      <button class="mini ${isC ? "on" : ""}" data-cap="${p.id}">C</button>
-      <button class="mini ${isV ? "on" : ""}" data-vice="${p.id}">V</button>
-    </div>`
-        : ""
-    }
   </div>`;
 }
 

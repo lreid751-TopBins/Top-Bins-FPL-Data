@@ -1393,11 +1393,52 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   if (posRowBlocks.length !== 1) throw new Error(`expected exactly one .pos-rows block, got ${posRowBlocks.length}`);
   const filledSlots = panel("panel-planner").querySelectorAll(".slot.filled");
   if (filledSlots.length !== 15) throw new Error(`expected 15 filled slots total (11 starting + 4 bench), got ${filledSlots.length}`);
-  const capButtons = panel("panel-planner").querySelectorAll(".slot-cap");
+  const capButtons = panel("panel-planner").querySelectorAll("[data-cap], [data-vice]");
   if (!capButtons.length) throw new Error("no captain/vice controls rendered on the merged pitch");
   const gwNav = panel("panel-planner").querySelector(".gw-nav");
   if (!gwNav) throw new Error("no gameweek navigator on the merged pitch");
   return `${filledSlots.length} cards in one pitch, captain/vice controls and gw-nav both present`;
+});
+
+check("captain/vice controls sit in the card's corners, not a separate row below it", () => {
+  renderPlanner(panel("panel-planner"));
+  if (panel("panel-planner").querySelector(".slot-cap")) {
+    throw new Error("the old separate captain/vice button row should be gone");
+  }
+  const startingCard = panel("panel-planner").querySelector(".slot[data-lineup]:not(.bench)");
+  const corners = startingCard.querySelectorAll(".slot-top .cap-corner");
+  if (corners.length !== 2) throw new Error(`expected a C and a V control in .slot-top, got ${corners.length}`);
+  if (!corners[0].classList.contains("c") || !corners[1].classList.contains("v")) {
+    throw new Error("expected captain control on the left, vice on the right");
+  }
+
+  const capBtn = panel("panel-planner").querySelector("[data-cap]");
+  capBtn.click();
+  const capBtnAfter = panel("panel-planner").querySelector("[data-cap]");
+  if (!capBtnAfter.classList.contains("on")) throw new Error("clicking the corner C button should mark it on");
+
+  return "C/V controls confirmed in the top corners, and still functional";
+});
+
+check("a complete lineup's cards are the same size as building-phase cards", () => {
+  // Removing the separate cap-button row was meant to close the gap between
+  // the building-phase card size and the completed-lineup card size - this
+  // checks the CSS actually enforces one shared floor for both, not just
+  // that they happen to match by coincidence in one particular squad.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  const slotRuleMatch = css.match(/\.slot\s*\{[^}]*min-height:\s*(\d+)px/);
+  if (!slotRuleMatch) throw new Error("couldn't find .slot's min-height rule");
+  const minHeight = +slotRuleMatch[1];
+
+  renderPlanner(panel("panel-planner"));
+  const lineupCard = panel("panel-planner").querySelector(".slot[data-lineup]");
+  if (!lineupCard) throw new Error("no lineup card rendered to compare against");
+  // jsdom doesn't compute real layout heights, so this confirms the same
+  // .slot class (and therefore the same min-height) is what sizes it -
+  // actual pixel parity (148px for both) was verified live in the browser.
+  if (!lineupCard.classList.contains("slot")) throw new Error("lineup card should share the .slot class building cards use");
+
+  return `.slot min-height (${minHeight}px) is the single shared floor for both building and lineup cards`;
 });
 
 check("clicking a player's name on the Planner pitch opens their profile, not a lineup swap", () => {

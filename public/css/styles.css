@@ -1171,9 +1171,18 @@ textarea::placeholder { color: var(--muted-2); }
 .slot-top { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 15px; }
 .slot-x { background: transparent; border: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 0; }
 .slot-x:hover { color: var(--neg); }
-.cap-badge { font-size: 9px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
-.cap-badge.c { background: var(--gold); color: var(--ink); }
-.cap-badge.v { background: var(--raise); color: var(--gold); border: 1px solid var(--line); }
+/* Captain/vice control, doubling as its own indicator (gold when on) - sits
+   in .slot-top's two corners instead of a separate button row below the
+   card, which used to add a whole extra row of height to every starting
+   card. Same colours the old read-only badge used: solid gold for captain,
+   an outlined gold-on-raise for vice, so the meaning carries over. */
+.cap-corner {
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+  border-radius: 6px; font-size: 9px; font-weight: 700; padding: 1px 6px;
+  font-family: inherit; cursor: pointer;
+}
+.cap-corner.c.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.cap-corner.v.on { background: var(--raise); color: var(--gold); border-color: var(--line); }
 .slot-jersey { width: 50px; height: auto; margin: 3px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
 .slot-name { font-size: 11.5px; font-weight: 600; line-height: 1.1; margin-top: 3px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
@@ -1202,12 +1211,6 @@ textarea::placeholder { color: var(--muted-2); }
    run twice as wide as the shared .fxc default, making the team you're
    actually up against easier to read at a glance. */
 .slot-fx-current .fxc { width: 48px; }
-.slot-cap { display: flex; gap: 4px; margin-top: 6px; }
-.slot-cap .mini {
-  background: transparent; border: 1px solid var(--line); color: var(--muted);
-  border-radius: 6px; font-size: 9.5px; font-weight: 700; padding: 2px 7px;
-}
-.slot-cap .mini.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 
 /* Squad/lineup cards on narrow screens: the position label moves above the
    strip instead of eating a fixed column beside it. */
@@ -1278,7 +1281,7 @@ textarea::placeholder { color: var(--muted-2); }
    .slot width fix necessary earlier would otherwise repeat itself here. */
 @media (max-width: 720px) {
   .gw-nav-btn { width: 34px; height: 34px; font-size: 13px; }
-  .slot-cap .mini { padding: 6px 10px; font-size: 11px; }
+  .cap-corner { padding: 6px 8px; font-size: 11px; }
   .slot-x { padding: 6px; font-size: 18px; }
   .chip .x { padding: 8px; font-size: 19px; }
   .squad-tab .st-x, .squad-tab .st-branch { padding: 8px 6px; }
