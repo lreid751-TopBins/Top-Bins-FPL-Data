@@ -80,6 +80,12 @@
   </p>
 </main>
 
+<!-- Player profile drawer: a single shared panel any tab can open by player
+     id, rather than each view building its own. Lives outside .board so
+     its fixed positioning is never affected by an ancestor's layout. -->
+<div class="player-detail-backdrop" id="pdBackdrop" hidden></div>
+<aside class="player-detail" id="playerDetail" hidden aria-hidden="true" aria-label="Player profile"></aside>
+
 <!-- Written by the Pages workflow. Absent locally, which falls back to /api. -->
 <script src="./env.js"></script>
 <script type="module" src="./js/app.js"></script>

@@ -4,6 +4,7 @@ import {
   $, $$, esc, statCard, emptyState, fixtureStrip,
   availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash,
 } from "../ui.js";
+import { openPlayerDetail } from "../playerDetail.js";
 
 let liveById = {};
 let loadError = "";
@@ -251,7 +252,7 @@ function playerCard(pick, benched) {
     ${tag}
     ${jersey}
     <div class="pts">${pts}</div>
-    <div class="nm">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
     <div class="nx">${gwOpponent(p.teamId, S.picksGw)}</div>
     <div class="fx">${fixtureStrip(p.teamId, 5)}</div>
   </div>`;
@@ -354,6 +355,14 @@ function deltas(out, inc) {
    Events
    ========================================================= */
 function wire(root, rerender, picks) {
+  // Player name → profile drawer. A div, not a button, so Enter/Space
+  // needs wiring by hand alongside the tabindex that makes it reachable.
+  $$("[data-playerid]", root).forEach((el) => {
+    const go = () => openPlayerDetail(+el.dataset.playerid);
+    el.onclick = go;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
+
   const sw = $("#mgrSwitch", root);
   if (sw)
     sw.onclick = () => {

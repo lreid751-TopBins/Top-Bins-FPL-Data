@@ -7,6 +7,9 @@ import { renderFixtures } from "./views/fixtures.js";
 import { renderTeams } from "./views/teams.js";
 import { renderJournal } from "./views/journal.js";
 import { renderPlanner } from "./views/planner.js";
+// No panel of its own - importing it wires up its close interactions
+// (backdrop click, Escape) once, regardless of which tab loads first.
+import "./playerDetail.js";
 
 const PANELS = {
   hub: { el: () => $("#panel-hub"), render: renderHub },

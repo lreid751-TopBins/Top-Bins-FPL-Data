@@ -1,6 +1,6 @@
 import { S, runDifficulty, saveWatchlist, n, f1, f2, signed } from "../store.js";
 import {
-  $, $$, esc, th, sparkline, fixtureStrip, availabilityFlag,
+  $, $$, esc, th, sparkline, fixtureStrip, availabilityFlag, setPieceFlag,
 } from "../ui.js";
 import { scatter, POS_COLOR } from "../charts.js";
 
@@ -180,21 +180,6 @@ function xMinCell(p) {
   const cls = v >= 80 ? "pos" : v >= 60 ? "" : v >= 30 ? "" : "neg";
   const style = v >= 80 ? "color:var(--pos)" : v < 30 ? "color:var(--neg)" : "";
   return `<span style="${style}">${v}'</span>`;
-}
-
-function setPieceFlag(p) {
-  // First-choice penalty taker is the big one; show it prominently.
-  if (p.penaltyOrder === 1) {
-    return ` <span class="sp-flag pen" title="First-choice penalty taker">P</span>`;
-  }
-  // On penalties but not first, or on direct free-kicks — a smaller nod.
-  if (p.penaltyOrder && p.penaltyOrder <= 2) {
-    return ` <span class="sp-flag" title="Penalty order ${p.penaltyOrder}">P${p.penaltyOrder}</span>`;
-  }
-  if (p.freekickOrder === 1) {
-    return ` <span class="sp-flag" title="First-choice direct free-kicks">FK</span>`;
-  }
-  return "";
 }
 
 function priceMoveCell(p) {

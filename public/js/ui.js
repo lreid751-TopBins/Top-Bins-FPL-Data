@@ -26,6 +26,22 @@ export function availabilityFlag(p) {
   return `<span class="flag ${cls}" title="${esc(title)}"></span>`;
 }
 
+/* ---------------- Set-piece flag ---------------- */
+export function setPieceFlag(p) {
+  // First-choice penalty taker is the big one; show it prominently.
+  if (p.penaltyOrder === 1) {
+    return ` <span class="sp-flag pen" title="First-choice penalty taker">P</span>`;
+  }
+  // On penalties but not first, or on direct free-kicks — a smaller nod.
+  if (p.penaltyOrder && p.penaltyOrder <= 2) {
+    return ` <span class="sp-flag" title="Penalty order ${p.penaltyOrder}">P${p.penaltyOrder}</span>`;
+  }
+  if (p.freekickOrder === 1) {
+    return ` <span class="sp-flag" title="First-choice direct free-kicks">FK</span>`;
+  }
+  return "";
+}
+
 /* ---------------- Form sparkline ----------------
    Bars, not a line: gameweek points are discrete events, and a bar
    makes a blank (didn't play) visibly different from a zero. */

@@ -51,7 +51,9 @@ export const PL = {
   browseSort: { k: "total_points", dir: -1 }, // sort applied to the browse list
   browseMinPoints: 0,   // browse list filter: minimum total points
   browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
+  browseTeam: "",        // browse list filter: team id, "" = all teams
   searchCollapsed: false, // whether the search/analysis column is slid out of view
+  searchWidthPct: 29,     // width of the search/analysis column, user-adjustable by dragging
 };
 
 export function blankDraft() {

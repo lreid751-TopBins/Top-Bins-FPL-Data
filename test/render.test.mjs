@@ -122,6 +122,7 @@ const {
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
   draftPlayers, branchSquad, compareTotals, deleteSquad, transferLogDraft,
 } = await import("../public/js/planner.js");
+const { PD, openPlayerDetail, closePlayerDetail } = await import("../public/js/playerDetail.js");
 
 const results = [];
 const check = (name, fn) => {
@@ -663,6 +664,54 @@ check("captain multiplier applied", () => {
   return `captain shown as ${want}`;
 });
 
+check("clicking a player's name on My Team opens their profile drawer", () => {
+  const nameEl = panel("panel-squad").querySelector(".plr .nm[data-playerid]");
+  if (!nameEl) throw new Error("no clickable player name found on a My Team card");
+  const id = +nameEl.dataset.playerid;
+  const p = S.playerById[id];
+
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== id) throw new Error("clicking the name should open that player's profile");
+
+  const drawer = document.getElementById("playerDetail");
+  if (drawer.hidden) throw new Error("drawer should no longer be hidden once opened");
+  if (!drawer.innerHTML.includes(p.name)) throw new Error("drawer doesn't show the clicked player's name");
+  if (!drawer.innerHTML.includes("xG")) throw new Error("drawer is missing xG");
+  if (!drawer.innerHTML.includes("Fixtures ahead")) throw new Error("drawer is missing the fixtures section");
+
+  document.getElementById("pdClose").click();
+  if (PD.openId !== null) throw new Error("close button should clear PD.openId");
+
+  return `opened ${p.name}'s profile, closed it again`;
+});
+
+check("player profile drawer shows a photo, grouped stats, and vertical fixture/result lists", () => {
+  const nameEl = panel("panel-squad").querySelector(".plr .nm[data-playerid]");
+  const id = +nameEl.dataset.playerid;
+  const p = S.playerById[id];
+  openPlayerDetail(id);
+
+  const drawer = document.getElementById("playerDetail");
+  const img = drawer.querySelector(".pd-photo, .pd-photo-placeholder");
+  if (!img) throw new Error("drawer should render a player photo or a placeholder in its place");
+  if (p.photo && img.tagName === "IMG" && img.src !== p.photo)
+    throw new Error("drawer photo src doesn't match the player's photo field");
+
+  ["Underlying", "Returns", "Ownership &amp; risk"].forEach((group) => {
+    if (!drawer.innerHTML.includes(group)) throw new Error(`drawer is missing the "${group}" stat group`);
+  });
+
+  if (!drawer.innerHTML.includes("Recent results")) throw new Error("drawer is missing the recent-results list");
+  const fixtureRows = drawer.querySelectorAll(".pd-list .pd-row");
+  if (fixtureRows.length < 2) throw new Error("fixtures/results should render as a vertical list of rows, not chips");
+  fixtureRows.forEach((row) => {
+    if (!row.querySelector(".pd-row-gw")) throw new Error("each fixture/result row needs a gameweek label");
+  });
+
+  closePlayerDetail();
+  return `photo present, 3 stat groups, ${fixtureRows.length} fixture/result rows rendered vertically`;
+});
+
 // Regression: loadManager() is also called every 90s by the live-score
 // refresh in app.js while a team is already showing. It used to set the
 // same `loading` flag that gates a full "Fetching your team" wipe on first
@@ -1161,6 +1210,46 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   return `${filledSlots.length} cards in one pitch, captain/vice controls and gw-nav both present`;
 });
 
+check("clicking a player's name on the Planner pitch opens their profile, not a lineup swap", () => {
+  // Regression risk: a lineup card's own click handler treats any click as
+  // a swap-select. Clicking the name specifically must stop short of that -
+  // otherwise "view this player's profile" would also silently arm a swap.
+  renderPlanner(panel("panel-planner"));
+  const nameEl = panel("panel-planner").querySelector(".slot.filled .slot-name[data-playerid]");
+  if (!nameEl) throw new Error("no clickable player name found on the Planner pitch");
+  const id = +nameEl.dataset.playerid;
+
+  PL.lineupSelect = null;
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== id) throw new Error("clicking the name should open that player's profile");
+  if (PL.lineupSelect !== null) throw new Error("clicking the name should not also arm a lineup swap");
+
+  const drawer = document.getElementById("playerDetail");
+  const p = S.playerById[id];
+  if (!drawer.innerHTML.includes(p.name)) throw new Error("drawer doesn't show the clicked player's name");
+
+  closePlayerDetail();
+  return `opened ${p.name}'s profile from the pitch without arming a swap`;
+});
+
+check("clicking a player's name while still building the squad also opens the profile drawer", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  const p = S.players.find((pl) => pl.pos === "MID");
+  addPlayer(p);
+  renderPlanner(panel("panel-planner"));
+
+  const nameEl = panel("panel-planner").querySelector(`.slot.filled .slot-name[data-playerid="${p.id}"]`);
+  if (!nameEl) throw new Error("no clickable name for the just-added player in building mode");
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== p.id) throw new Error("clicking a name mid-build should still open the profile drawer");
+
+  closePlayerDetail();
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `${p.name}'s profile opens even before the squad is complete`;
+});
+
 check("the search/analysis panel can slide fully out of view", () => {
   renderPlanner(panel("panel-planner"));
   const layout = panel("panel-planner").querySelector("#plannerLayout");
@@ -1183,6 +1272,37 @@ check("the search/analysis panel can slide fully out of view", () => {
   panel("panel-planner").querySelector("#panelToggle").click();
   PL.searchCollapsed = false; // reset for later tests
   return "panel toggles collapsed/expanded and a rerender respects the persisted state";
+});
+
+check("the search/analysis column can be resized independently of the collapse toggle", () => {
+  PL.searchWidthPct = 29;
+  renderPlanner(panel("panel-planner"));
+  const layout = panel("panel-planner").querySelector("#plannerLayout");
+  const handle = panel("panel-planner").querySelector("#colResizeHandle");
+  if (!handle) throw new Error("no resize handle rendered");
+  if (layout.style.getPropertyValue("--search-w").trim() !== "29%") {
+    throw new Error(`expected --search-w to start at 29%, got "${layout.style.getPropertyValue("--search-w")}"`);
+  }
+
+  // Keyboard resize (the drag itself needs real pointer events jsdom
+  // doesn't simulate, but the same setWidth() path backs both).
+  handle.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  if (PL.searchWidthPct !== 31) throw new Error(`expected 29 + 2 = 31, got ${PL.searchWidthPct}`);
+  if (layout.style.getPropertyValue("--search-w").trim() !== "31%") {
+    throw new Error("resizing should update --search-w directly, not just PL state");
+  }
+  if (handle.getAttribute("aria-valuenow") !== "31") throw new Error("aria-valuenow should track the resized width");
+
+  // Clamped to the documented range, not just nudged forever.
+  PL.searchWidthPct = 44;
+  handle.setAttribute("aria-valuenow", "44");
+  layout.style.setProperty("--search-w", "44%");
+  handle.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  if (PL.searchWidthPct > 45) throw new Error(`resize should clamp at 45%, got ${PL.searchWidthPct}`);
+
+  PL.searchWidthPct = 29; // reset for later tests
+  renderPlanner(panel("panel-planner"));
+  return "resize handle adjusts --search-w independently, clamped to its documented range";
 });
 
 check("clicking an empty slot jumps the browse list to that position", () => {
@@ -1251,6 +1371,33 @@ check("Planner browse list filters by minimum points and DEFCON/90", () => {
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
   return `filtered to ${ptsVals.length} at >= ${threshold} points, ${dcVals.length} at >= ${dcThreshold} DEFCON/90`;
+});
+
+check("Planner browse list filters by team - e.g. all Liverpool midfielders", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "MID";
+  const liverpool = S.teamList.find((t) => t.name === "Liverpool") || S.teamList[0];
+  PL.browseTeam = String(liverpool.id);
+  renderPlanner(panel("panel-planner"));
+
+  const sel = panel("panel-planner").querySelector("#plBrowseTeam");
+  if (!sel) throw new Error("no team filter dropdown rendered in the Planner browse list");
+  if (sel.value !== String(liverpool.id)) throw new Error("team dropdown doesn't reflect PL.browseTeam");
+
+  const rows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
+  const expected = S.players.filter((p) => p.pos === "MID" && p.teamId === liverpool.id).length;
+  if (rows.length !== expected) throw new Error(`expected ${expected} ${liverpool.name} MIDs, got ${rows.length}`);
+
+  const teamCol = browseColIdx("Team");
+  const teams = rows.map((r) => r.querySelector(`td:nth-child(${teamCol})`).textContent.trim());
+  if (!teams.every((t) => t === liverpool.short)) throw new Error("a player from another team leaked into the team-filtered list");
+
+  PL.browseTeam = "";
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `${rows.length} ${liverpool.name} midfielders, all correctly filtered`;
 });
 
 check("Planner browse list sort-by dropdown sorts the list", () => {

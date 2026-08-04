@@ -234,6 +234,12 @@ function buildPlayers(boot) {
         jersey: S.teams[e.team]?.code
           ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${S.teams[e.team].code}-66.png`
           : "",
+        // Official headshot, keyed by the player's own code (not the team's) -
+        // a different endpoint on the same CDN that badges already use
+        // successfully, so this one does serve directly.
+        photo: e.code
+          ? `https://resources.premierleague.com/premierleague/photos/players/110x140/p${e.code}.png`
+          : "",
         // Set-piece and penalty order: 1 = first choice. Lower is better;
         // null means not on the list. Big signal for attacking returns.
         penaltyOrder: e.penalties_order === null ? null : n(e.penalties_order),

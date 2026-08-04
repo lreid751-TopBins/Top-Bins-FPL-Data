@@ -10,8 +10,14 @@ import {
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { $, $$, esc, fixtureChips, availabilityFlag, sparkline } from "../ui.js";
 import { divergingBars } from "../charts.js";
+import { openPlayerDetail } from "../playerDetail.js";
 
 const TOTAL_GWS = 38;
+// How far the search/analysis column can be dragged, as a % of the layout's
+// width - narrow enough that the pitch always keeps most of the room, wide
+// enough to actually read the browse table comfortably.
+const SEARCH_W_MIN = 18;
+const SEARCH_W_MAX = 45;
 
 export function renderPlanner(root) {
   const rerender = () => renderPlanner(root);
@@ -45,10 +51,13 @@ export function renderPlanner(root) {
 
     ${savedSquadsBar()}
 
-    <div class="planner-layout ${PL.searchCollapsed ? "collapsed" : ""}" id="plannerLayout">
+    <div class="planner-layout ${PL.searchCollapsed ? "collapsed" : ""}" id="plannerLayout" style="--search-w:${PL.searchWidthPct}%">
       <button class="panel-toggle" id="panelToggle"
         aria-label="${PL.searchCollapsed ? "Show the search panel" : "Hide the search panel"}"
         aria-expanded="${String(!PL.searchCollapsed)}">${PL.searchCollapsed ? "›" : "‹"}</button>
+      <div class="col-resize-handle" id="colResizeHandle" role="separator" aria-orientation="vertical"
+        aria-label="Resize the search panel" tabindex="0"
+        aria-valuemin="${SEARCH_W_MIN}" aria-valuemax="${SEARCH_W_MAX}" aria-valuenow="${Math.round(PL.searchWidthPct)}"></div>
       <div class="col-search">
         ${addRow()}
         ${totalsPanel(totals, complete)}
@@ -166,11 +175,7 @@ function pitchView(complete) {
     ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
     ${pitchWrap(`
       <div class="pos-rows">
-        ${POSITION_ORDER.map((posKey) => `<div class="pos-row">
-          <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
-            <span class="hint">${byPos[posKey].length}</span></div>
-          <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>
-        </div>`).join("")}
+        ${POSITION_ORDER.map((posKey) => `<div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>`).join("")}
       </div>
       <div class="pos-row lineup-bench">
         <div class="pos-label"><span class="hint">Bench</span></div>
@@ -188,18 +193,13 @@ function buildingRows() {
 
   return `<div class="pos-rows">
     ${POSITION_ORDER.map((posKey) => {
-      const have = byPos[posKey].length;
       const want = SQUAD_RULES.positions[posKey];
       const slots = [];
       for (let i = 0; i < want; i++) {
         const p = byPos[posKey][i];
         slots.push(p ? filledSlot(p) : emptySlot(posKey));
       }
-      return `<div class="pos-row">
-        <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
-          <span class="hint">${have}/${want}</span></div>
-        <div class="slot-strip">${slots.join("")}</div>
-      </div>`;
+      return `<div class="slot-strip">${slots.join("")}</div>`;
     }).join("")}
   </div>`;
 }
@@ -250,7 +250,7 @@ function filledSlot(p) {
       <button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
     </div>
     ${jersey}
-    <div class="slot-name">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
     <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
     <div class="slot-stats">
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
@@ -280,7 +280,7 @@ function lineupSlot(p, starting, gw) {
       ${isC ? '<span class="cap-badge c">C</span>' : isV ? '<span class="cap-badge v">V</span>' : "<span></span>"}
     </div>
     ${jersey}
-    <div class="slot-name">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
     <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
     <div class="slot-stats">
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
@@ -330,6 +330,14 @@ function addRow() {
       </div>
     </div>
     <div class="add-row-head" style="margin-top:8px">
+      <select id="plBrowseTeam" aria-label="Filter by team">
+        <option value="">All teams</option>
+        ${S.teamList
+          .slice()
+          .sort((a, b) => a.name.localeCompare(b.name))
+          .map((t) => `<option value="${t.id}" ${String(t.id) === String(PL.browseTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
+          .join("")}
+      </select>
       <span class="range">Min points<input type="range" id="plMinPoints" min="0" max="250" step="5" value="${PL.browseMinPoints}"><b class="mono" id="plMinPointsV">${PL.browseMinPoints}</b></span>
       <span class="range">Min DC/90<input type="range" id="plMinDefcon90" min="0" max="20" step="0.5" value="${PL.browseMinDefcon90}"><b class="mono" id="plMinDefcon90V">${f1(PL.browseMinDefcon90)}</b></span>
       <span class="sort-by">
@@ -353,6 +361,7 @@ function browseList() {
       (p) =>
         p.pos === posKey &&
         !inSquad.has(p.id) &&
+        (!PL.browseTeam || String(p.teamId) === String(PL.browseTeam)) &&
         p.total_points >= PL.browseMinPoints &&
         p.defcon90 >= PL.browseMinDefcon90
     )
@@ -521,6 +530,16 @@ function compareBody(cmp) {
 function wire(root, rerender) {
   const bind = (sel, ev, fn) => { const el = $(sel, root); if (el) el[ev] = fn; };
 
+  // Player name → profile drawer. A div, not a button, so Enter/Space needs
+  // wiring by hand alongside the tabindex that makes it reachable. On a
+  // lineup card this also has to stop short of the card's own click
+  // handler below, which otherwise treats any click as a swap-select.
+  $$("[data-playerid]", root).forEach((el) => {
+    const go = (e) => { e.stopPropagation(); openPlayerDetail(+el.dataset.playerid); };
+    el.onclick = go;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
+  });
+
   bind("#plNew", "onclick", () => { newDraft(); rerender(); });
   bind("#plName", "oninput", (e) => { PL.draft.name = e.target.value; });
   bind("#plNote", "oninput", (e) => { PL.draft.note = e.target.value; });
@@ -604,6 +623,41 @@ function wire(root, rerender) {
     toggle.setAttribute("aria-expanded", String(!PL.searchCollapsed));
   });
 
+  // Drag the search/analysis column wider or narrower - separate from the
+  // full-collapse toggle above, so both stay available: slide to adjust,
+  // or the ‹ button to tuck it away entirely. Written straight to the CSS
+  // custom property during the drag (no rerender per pixel moved), and only
+  // committed to PL for the next real render once the drag ends.
+  const resizeHandle = $("#colResizeHandle", root);
+  if (resizeHandle) {
+    const layout = $("#plannerLayout", root);
+    const setWidth = (pct) => {
+      const clamped = Math.min(SEARCH_W_MAX, Math.max(SEARCH_W_MIN, pct));
+      layout.style.setProperty("--search-w", `${clamped}%`);
+      resizeHandle.setAttribute("aria-valuenow", String(Math.round(clamped)));
+      PL.searchWidthPct = clamped;
+      return clamped;
+    };
+    resizeHandle.addEventListener("pointerdown", (e) => {
+      if (PL.searchCollapsed) return; // nothing to drag while it's tucked away
+      e.preventDefault();
+      const rect = layout.getBoundingClientRect();
+      resizeHandle.classList.add("dragging");
+      const onMove = (ev) => setWidth(((ev.clientX - rect.left) / rect.width) * 100);
+      const onUp = () => {
+        resizeHandle.classList.remove("dragging");
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    });
+    resizeHandle.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowLeft") { e.preventDefault(); setWidth(PL.searchWidthPct - 2); }
+      if (e.key === "ArrowRight") { e.preventDefault(); setWidth(PL.searchWidthPct + 2); }
+    });
+  }
+
   // Browse-by-position tabs
   $$("[data-browsepos]", root).forEach((b) => {
     b.onclick = () => { PL.browsePos = b.dataset.browsepos; rerender(); };
@@ -617,6 +671,10 @@ function wire(root, rerender) {
   });
 
   // Browse list filters and sort
+  bind("#plBrowseTeam", "onchange", (e) => {
+    PL.browseTeam = e.target.value;
+    rerender();
+  });
   bind("#plMinPoints", "oninput", (e) => {
     PL.browseMinPoints = +e.target.value;
     $("#plMinPointsV", root).textContent = PL.browseMinPoints;
@@ -640,7 +698,7 @@ function wire(root, rerender) {
   // Lineup: click a player, then one from the other side (bench/starting) to swap
   $$("[data-lineup]", root).forEach((el) => {
     const activate = (e) => {
-      if (e.target.closest("[data-cap],[data-vice]")) return;
+      if (e.target.closest("[data-cap],[data-vice],[data-playerid]")) return;
       const id = +el.dataset.lineup;
       if (PL.lineupSelect == null) {
         PL.lineupSelect = id;
