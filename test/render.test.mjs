@@ -1345,6 +1345,19 @@ check("+ New squad lives in the squad-name row, not a row it'd make taller", () 
   return "+ New squad confirmed in the squad-name row, still resets the draft";
 });
 
+check("the squad-name/note/New-squad row sits below the player table, not above it", () => {
+  renderPlanner(panel("panel-planner"));
+  const colTeam = panel("panel-planner").querySelector(".col-team");
+  const pitchIdx = colTeam.innerHTML.indexOf("squad-section-head");
+  const draftIdx = colTeam.innerHTML.indexOf("draft-head");
+  if (pitchIdx === -1) throw new Error("no player table (.squad-section-head) found in the team column");
+  if (draftIdx === -1) throw new Error("no squad-name row (.draft-head) found in the team column");
+  if (draftIdx < pitchIdx) {
+    throw new Error("the squad-name/note/New-squad row should come after the player table, not before it");
+  }
+  return "player table now renders before the squad-name/note/New-squad row";
+});
+
 check("squad cards are sized to fit a full 5-wide row without scrolling at typical widths", () => {
   // jsdom doesn't apply external stylesheets or lay out flex children by
   // real pixel widths, so this is a check on the raw CSS text - confirms

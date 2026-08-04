@@ -62,8 +62,8 @@ export function renderPlanner(root) {
         ${totalsPanel(totals, complete)}
       </div>
       <div class="col-team">
-        ${draftHeader()}
         ${teamSection(complete)}
+        ${draftHeader()}
         ${seasonTicker()}
       </div>
     </div>
