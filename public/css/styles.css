@@ -1093,12 +1093,10 @@ textarea::placeholder { color: var(--muted-2); }
 }
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 
-/* Saved-squad tabs - collapsed behind a single toggle by default, sharing a
-   row with + New squad (moved down from the section head) rather than each
-   getting its own line, so the team pitch below sits higher up the page. */
+/* Saved-squad tabs - collapsed behind a single toggle by default, so the
+   team pitch below sits higher up the page instead of under a permanently-
+   open row. */
 .saved-squads { margin-bottom: 12px; }
-.saved-squads-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.saved-squads-row .hint { margin: 0; }
 .saved-squads-toggle {
   display: flex; align-items: center; gap: 8px; background: transparent; border: none;
   color: var(--chalk); font-size: 13px; font-weight: 600; padding: 4px 0; cursor: pointer;

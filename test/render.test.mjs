@@ -1317,14 +1317,19 @@ check("saved squads sit behind a collapsed toggle, and the team pitch has painte
   return "saved squads collapsed by default and expand on click; pitch shows painted lines and a goal";
 });
 
-check("+ New squad shares a row with the saved-squads control instead of its own line up top", () => {
+check("+ New squad lives in the section head, not the saved-squads row it'd make taller", () => {
+  // A real <button> is taller than the saved-squads toggle's plain text, so
+  // pairing them on one row would make that row as tall as the button
+  // instead of the toggle - defeating the point of collapsing it. The
+  // section head's h2 is already taller than the button, so that's where
+  // it belongs instead: costs nothing extra there.
   renderPlanner(panel("panel-planner"));
-  const sectionHead = panel("panel-planner").querySelector(".section-head");
-  if (sectionHead.querySelector("#plNew")) {
-    throw new Error("+ New squad should no longer live in the section head");
+  const savedSquads = panel("panel-planner").querySelector(".saved-squads");
+  if (savedSquads && savedSquads.querySelector("#plNew")) {
+    throw new Error("+ New squad shouldn't live in .saved-squads - it makes that row as tall as the button");
   }
-  const newBtn = panel("panel-planner").querySelector(".saved-squads-row #plNew");
-  if (!newBtn) throw new Error("+ New squad should live in .saved-squads-row, alongside the saved-squads control");
+  const newBtn = panel("panel-planner").querySelector(".section-head #plNew");
+  if (!newBtn) throw new Error("+ New squad should live in the section head, next to the Squad Planner title");
 
   const savedDraft = PL.draft;
   PL.draft.name = "Something I'm about to discard";
@@ -1332,7 +1337,7 @@ check("+ New squad shares a row with the saved-squads control instead of its own
   if (PL.draft.name === "Something I'm about to discard") throw new Error("+ New squad button didn't reset the draft");
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
-  return "+ New squad relocated into the saved-squads row and still resets the draft";
+  return "+ New squad confirmed back in the section head, still resets the draft";
 });
 
 check("squad cards are sized to fit a full 5-wide row without scrolling at typical widths", () => {

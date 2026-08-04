@@ -45,6 +45,9 @@ export function renderPlanner(root) {
     <div class="eyebrow">Planning</div>
     <div class="section-head">
       <h2>Squad Planner</h2>
+      <div class="controls">
+        <button class="btn ghost" id="plNew">+ New squad</button>
+      </div>
     </div>
     ${PL.error ? `<p class="neg" style="margin-top:-6px">${esc(PL.error)}</p>` : ""}
 
@@ -79,24 +82,23 @@ export function renderPlanner(root) {
    list itself is only interesting once you have more than one squad to
    flip between, and keeping it collapsed by default leaves the team pitch
    sitting higher up the page instead of pushed down under it. + New squad
-   lives on this same row (rather than its own line up in the section head)
-   since it's the other half of the same "which squad am I looking at"
-   decision - and one shared row here is one less line above the pitch. */
+   deliberately stays up in the section head rather than sharing this row -
+   a real <button> is taller than this toggle's plain text, so pairing them
+   here would make THIS row as tall as the button instead of the toggle,
+   undoing the point of collapsing it. Up in the section head it costs
+   nothing extra, since the h2 next to it is already taller than the button. */
 function savedSquadsBar() {
   const activeSquad = PL.squads.find((sq) => sq.id === PL.activeId);
   return `<div class="saved-squads">
-    <div class="saved-squads-row">
-      ${
-        PL.squads.length
-          ? `<button class="saved-squads-toggle" id="savedSquadsToggle" aria-expanded="${String(PL.savedSquadsOpen)}">
-              <span class="saved-squads-caret">${PL.savedSquadsOpen ? "▾" : "▸"}</span>
-              <span>Saved squads (${PL.squads.length})</span>
-              ${activeSquad ? `<span class="hint">viewing ${esc(activeSquad.name)}</span>` : ""}
-            </button>`
-          : `<p class="hint">No saved squads yet — build one below and save it.</p>`
-      }
-      <button class="btn ghost" id="plNew">+ New squad</button>
-    </div>
+    ${
+      PL.squads.length
+        ? `<button class="saved-squads-toggle" id="savedSquadsToggle" aria-expanded="${String(PL.savedSquadsOpen)}">
+            <span class="saved-squads-caret">${PL.savedSquadsOpen ? "▾" : "▸"}</span>
+            <span>Saved squads (${PL.squads.length})</span>
+            ${activeSquad ? `<span class="hint">viewing ${esc(activeSquad.name)}</span>` : ""}
+          </button>`
+        : `<p class="hint" style="margin:0">No saved squads yet — build one below and save it.</p>`
+    }
     ${
       PL.squads.length && PL.savedSquadsOpen
         ? `<div class="squad-tabs">
