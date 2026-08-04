@@ -1093,10 +1093,12 @@ textarea::placeholder { color: var(--muted-2); }
 }
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 
-/* Saved-squad tabs - collapsed behind a single toggle by default so the
-   team pitch below sits higher up the page instead of under a permanently-
-   open row. */
-.saved-squads { margin-bottom: 16px; }
+/* Saved-squad tabs - collapsed behind a single toggle by default, sharing a
+   row with + New squad (moved down from the section head) rather than each
+   getting its own line, so the team pitch below sits higher up the page. */
+.saved-squads { margin-bottom: 12px; }
+.saved-squads-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.saved-squads-row .hint { margin: 0; }
 .saved-squads-toggle {
   display: flex; align-items: center; gap: 8px; background: transparent; border: none;
   color: var(--chalk); font-size: 13px; font-weight: 600; padding: 4px 0; cursor: pointer;
@@ -1120,7 +1122,7 @@ textarea::placeholder { color: var(--muted-2); }
 .squad-tab .st-branch:hover { color: var(--gold); }
 
 /* Draft header */
-.draft-head { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.draft-head { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .draft-name {
   font-family: "Anton", sans-serif; font-size: 18px; letter-spacing: 0.02em;
   flex: 0 1 240px; background: var(--panel-2);
@@ -1137,7 +1139,7 @@ textarea::placeholder { color: var(--muted-2); }
 .squad-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 /* Position rows + slots */
-.pos-rows { display: flex; flex-direction: column; gap: 16px; margin-bottom: 16px; }
+.pos-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
 .pos-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
 /* Each position is its own line, always - DEF/MID/FWD must never wrap onto

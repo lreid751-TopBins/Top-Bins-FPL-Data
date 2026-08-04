@@ -1317,6 +1317,24 @@ check("saved squads sit behind a collapsed toggle, and the team pitch has painte
   return "saved squads collapsed by default and expand on click; pitch shows painted lines and a goal";
 });
 
+check("+ New squad shares a row with the saved-squads control instead of its own line up top", () => {
+  renderPlanner(panel("panel-planner"));
+  const sectionHead = panel("panel-planner").querySelector(".section-head");
+  if (sectionHead.querySelector("#plNew")) {
+    throw new Error("+ New squad should no longer live in the section head");
+  }
+  const newBtn = panel("panel-planner").querySelector(".saved-squads-row #plNew");
+  if (!newBtn) throw new Error("+ New squad should live in .saved-squads-row, alongside the saved-squads control");
+
+  const savedDraft = PL.draft;
+  PL.draft.name = "Something I'm about to discard";
+  newBtn.click();
+  if (PL.draft.name === "Something I'm about to discard") throw new Error("+ New squad button didn't reset the draft");
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return "+ New squad relocated into the saved-squads row and still resets the draft";
+});
+
 check("squad cards are sized to fit a full 5-wide row without scrolling at typical widths", () => {
   // jsdom doesn't apply external stylesheets or lay out flex children by
   // real pixel widths, so this is a check on the raw CSS text - confirms
