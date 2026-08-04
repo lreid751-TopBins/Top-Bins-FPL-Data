@@ -45,9 +45,6 @@ export function renderPlanner(root) {
     <div class="eyebrow">Planning</div>
     <div class="section-head">
       <h2>Squad Planner</h2>
-      <div class="controls">
-        <button class="btn ghost" id="plNew">+ New squad</button>
-      </div>
     </div>
     ${PL.error ? `<p class="neg" style="margin-top:-6px">${esc(PL.error)}</p>` : ""}
 
@@ -82,11 +79,11 @@ export function renderPlanner(root) {
    list itself is only interesting once you have more than one squad to
    flip between, and keeping it collapsed by default leaves the team pitch
    sitting higher up the page instead of pushed down under it. + New squad
-   deliberately stays up in the section head rather than sharing this row -
-   a real <button> is taller than this toggle's plain text, so pairing them
-   here would make THIS row as tall as the button instead of the toggle,
-   undoing the point of collapsing it. Up in the section head it costs
-   nothing extra, since the h2 next to it is already taller than the button. */
+   doesn't live here - pairing it with this toggle would make the row as
+   tall as the button instead of the toggle's plain text, undoing the
+   point of collapsing it. It lives in the squad-name row instead (see
+   draftHeader) where it costs nothing extra and sits right where the
+   panel it acts on actually begins. */
 function savedSquadsBar() {
   const activeSquad = PL.squads.find((sq) => sq.id === PL.activeId);
   return `<div class="saved-squads">
@@ -118,11 +115,16 @@ function savedSquadsBar() {
   </div>`;
 }
 
-/* ---------------- Draft header (name + note) ---------------- */
+/* ---------------- Draft header (name + note) ----------------
+   + New squad rides along on this same row - it's the other half of "which
+   squad am I editing", and this row is already taller than the button
+   (two real text inputs vs. a single-line button), so it tucks in for
+   free instead of needing its own dedicated row up in the page header. */
 function draftHeader() {
   return `<div class="draft-head">
     <input id="plName" class="draft-name" value="${esc(PL.draft.name)}" maxlength="60" aria-label="Squad name">
     <input id="plNote" class="draft-note" placeholder="Optional note — e.g. GW1 wildcard draft" value="${esc(PL.draft.note)}" maxlength="400" aria-label="Squad note">
+    <button class="btn ghost" id="plNew">+ New squad</button>
   </div>`;
 }
 

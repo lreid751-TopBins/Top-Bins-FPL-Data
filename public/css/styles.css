@@ -1120,7 +1120,8 @@ textarea::placeholder { color: var(--muted-2); }
 .squad-tab .st-branch:hover { color: var(--gold); }
 
 /* Draft header */
-.draft-head { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.draft-head { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
+.draft-head .btn { flex: none; }
 .draft-name {
   font-family: "Anton", sans-serif; font-size: 18px; letter-spacing: 0.02em;
   flex: 0 1 240px; background: var(--panel-2);
