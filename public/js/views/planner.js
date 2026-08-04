@@ -1,4 +1,4 @@
-import { S, f1, f2, runDifficulty } from "../store.js";
+import { S, f1, f2, runDifficulty, upcoming } from "../store.js";
 import {
   PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
   draftPlayers, spend, canAdd, addPlayer,
@@ -12,6 +12,7 @@ import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint } fr
 import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
+import { tickerRow } from "./fixtures.js";
 
 const TOTAL_GWS = 38;
 // How far the search/analysis column can be dragged, as a % of the layout's
@@ -66,6 +67,7 @@ export function renderPlanner(root) {
       <div class="col-team">
         ${draftHeader()}
         ${teamSection(complete)}
+        ${seasonTicker()}
       </div>
     </div>
 
@@ -134,6 +136,40 @@ function teamSection(complete) {
     </div>
   </div>
   ${PL.squadView === "table" ? squadTable() : pitchView(complete)}`;
+}
+
+/* ---------------- Full-season fixture ticker ----------------
+   The Fixture Ticker tab's own row renderer (tickerRow), reused as-is so
+   this reads as the same tool rather than a lookalike - just every
+   gameweek at once (no From/To picker, no per-team focus filter) and sized
+   down (.mini) to sit as a reference strip under the team, not a full page
+   of its own. Same difficulty model (S.ui.fdrMode) the Ticker tab and the
+   rest of the Planner's fixture colouring already use. */
+function seasonTicker() {
+  const mode = S.ui.fdrMode;
+  const gws = [];
+  for (let g = 1; g <= TOTAL_GWS; g++) gws.push(g);
+  const rows = S.teamList
+    .map((t) => ({ team: t, avg: runDifficulty(t.id, TOTAL_GWS, mode, 1), fixtures: upcoming(t.id, TOTAL_GWS, 1) }))
+    .sort((a, b) => a.team.name.localeCompare(b.team.name));
+
+  return `<div class="season-ticker">
+    <div class="lineup-head">
+      <span class="anton">Full-season fixtures</span>
+      <span class="hint">GW1–${TOTAL_GWS}</span>
+    </div>
+    <div class="ticker-wrap mini">
+      <table class="ticker mini">
+        <thead>
+          <tr>
+            <th class="team-h">Team</th>
+            ${gws.map((g) => `<th>${g}</th>`).join("")}
+          </tr>
+        </thead>
+        <tbody>${rows.map((r) => tickerRow(r, mode)).join("")}</tbody>
+      </table>
+    </div>
+  </div>`;
 }
 
 function pitchWrap(inner) {
@@ -287,7 +323,7 @@ function lineupSlot(p, starting, gw) {
       <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
       <span title="Expected minutes next GW">${p.xMin}'</span>
     </div>
-    <div class="slot-fx">${fixtureChips(p.teamId, 1, null, gw)}</div>
+    <div class="slot-fx slot-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>
     ${
       starting
         ? `<div class="slot-cap">

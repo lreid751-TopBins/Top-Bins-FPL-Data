@@ -142,7 +142,7 @@ function card(lab, big, small, foot, accent = false) {
   </div>`;
 }
 
-function tickerRow(r, mode) {
+export function tickerRow(r, mode) {
   const cells = r.fixtures
     .map((slot) => {
       if (!slot.list.length) {

@@ -411,6 +411,25 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .cell.dbl { box-shadow: inset 0 0 0 2px var(--gold); }
 
+/* Full-season mini ticker (Planner) - the same .ticker/.cell markup as the
+   Fixture Ticker tab (tickerRow() is reused directly), just shrunk enough
+   that all 38 gameweeks read as a compact reference strip under the team
+   rather than a second full-size ticker. Overrides win on specificity
+   (two classes vs one), so source order relative to the base rules above
+   doesn't matter. */
+.ticker-wrap.mini { max-height: 46vh; }
+.ticker.mini { min-width: 0; }
+.ticker.mini th { font-size: 8px; padding: 5px 2px; letter-spacing: 0.04em; }
+.ticker.mini td { padding: 2px 1px; }
+.ticker.mini td.team-c { padding: 3px 6px 3px 8px; font-size: 10.5px; }
+.ticker.mini td.team-c .avg { font-size: 9px; margin-left: 5px; }
+.ticker.mini .cell {
+  min-height: 20px; min-width: 20px; gap: 0; padding: 2px 1px;
+  font-size: 7px; border-radius: 3px;
+}
+.ticker.mini .cell .ha { font-size: 5.5px; }
+.ticker.mini .cell.blank { font-size: 0; } /* "blank" text doesn't fit at this size - the hatching alone reads fine */
+
 /* Fixture chip: a shrunk .cell for cards and table cells - same difficulty
    colours, small enough to sit five-in-a-row next to a player. */
 .fxc {
@@ -1154,6 +1173,11 @@ textarea::placeholder { color: var(--muted-2); }
 .slot-meta { font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
 .slot-stats { display: flex; gap: 6px; font-size: 9px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
 .slot-fx { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 6px; }
+/* The completed lineup shows one chip - this gameweek's actual opponent -
+   instead of the next-5 row the building phase shows, so it can afford to
+   run twice as wide as the shared .fxc default, making the team you're
+   actually up against easier to read at a glance. */
+.slot-fx-current .fxc { width: 48px; }
 .slot-cap { display: flex; gap: 4px; margin-top: 6px; }
 .slot-cap .mini {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
@@ -1239,6 +1263,9 @@ textarea::placeholder { color: var(--muted-2); }
 .slot[data-lineup]:hover { border-color: var(--gold-deep); }
 .slot.bench { opacity: 0.65; }
 .slot.selected { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); opacity: 1; }
+
+/* ---------------- Full-season fixture reference (Planner) ---------------- */
+.season-ticker { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }
 
 /* ---------------- Branching (compare two squads) ---------------- */
 .compare-section { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }

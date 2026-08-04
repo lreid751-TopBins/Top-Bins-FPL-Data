@@ -1215,6 +1215,47 @@ check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
   return `defaulted to GW${S.nextGw}, moved forward, chips updated`;
 });
 
+check("the Starting XI's current-opponent chip is wider than the browse-list fixture chips", () => {
+  // jsdom doesn't apply external stylesheets, so this is a check on the raw
+  // CSS text - the current-gameweek chip on a lineup slot gets its own
+  // wider .fxc override, while the browse/table "Next 5" chips keep the
+  // shared default size.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  if (!css.includes(".slot-fx-current .fxc { width: 48px; }")) {
+    throw new Error("lineup slot's current-opponent chip should override .fxc to a wider, more legible width");
+  }
+  renderPlanner(panel("panel-planner"));
+  const currentChip = panel("panel-planner").querySelector(".slot[data-lineup] .slot-fx-current");
+  if (!currentChip) throw new Error("lineup slots should mark their fixture chip with slot-fx-current");
+  return "current-opponent chip carries the wider .slot-fx-current class and CSS override";
+});
+
+check("Planner shows a compact full-season fixture ticker below the team", () => {
+  renderPlanner(panel("panel-planner"));
+  const ticker = panel("panel-planner").querySelector(".season-ticker");
+  if (!ticker) throw new Error("no full-season fixture ticker rendered in the Planner");
+
+  const headers = [...ticker.querySelectorAll("thead th")].map((h) => h.textContent.trim());
+  if (headers[0] !== "Team") throw new Error("first ticker column should be Team");
+  if (headers.length !== 39) throw new Error(`expected Team + 38 gameweek columns (39), got ${headers.length}`);
+  if (headers[1] !== "1" || headers[38] !== "38") {
+    throw new Error(`expected gameweek columns 1..38, got ${headers[1]}..${headers[headers.length - 1]}`);
+  }
+
+  const rows = ticker.querySelectorAll("tbody tr");
+  if (rows.length !== S.teamList.length) {
+    throw new Error(`expected one row per team (${S.teamList.length}), got ${rows.length}`);
+  }
+  const firstRowCells = rows[0].querySelectorAll("td");
+  if (firstRowCells.length !== 39) throw new Error(`expected 38 fixture cells + team cell per row, got ${firstRowCells.length}`);
+
+  // It must sit inside .col-team, below the pitch, not off in the search column.
+  const colTeam = panel("panel-planner").querySelector(".col-team");
+  if (!colTeam.contains(ticker)) throw new Error("season ticker should live in the team column, below the pitch");
+
+  return `${rows.length} teams x 38 gameweeks rendered in the compact ticker`;
+});
+
 check("add-player row sits above the squad, with a full browse-by-position list", () => {
   PL.browsePos = null;
   renderPlanner(panel("panel-planner"));
