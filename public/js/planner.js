@@ -51,6 +51,7 @@ export const PL = {
   browseSort: { k: "total_points", dir: -1 }, // sort applied to the browse list
   browseMinPoints: 0,   // browse list filter: minimum total points
   browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
+  searchCollapsed: false, // whether the search/analysis column is slid out of view
 };
 
 export function blankDraft() {

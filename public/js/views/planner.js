@@ -1,7 +1,7 @@
 import { S, f1, f2 } from "../store.js";
 import {
   PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
-  draftPlayers, countByPosition, spend, budgetLeft, canAdd, addPlayer,
+  draftPlayers, spend, canAdd, addPlayer,
   removePlayer, isComplete, needed, squadTotals,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
   branchSquad, setCompare, compareTotals, transferLogDraft,
@@ -31,8 +31,6 @@ export function renderPlanner(root) {
   }
 
   const totals = squadTotals();
-  const pos = countByPosition();
-  const left = budgetLeft();
   const complete = isComplete();
 
   root.innerHTML = `
@@ -47,17 +45,18 @@ export function renderPlanner(root) {
 
     ${savedSquadsBar()}
 
-    <div class="planner-grid">
-      <div class="planner-build">
-        ${draftHeader()}
+    <div class="planner-layout ${PL.searchCollapsed ? "collapsed" : ""}" id="plannerLayout">
+      <button class="panel-toggle" id="panelToggle"
+        aria-label="${PL.searchCollapsed ? "Show the search panel" : "Hide the search panel"}"
+        aria-expanded="${String(!PL.searchCollapsed)}">${PL.searchCollapsed ? "›" : "‹"}</button>
+      <div class="col-search">
         ${addRow()}
-        ${budgetBar(left)}
-        ${squadSection()}
-        ${lineupSection(complete)}
-      </div>
-      <aside class="planner-side">
         ${totalsPanel(totals, complete)}
-      </aside>
+      </div>
+      <div class="col-team">
+        ${draftHeader()}
+        ${teamSection(complete)}
+      </div>
     </div>
 
     ${compareSection()}
@@ -109,19 +108,80 @@ function budgetBar(left) {
   </div>`;
 }
 
-/* ---------------- Squad list: cards (jerseys) or table (dense stats) ---------------- */
-function squadSection() {
+/* ---------------- Team: one pitch, not a squad list plus a separate lineup ----------------
+   Below 15 players there's no legal formation yet, so this shows every
+   position's full quota with gaps to fill in - same as the old squad list,
+   just under the pitch treatment. Once the squad is complete, it becomes the
+   real starting XI (formation rows + bench), gameweek-navigable, with
+   captain/vice right on the cards - what used to be a separate "Starting
+   XI" section below this one. */
+function teamSection(complete) {
   return `<div class="squad-section-head">
-    <span class="hint">Squad</span>
+    <span class="hint">Your team</span>
     <div class="seg" role="group" aria-label="Squad view">
       <button data-squadview="cards" ${PL.squadView === "cards" ? 'aria-pressed="true"' : ""}>Cards</button>
       <button data-squadview="table" ${PL.squadView === "table" ? 'aria-pressed="true"' : ""}>Table</button>
     </div>
   </div>
-  ${PL.squadView === "table" ? squadTable() : squadCards()}`;
+  ${PL.squadView === "table" ? squadTable() : pitchView(complete)}`;
 }
 
-function squadCards() {
+function pitchWrap(inner) {
+  return `<div class="pitch-stand"><div class="squad-pitch">${inner}</div></div>`;
+}
+
+function pitchView(complete) {
+  if (!complete) {
+    return `
+      <p class="hint" style="margin-bottom:10px">Complete your 15 to set a lineup and step through gameweeks.</p>
+      ${pitchWrap(buildingRows())}
+    `;
+  }
+
+  const valid = isValidLineup();
+  const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
+  startingPlayers().forEach((p) => byPos[p.pos].push(p));
+  const bench = benchPlayers();
+
+  // Defaults to the next gameweek the first time this renders; after that,
+  // whatever gameweek the arrows landed on sticks.
+  if (PL.lineupGw == null) PL.lineupGw = S.nextGw || 1;
+  const gw = Math.min(TOTAL_GWS, Math.max(1, PL.lineupGw));
+
+  return `
+    <div class="lineup-head">
+      <span class="hint mono">${formationLabel()}</span>
+      <div class="gw-nav">
+        <button class="gw-nav-btn" data-gwnav="-1" ${gw <= 1 ? "disabled" : ""} aria-label="Previous gameweek">◀</button>
+        <span class="gw-nav-label mono">GW${gw}</span>
+        <button class="gw-nav-btn" data-gwnav="1" ${gw >= TOTAL_GWS ? "disabled" : ""} aria-label="Next gameweek">▶</button>
+      </div>
+    </div>
+    <p class="hint" style="margin:-4px 0 10px">Showing who each starter faces in GW${gw} - step through any gameweek this season.</p>
+    ${
+      valid
+        ? ""
+        : `<p class="totals-need">Formation isn't legal — click a bench player, then a starter, to swap them.</p>`
+    }
+    ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
+    ${pitchWrap(`
+      <div class="pos-rows">
+        ${POSITION_ORDER.map((posKey) => `<div class="pos-row">
+          <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
+            <span class="hint">${byPos[posKey].length}</span></div>
+          <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>
+        </div>`).join("")}
+      </div>
+      <div class="pos-row lineup-bench">
+        <div class="pos-label"><span class="hint">Bench</span></div>
+        <div class="slot-strip">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
+      </div>
+    `)}
+    <p class="hint">Click a player, then click one from the other side to swap them. Captain and vice can only be a starter.</p>
+  `;
+}
+
+function buildingRows() {
   const byPos = {};
   POSITION_ORDER.forEach((k) => (byPos[k] = []));
   draftPlayers().forEach((p) => byPos[p.pos].push(p));
@@ -204,57 +264,6 @@ function emptySlot(posKey) {
   return `<div class="slot empty" data-addpos="${posKey}" tabindex="0" role="button" aria-label="Add a ${posKey}">
     <div class="slot-plus">+</div>
     <div class="slot-meta">${posKey}</div>
-  </div>`;
-}
-
-/* ---------------- Starting XI (lineup layer) ---------------- */
-function lineupSection(complete) {
-  if (!complete) {
-    return `<div class="lineup-section">
-      <div class="lineup-head"><span class="anton">Starting XI</span></div>
-      <p class="hint">Complete your 15 to set a lineup.</p>
-    </div>`;
-  }
-
-  const valid = isValidLineup();
-  const byPos = { GKP: [], DEF: [], MID: [], FWD: [] };
-  startingPlayers().forEach((p) => byPos[p.pos].push(p));
-  const bench = benchPlayers();
-
-  // Defaults to the next gameweek the first time this renders; after that,
-  // whatever gameweek the arrows landed on sticks.
-  if (PL.lineupGw == null) PL.lineupGw = S.nextGw || 1;
-  const gw = Math.min(TOTAL_GWS, Math.max(1, PL.lineupGw));
-
-  return `<div class="lineup-section">
-    <div class="lineup-head">
-      <span class="anton">Starting XI</span>
-      <span class="hint mono">${formationLabel()}</span>
-      <div class="gw-nav">
-        <button class="gw-nav-btn" data-gwnav="-1" ${gw <= 1 ? "disabled" : ""} aria-label="Previous gameweek">◀</button>
-        <span class="gw-nav-label mono">GW${gw}</span>
-        <button class="gw-nav-btn" data-gwnav="1" ${gw >= TOTAL_GWS ? "disabled" : ""} aria-label="Next gameweek">▶</button>
-      </div>
-    </div>
-    <p class="hint" style="margin:-4px 0 10px">Showing who each player faces in GW${gw} - step through any gameweek this season.</p>
-    ${
-      valid
-        ? ""
-        : `<p class="totals-need">Formation isn't legal — click a bench player, then a starter, to swap them.</p>`
-    }
-    ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
-    <div class="pos-rows">
-      ${POSITION_ORDER.map((posKey) => `<div class="pos-row">
-        <div class="pos-label"><span class="pos-chip pos-${posKey}">${posKey}</span>
-          <span class="hint">${byPos[posKey].length}</span></div>
-        <div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>
-      </div>`).join("")}
-    </div>
-    <div class="pos-row lineup-bench">
-      <div class="pos-label"><span class="hint">Bench</span></div>
-      <div class="slot-strip">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
-    </div>
-    <p class="hint">Click a player, then click one from the other side to swap them. Captain and vice can only be a starter.</p>
   </div>`;
 }
 
@@ -416,10 +425,7 @@ function totalsPanel(t, complete) {
     </div>
 
     <div class="totals-foot">
-      <div class="budget-line" style="font-size:12px">
-        <span>Spent £${f1(t.spend)}</span>
-        <span class="${t.left < 0 ? "neg" : "pos"}">£${f1(t.left)} left</span>
-      </div>
+      ${budgetBar(t.left)}
     </div>
 
     <button class="btn primary" id="plSave" style="width:100%;margin-top:12px" ${PL.saving ? "disabled" : ""}>
@@ -567,19 +573,35 @@ function wire(root, rerender) {
   });
 
   // Empty slot click → jump to the browse panel already filtered to that
-  // position, since the search/browse row now lives at the top of the
-  // column, above the squad it's filling in. These are divs, not buttons
-  // (they hold no single semantic role beyond "activate"), so Enter/Space
-  // needs wiring by hand alongside the tabindex that makes them reachable.
+  // position, since the search/browse row now lives in its own column
+  // beside the team instead of above it. These are divs, not buttons (they
+  // hold no single semantic role beyond "activate"), so Enter/Space needs
+  // wiring by hand alongside the tabindex that makes them reachable.
   $$("[data-addpos]", root).forEach((s) => {
     const go = () => {
       PL.browsePos = s.dataset.addpos;
+      if (PL.searchCollapsed) PL.searchCollapsed = false; // slid-away panel can't be searched in
       rerender();
       $("#addRow", root)?.scrollIntoView?.({ behavior: "smooth", block: "start" });
       $("#plSearch", root)?.focus();
     };
     s.onclick = go;
     s.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  });
+
+  // Slide the search/analysis column out of the way to give the pitch the
+  // full width - a direct class toggle on the existing node (not a
+  // rerender) so the CSS transition actually plays; PL.searchCollapsed
+  // still gets updated so a later rerender (any other interaction) starts
+  // from the right state.
+  bind("#panelToggle", "onclick", () => {
+    PL.searchCollapsed = !PL.searchCollapsed;
+    const layout = $("#plannerLayout", root);
+    const toggle = $("#panelToggle", root);
+    layout.classList.toggle("collapsed", PL.searchCollapsed);
+    toggle.textContent = PL.searchCollapsed ? "›" : "‹";
+    toggle.setAttribute("aria-label", PL.searchCollapsed ? "Show the search panel" : "Hide the search panel");
+    toggle.setAttribute("aria-expanded", String(!PL.searchCollapsed));
   });
 
   // Browse-by-position tabs

@@ -1144,6 +1144,47 @@ check("add-player row sits above the squad, with a full browse-by-position list"
   return `add row above squad, ${rows.length} ${posKey} shown by default, switched to ${fwdRows.length} FWD`;
 });
 
+check("squad and Starting XI are one pitch, not two stacked sections", () => {
+  // Regression: this used to be a full squad list (15 cards) followed by a
+  // completely separate "Starting XI" pitch (another 11+4 cards) below it -
+  // once the squad is complete there should be exactly one set of 15 cards
+  // total, with captain/vice controls right there, not a duplicate list.
+  renderPlanner(panel("panel-planner"));
+  const posRowBlocks = panel("panel-planner").querySelectorAll(".pos-rows");
+  if (posRowBlocks.length !== 1) throw new Error(`expected exactly one .pos-rows block, got ${posRowBlocks.length}`);
+  const filledSlots = panel("panel-planner").querySelectorAll(".slot.filled");
+  if (filledSlots.length !== 15) throw new Error(`expected 15 filled slots total (11 starting + 4 bench), got ${filledSlots.length}`);
+  const capButtons = panel("panel-planner").querySelectorAll(".slot-cap");
+  if (!capButtons.length) throw new Error("no captain/vice controls rendered on the merged pitch");
+  const gwNav = panel("panel-planner").querySelector(".gw-nav");
+  if (!gwNav) throw new Error("no gameweek navigator on the merged pitch");
+  return `${filledSlots.length} cards in one pitch, captain/vice controls and gw-nav both present`;
+});
+
+check("the search/analysis panel can slide fully out of view", () => {
+  renderPlanner(panel("panel-planner"));
+  const layout = panel("panel-planner").querySelector("#plannerLayout");
+  const toggle = panel("panel-planner").querySelector("#panelToggle");
+  if (!layout || !toggle) throw new Error("collapsible layout or its toggle button is missing");
+  if (layout.classList.contains("collapsed")) throw new Error("panel should start expanded");
+  if (toggle.getAttribute("aria-expanded") !== "true") throw new Error("toggle should start aria-expanded=true");
+
+  toggle.click();
+  if (!layout.classList.contains("collapsed")) throw new Error("clicking the toggle should collapse the panel");
+  if (PL.searchCollapsed !== true) throw new Error("PL.searchCollapsed should track the collapsed state");
+  if (toggle.getAttribute("aria-expanded") !== "false") throw new Error("toggle should flip to aria-expanded=false");
+
+  // A later full render (any other interaction) must start from the state
+  // the toggle left it in, not silently reset back to expanded.
+  renderPlanner(panel("panel-planner"));
+  const layout2 = panel("panel-planner").querySelector("#plannerLayout");
+  if (!layout2.classList.contains("collapsed")) throw new Error("a fresh render should respect the persisted collapsed state");
+
+  panel("panel-planner").querySelector("#panelToggle").click();
+  PL.searchCollapsed = false; // reset for later tests
+  return "panel toggles collapsed/expanded and a rerender respects the persisted state";
+});
+
 check("clicking an empty slot jumps the browse list to that position", () => {
   PL.browsePos = "FWD";
   // The draft built up by earlier tests is a complete 15 - free up one GKP
@@ -1378,21 +1419,17 @@ check("squad table view shows the same 15 with a remove action", () => {
   });
 }
 
-check("mobile .slot width override survives the cascade", () => {
-  // Regression: an earlier @media(max-width:720px) .slot{width:100px} rule
-  // silently never applied, because a later, unconditional .slot{width:160px}
-  // base rule (added after it, same specificity) won on source order - jsdom
-  // doesn't apply external stylesheets, so this can't be caught with
-  // getComputedStyle; it has to be a source-order check on the raw CSS text.
+check("each position row (GKP/DEF/MID/FWD, and the bench) stays on one line", () => {
+  // Regression: .slot-strip used to allow flex-wrap, so a row that didn't
+  // fit (5 DEF, say) silently wrapped onto a second line that then blended
+  // into the position row below it. jsdom doesn't apply external
+  // stylesheets, so this has to be a check on the raw CSS text rather than
+  // getComputedStyle.
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  const baseIdx = css.indexOf("width: 160px; min-height: 156px;");
-  const mobileIdx = css.indexOf(".slot { width: 140px; min-height: 148px; }");
-  if (baseIdx === -1) throw new Error("base .slot rule not found - did it move or get renamed?");
-  if (mobileIdx === -1) throw new Error("mobile .slot override not found - did it move or get renamed?");
-  if (mobileIdx < baseIdx) {
-    throw new Error("mobile .slot override appears before the base rule - it will lose the cascade tie again");
+  if (!css.includes("flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto;")) {
+    throw new Error(".slot-strip must never wrap - a row that doesn't fit should scroll sideways, not spill onto a second line");
   }
-  return "mobile override correctly comes after the base rule";
+  return "slot-strip is nowrap with a horizontal-scroll fallback, not wrap";
 });
 
 check("table zebra striping comes before the hover rule in the cascade", () => {

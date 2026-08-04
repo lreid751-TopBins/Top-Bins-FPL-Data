@@ -994,11 +994,30 @@ textarea::placeholder { color: var(--muted-2); }
 .sp-flag.pen {
   background: var(--gold); color: var(--ink); border-color: var(--gold);
 }
+
+/* =========================================================
    Squad Planner
    ========================================================= */
-.planner-grid {
-  display: grid; grid-template-columns: 1fr 300px; gap: 16px; align-items: start;
+/* Search/analysis (~29%) and the team itself (~71%) side by side, with the
+   search column able to slide fully out of view so the pitch can take the
+   whole width - "pick the team, then look forward through gameweeks" is
+   the point, search is a tool you dip into, not something that has to sit
+   on screen permanently. */
+.planner-layout {
+  display: flex; align-items: flex-start; gap: 20px; position: relative;
+  transition: gap 0.32s ease;
 }
+.planner-layout.collapsed { gap: 0; }
+@media (max-width: 900px) { .planner-layout { flex-direction: column; } }
+
+.col-search {
+  display: flex; flex-direction: column; gap: 16px; position: sticky; top: 16px;
+  flex: 0 0 29%; max-width: 29%; overflow: hidden;
+  transition: flex-basis 0.32s ease, max-width 0.32s ease, opacity 0.25s ease;
+}
+.planner-layout.collapsed .col-search { flex-basis: 0; max-width: 0; opacity: 0; pointer-events: none; }
+@media (max-width: 900px) { .col-search { flex-basis: auto; max-width: none; position: static; } }
+
 /* Editing (the squad you're building) and analysis (what it projects to)
    are two different mental modes on one screen. No background fill here -
    the slots/tables/chart-box children inside already use --panel/--panel-2
@@ -1006,10 +1025,27 @@ textarea::placeholder { color: var(--muted-2); }
    them out. A border-only boundary instead: an open, outlined workspace
    that reads as one zone, set against .totals-card's solid, sealed-report
    treatment on the analysis side. */
-.planner-build {
+.col-team {
+  flex: 1 1 0%; min-width: 0;
   border: 1px solid var(--line); border-radius: 12px; padding: 16px;
 }
-@media (max-width: 900px) { .planner-grid { grid-template-columns: 1fr; } }
+
+/* Slide-out handle: sits in the gap between the two columns and tracks it
+   as the panel collapses, so it always reads as the control for that
+   column rather than a fixed page element. */
+.panel-toggle {
+  position: absolute; top: 50%; left: calc(29% + 10px); transform: translateY(-50%);
+  width: 22px; height: 56px; border-radius: 8px; z-index: 5;
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--gold);
+  font-size: 13px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: left 0.32s ease, background 0.15s ease;
+}
+.panel-toggle:hover { background: var(--raise); }
+.planner-layout.collapsed .panel-toggle { left: -6px; }
+@media (max-width: 900px) { .panel-toggle { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .planner-layout, .col-search, .panel-toggle { transition: none; }
+}
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 
 /* Saved-squad tabs */
@@ -1045,13 +1081,20 @@ textarea::placeholder { color: var(--muted-2); }
 .squad-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
 /* Position rows + slots */
-.pos-rows { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; }
-.pos-row { display: grid; grid-template-columns: 64px 1fr; gap: 10px; align-items: start; }
+.pos-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+.pos-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
-.slot-strip { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+/* Each position is its own line, always - DEF/MID/FWD must never wrap onto
+   a second row, since a wrapped row silently blends into whichever
+   position sits below it. flex-shrink lets cards narrow under real
+   pressure; overflow-x is the last-resort safety net if even the smallest
+   cards still don't fit, so a row scrolls sideways rather than ever
+   wraps. min-width:0 lets this shrink below its grid track's content size. */
+.slot-strip { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
 .slot {
-  width: 160px; min-height: 156px; border-radius: 10px; border: 1px solid var(--line);
-  background: var(--panel); padding: 8px; position: relative; display: flex;
+  width: 104px; flex: 0 1 104px; min-width: 78px; min-height: 128px;
+  border-radius: 10px; border: 1px solid var(--line);
+  background: var(--panel); padding: 7px; position: relative; display: flex;
   flex-direction: column; align-items: center; text-align: center;
 }
 .slot.empty {
@@ -1062,52 +1105,46 @@ textarea::placeholder { color: var(--muted-2); }
    button:focus-visible rule - reachable via tabindex, but still need their
    own visible ring. */
 .slot[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.slot-plus { font-size: 26px; line-height: 1; }
-.slot-top { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 16px; }
-.slot-x { background: transparent; border: none; color: var(--muted); font-size: 15px; line-height: 1; padding: 0; }
+.slot-plus { font-size: 22px; line-height: 1; }
+.slot-top { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 15px; }
+.slot-x { background: transparent; border: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 0; }
 .slot-x:hover { color: var(--neg); }
-.cap-badge { font-size: 9px; font-weight: 700; border-radius: 10px; padding: 1px 6px; }
+.cap-badge { font-size: 8.5px; font-weight: 700; border-radius: 10px; padding: 1px 5px; }
 .cap-badge.c { background: var(--gold); color: var(--ink); }
 .cap-badge.v { background: var(--raise); color: var(--gold); border: 1px solid var(--line); }
-.slot-jersey { width: 46px; height: auto; margin: 2px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
-.slot-name { font-size: 12px; font-weight: 600; line-height: 1.1; margin-top: 4px;
+.slot-jersey { width: 36px; height: auto; margin: 2px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.slot-name { font-size: 11px; font-weight: 600; line-height: 1.1; margin-top: 3px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.slot-meta { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
-.slot-stats { display: flex; gap: 6px; font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
-.slot-fx { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 6px; }
-.slot-cap { display: flex; gap: 4px; margin-top: 6px; }
+.slot-meta { font-size: 9px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
+.slot-stats { display: flex; gap: 5px; font-size: 8.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 3px; }
+.slot-fx { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 5px; }
+.slot-cap { display: flex; gap: 3px; margin-top: 5px; }
 .slot-cap .mini {
   background: transparent; border: 1px solid var(--line); color: var(--muted);
-  border-radius: 6px; font-size: 10px; font-weight: 700; padding: 2px 7px;
+  border-radius: 6px; font-size: 9px; font-weight: 700; padding: 2px 6px;
 }
 .slot-cap .mini.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 
 /* Squad/lineup cards on narrow screens: the position label moves above the
-   strip instead of eating a fixed 64px column beside it, and the cards
-   themselves shrink - together that's the difference between one huge card
-   per row and two readable ones. This has to come after the rules above:
-   an earlier .slot{width:100px} in the global responsive block used to lose
-   this exact fight, same specificity, earlier in the file, so it silently
-   never applied. */
+   strip instead of eating a fixed column beside it. */
 @media (max-width: 720px) {
   .pos-row { grid-template-columns: 1fr; }
   .pos-label { flex-direction: row; align-items: center; gap: 8px; padding-top: 0; }
   .slot-strip { justify-content: flex-start; }
-  .slot { width: 140px; min-height: 148px; }
-  .slot-jersey { width: 38px; }
 }
 
-/* Add row: search + browse-by-position, pinned to the top of the build column */
+/* Add row: search + browse-by-position, at the top of the search column */
 .add-row { margin-bottom: 16px; }
 .add-row-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
 .add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
 .twrap.browse-wrap { max-height: 320px; }
 .browse-wrap .btn { padding: 5px 9px; font-size: 12px; }
 
-/* Totals panel */
+/* Totals panel - stickiness now lives on .col-search itself, which holds
+   this alongside the search/browse panel above it. */
 .totals-card {
   border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2);
-  padding: 14px; position: sticky; top: 88px;
+  padding: 14px;
 }
 .totals-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .totals-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
@@ -1134,8 +1171,7 @@ textarea::placeholder { color: var(--muted-2); }
 }
 .proj-note { font-size: 10.5px; color: var(--muted-2); margin: 0 0 12px; line-height: 1.4; }
 
-/* ---------------- Starting XI (lineup layer) ---------------- */
-.lineup-section { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--line-soft); }
+/* ---------------- Team pitch header (gw-nav, formation) ---------------- */
 .lineup-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
 .lineup-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
 .lineup-bench { margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
