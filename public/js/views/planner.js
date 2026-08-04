@@ -8,7 +8,7 @@ import {
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
-import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint } from "../ui.js";
+import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint, teamCrest } from "../ui.js";
 import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
@@ -77,22 +77,38 @@ export function renderPlanner(root) {
   wire(root, rerender);
 }
 
-/* ---------------- Saved squads selector ---------------- */
+/* ---------------- Saved squads selector ----------------
+   Tucked behind a single toggle rather than a permanently-open row - the
+   list itself is only interesting once you have more than one squad to
+   flip between, and keeping it collapsed by default leaves the team pitch
+   sitting higher up the page instead of pushed down under it. */
 function savedSquadsBar() {
   if (!PL.squads.length) {
     return `<p class="hint" style="margin-bottom:14px">No saved squads yet. Build one below and save it — you can keep several side by side to compare.</p>`;
   }
-  return `<div class="squad-tabs">
-    ${PL.squads
-      .map(
-        (sq) => `<button class="squad-tab ${sq.id === PL.activeId ? "on" : ""}" data-load="${sq.id}">
-          <span class="st-name">${esc(sq.name)}</span>
-          <span class="st-meta">${sq.picks.length}/15</span>
-          <span class="st-branch" data-branch="${sq.id}" title="Branch: clone this squad to try a swap against it">⑂</span>
-          <span class="st-x" data-del="${sq.id}" title="Delete" role="button">×</span>
-        </button>`
-      )
-      .join("")}
+  const activeSquad = PL.squads.find((sq) => sq.id === PL.activeId);
+  return `<div class="saved-squads">
+    <button class="saved-squads-toggle" id="savedSquadsToggle" aria-expanded="${String(PL.savedSquadsOpen)}">
+      <span class="saved-squads-caret">${PL.savedSquadsOpen ? "▾" : "▸"}</span>
+      <span>Saved squads (${PL.squads.length})</span>
+      ${activeSquad ? `<span class="hint">viewing ${esc(activeSquad.name)}</span>` : ""}
+    </button>
+    ${
+      PL.savedSquadsOpen
+        ? `<div class="squad-tabs">
+      ${PL.squads
+        .map(
+          (sq) => `<button class="squad-tab ${sq.id === PL.activeId ? "on" : ""}" data-load="${sq.id}">
+            <span class="st-name">${esc(sq.name)}</span>
+            <span class="st-meta">${sq.picks.length}/15</span>
+            <span class="st-branch" data-branch="${sq.id}" title="Branch: clone this squad to try a swap against it">⑂</span>
+            <span class="st-x" data-del="${sq.id}" title="Delete" role="button">×</span>
+          </button>`
+        )
+        .join("")}
+    </div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -147,16 +163,28 @@ function teamSection(complete) {
    rest of the Planner's fixture colouring already use. */
 function seasonTicker() {
   const mode = S.ui.fdrMode;
+  const focus = S.ui.fdrFocus;
   const gws = [];
   for (let g = 1; g <= TOTAL_GWS; g++) gws.push(g);
-  const rows = S.teamList
+  const allRows = S.teamList
     .map((t) => ({ team: t, avg: runDifficulty(t.id, TOTAL_GWS, mode, 1), fixtures: upcoming(t.id, TOTAL_GWS, 1) }))
     .sort((a, b) => a.team.name.localeCompare(b.team.name));
+  const rows = focus.size ? allRows.filter((r) => focus.has(r.team.id)) : allRows;
 
   return `<div class="season-ticker">
     <div class="lineup-head">
       <span class="anton">Full-season fixtures</span>
       <span class="hint">GW1–${TOTAL_GWS}</span>
+    </div>
+    <div class="team-focus-row mini">
+      ${S.teamList
+        .map(
+          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-seasonfocus="${t.id}">
+            ${teamCrest(t.id, 14)}<span>${esc(t.short)}</span>
+          </button>`
+        )
+        .join("")}
+      ${focus.size ? `<button class="team-focus-clear" data-seasonfocus-clear>Clear focus (${focus.size})</button>` : ""}
     </div>
     <div class="ticker-wrap mini">
       <table class="ticker mini">
@@ -172,8 +200,20 @@ function seasonTicker() {
   </div>`;
 }
 
+// Same painted pitch markings My Team's pitch already uses (.pitch-lines and
+// its CSS both already exist) - just wasn't in the Planner's own pitch
+// markup yet, so the two pitches read as two different backgrounds.
+const PITCH_LINES = `<div class="pitch-lines" aria-hidden="true">
+  <span class="pl-touch"></span>
+  <span class="pl-goal"></span>
+  <span class="pl-six"></span>
+  <span class="pl-box"></span>
+  <span class="pl-half"></span>
+  <span class="pl-circle"></span>
+</div>`;
+
 function pitchWrap(inner) {
-  return `<div class="pitch-stand"><div class="squad-pitch">${inner}</div></div>`;
+  return `<div class="pitch-stand"><div class="squad-pitch">${PITCH_LINES}${inner}</div></div>`;
 }
 
 function pitchView(complete) {
@@ -624,6 +664,11 @@ function wire(root, rerender) {
   bind("#plName", "oninput", (e) => { PL.draft.name = e.target.value; });
   bind("#plNote", "oninput", (e) => { PL.draft.note = e.target.value; });
 
+  bind("#savedSquadsToggle", "onclick", () => {
+    PL.savedSquadsOpen = !PL.savedSquadsOpen;
+    rerender();
+  });
+
   $$("[data-squadview]", root).forEach((b) => {
     b.onclick = () => { PL.squadView = b.dataset.squadview; rerender(); };
   });
@@ -633,7 +678,11 @@ function wire(root, rerender) {
     b.onclick = (e) => {
       if (e.target.closest("[data-del]") || e.target.closest("[data-branch]")) return;
       const sq = PL.squads.find((s) => s.id === b.dataset.load);
-      if (sq) { loadIntoDraft(sq); rerender(); }
+      if (sq) {
+        loadIntoDraft(sq);
+        PL.savedSquadsOpen = false; // collapse back once a squad's actually been picked
+        rerender();
+      }
     };
   });
   $$("[data-branch]", root).forEach((x) => {
@@ -789,6 +838,22 @@ function wire(root, rerender) {
   });
   bind("#plBrowseSortDir", "onclick", () => {
     PL.browseSort.dir = -PL.browseSort.dir;
+    rerender();
+  });
+
+  // Full-season ticker's team-focus filter - same S.ui.fdrFocus set the
+  // Fixture Ticker tab uses, so narrowing down to a few clubs there or here
+  // stays in sync rather than being two separate filters to keep straight.
+  $$("[data-seasonfocus]", root).forEach((b) => {
+    b.onclick = () => {
+      const id = +b.dataset.seasonfocus;
+      if (S.ui.fdrFocus.has(id)) S.ui.fdrFocus.delete(id);
+      else S.ui.fdrFocus.add(id);
+      rerender();
+    };
+  });
+  bind("[data-seasonfocus-clear]", "onclick", () => {
+    S.ui.fdrFocus.clear();
     rerender();
   });
 

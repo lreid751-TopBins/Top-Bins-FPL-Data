@@ -1256,6 +1256,82 @@ check("Planner shows a compact full-season fixture ticker below the team", () =>
   return `${rows.length} teams x 38 gameweeks rendered in the compact ticker`;
 });
 
+check("full-season ticker can be filtered down to specific teams, same as the Fixture Ticker tab", () => {
+  const savedFocus = new Set(S.ui.fdrFocus);
+  S.ui.fdrFocus.clear();
+  renderPlanner(panel("panel-planner"));
+
+  const tags = [...panel("panel-planner").querySelectorAll(".team-focus-row.mini [data-seasonfocus]")];
+  if (!tags.length) throw new Error("no team-focus filter rendered on the full-season ticker");
+  const liverpool = S.teamList.find((t) => t.name === "Liverpool") || S.teamList[0];
+  const tag = tags.find((t) => +t.dataset.seasonfocus === liverpool.id);
+  tag.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+  if (!S.ui.fdrFocus.has(liverpool.id)) throw new Error("clicking a team tag should add it to S.ui.fdrFocus");
+  const rows = panel("panel-planner").querySelectorAll(".season-ticker tbody tr");
+  if (rows.length !== 1) throw new Error(`expected the ticker to narrow to 1 team, got ${rows.length}`);
+  if (!rows[0].querySelector(".team-c-name").textContent.includes(liverpool.name)) {
+    throw new Error("the one remaining row should be the focused team");
+  }
+
+  const clear = panel("panel-planner").querySelector("[data-seasonfocus-clear]");
+  clear.click();
+  if (S.ui.fdrFocus.size) throw new Error("clear-focus button should empty S.ui.fdrFocus");
+
+  S.ui.fdrFocus.clear();
+  savedFocus.forEach((id) => S.ui.fdrFocus.add(id));
+  renderPlanner(panel("panel-planner"));
+  return "team-focus filter narrows the ticker to one team and clears back to all";
+});
+
+check("saved squads sit behind a collapsed toggle, and the team pitch has painted lines and a goal", () => {
+  const savedDraft = PL.draft;
+  const savedActive = PL.activeId;
+  const wasOpen = PL.savedSquadsOpen;
+  PL.savedSquadsOpen = false;
+  renderPlanner(panel("panel-planner"));
+
+  if (PL.squads.length) {
+    const toggle = panel("panel-planner").querySelector("#savedSquadsToggle");
+    if (!toggle) throw new Error("no saved-squads toggle rendered despite having saved squads");
+    if (panel("panel-planner").querySelector(".squad-tabs")) {
+      throw new Error("squad tabs should be hidden until the toggle is clicked");
+    }
+    toggle.click();
+    if (!panel("panel-planner").querySelector(".squad-tabs")) {
+      throw new Error("clicking the toggle should reveal the saved-squad tabs");
+    }
+    PL.savedSquadsOpen = false;
+  }
+
+  // Same painted-pitch markup My Team already uses, now on the Planner's pitch too.
+  const pitchLines = panel("panel-planner").querySelector(".squad-pitch .pitch-lines");
+  if (!pitchLines) throw new Error("Planner pitch is missing the pitch-lines markings");
+  if (!pitchLines.querySelector(".pl-goal")) throw new Error("Planner pitch is missing a goal line");
+  if (!pitchLines.querySelector(".pl-circle")) throw new Error("Planner pitch is missing the centre circle");
+
+  PL.draft = savedDraft;
+  PL.activeId = savedActive;
+  PL.savedSquadsOpen = wasOpen;
+  renderPlanner(panel("panel-planner"));
+  return "saved squads collapsed by default and expand on click; pitch shows painted lines and a goal";
+});
+
+check("squad cards are sized to fit a full 5-wide row without scrolling at typical widths", () => {
+  // jsdom doesn't apply external stylesheets or lay out flex children by
+  // real pixel widths, so this is a check on the raw CSS text - confirms
+  // the card width/gap were actually brought down, not just the comment
+  // above them.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  if (!css.includes(".slot-strip { display: flex; gap: 10px;")) {
+    throw new Error("slot-strip gap should be 10px, tighter than before, to help a 5-wide row fit");
+  }
+  if (!css.includes("width: 108px; flex: 0 1 108px; min-width: 82px;")) {
+    throw new Error(".slot should be sized down from its old 130px/96px so more cards fit per row");
+  }
+  return "slot-strip gap and .slot width brought down to fit more cards per row";
+});
+
 check("add-player row sits above the squad, with a full browse-by-position list", () => {
   PL.browsePos = null;
   renderPlanner(panel("panel-planner"));
@@ -1620,9 +1696,11 @@ check("squad table view shows the same 15 with a remove action", () => {
   await saveDraft();
   check("planner persists multiple named squads", () => {
     if (PL.squads.length < before + 2) throw new Error(`expected 2 new squads, have ${PL.squads.length}`);
+    PL.savedSquadsOpen = true; // the list is collapsed behind a toggle by default
     renderPlanner(panel("panel-planner"));
     const tabs = panel("panel-planner").querySelectorAll(".squad-tab");
     if (tabs.length < 2) throw new Error("expected 2+ tabs");
+    PL.savedSquadsOpen = false;
     return `${tabs.length} squads side by side`;
   });
 }

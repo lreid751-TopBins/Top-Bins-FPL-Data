@@ -54,6 +54,7 @@ export const PL = {
   browseTeam: "",        // browse list filter: team id, "" = all teams
   searchCollapsed: false, // whether the search/analysis column is slid out of view
   searchWidthPct: 29,     // width of the search/analysis column, user-adjustable by dragging
+  savedSquadsOpen: false, // whether the saved-squads list is expanded below its tab
 };
 
 export function blankDraft() {

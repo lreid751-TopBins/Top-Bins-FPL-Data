@@ -457,6 +457,11 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   text-decoration: underline; cursor: pointer; padding: 4px 2px; font-family: inherit;
 }
 .team-focus-clear:hover { color: var(--gold); }
+/* Compact variant for the full-season ticker - same filter, smaller footprint
+   to match the rest of that panel. */
+.team-focus-row.mini { gap: 4px; margin-bottom: 10px; }
+.team-focus-row.mini .team-focus-tag { padding: 2px 8px 2px 5px; font-size: 10.5px; }
+.team-focus-row.mini .team-focus-clear { font-size: 10px; }
 
 /* Club colour theme picker - same pill language as the team-focus filter above. */
 .theme-picker { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -1088,7 +1093,18 @@ textarea::placeholder { color: var(--muted-2); }
 }
 @media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
 
-/* Saved-squad tabs */
+/* Saved-squad tabs - collapsed behind a single toggle by default so the
+   team pitch below sits higher up the page instead of under a permanently-
+   open row. */
+.saved-squads { margin-bottom: 16px; }
+.saved-squads-toggle {
+  display: flex; align-items: center; gap: 8px; background: transparent; border: none;
+  color: var(--chalk); font-size: 13px; font-weight: 600; padding: 4px 0; cursor: pointer;
+}
+.saved-squads-toggle .hint { font-weight: 400; margin-left: 2px; }
+.saved-squads-caret { color: var(--muted); font-size: 11px; width: 10px; display: inline-block; }
+.saved-squads .squad-tabs { margin: 10px 0 0; }
+
 .squad-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
 .squad-tab {
   display: flex; align-items: center; gap: 8px; background: var(--panel-2);
@@ -1130,9 +1146,13 @@ textarea::placeholder { color: var(--muted-2); }
    pressure; overflow-x is the last-resort safety net if even the smallest
    cards still don't fit, so a row scrolls sideways rather than ever
    wraps. min-width:0 lets this shrink below its grid track's content size. */
-.slot-strip { display: flex; gap: 14px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
+/* Sized so a full 5-wide DEF/MID row fits without the overflow-x fallback
+   kicking in at typical panel widths - smaller than the cards' previous
+   130px so all 15 players read at a glance instead of needing to scroll a
+   row sideways to see the last one or two. */
+.slot-strip { display: flex; gap: 10px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
 .slot {
-  width: 130px; flex: 0 1 130px; min-width: 96px; min-height: 148px;
+  width: 108px; flex: 0 1 108px; min-width: 82px; min-height: 148px;
   border-radius: 10px; border: 1px solid var(--line);
   background: var(--panel); padding: 8px; position: relative; display: flex;
   flex-direction: column; align-items: center; text-align: center;
