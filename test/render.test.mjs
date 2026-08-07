@@ -106,7 +106,7 @@ const origError = console.error;
 console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
-const { S, load, runDifficulty, difficultyOf, teamResults } = await import("../public/js/store.js");
+const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub } = await import("../public/js/views/hub.js");
@@ -143,13 +143,48 @@ check("bootstrap parsed", () => {
   return `${S.players.length} players, GW${S.currentGw} current / GW${S.nextGw} next`;
 });
 
-check("per-90 maths", () => {
-  const p = S.players.find((x) => x.minutes > 500);
-  const expected = (p.xgi * 90) / p.minutes;
-  if (Math.abs(p.xgi90 - expected) > 1e-9) throw new Error("xgi90 mismatch");
-  const zero = S.players.find((x) => x.minutes === 0);
-  if (zero && !Number.isFinite(zero.xgi90)) throw new Error("divide by zero leaked");
-  return "no NaN or Infinity";
+check("per-90 rates are shrunk toward the position baseline, not raw total/minutes", () => {
+  // xg90/xa90/xgi90 are no longer a naive rate - they're blended toward
+  // their position's own (minutes-weighted) baseline, damped by how many
+  // minutes the player has actually played. Recompute that same baseline
+  // independently here rather than trust the app's own numbers back at it.
+  const pos = "FWD";
+  const pool = S.players.filter((p) => p.pos === pos && p.minutes >= 270);
+  const baseline90 = (pool.reduce((a, p) => a + p.xgi, 0) * 90) / pool.reduce((a, p) => a + p.minutes, 0);
+
+  const heavy = [...S.players].filter((p) => p.pos === pos).sort((a, b) => b.minutes - a.minutes)[0];
+  const rawRate = (heavy.xgi * 90) / heavy.minutes;
+  // A player with a big sample should barely move off their own raw rate.
+  if (Math.abs(heavy.xgi90 - rawRate) > Math.abs(baseline90 - rawRate) * 0.5 + 0.05) {
+    throw new Error(`high-minutes player shrunk too far from their own rate: raw ${rawRate}, shrunk ${heavy.xgi90}`);
+  }
+
+  const zero = S.players.find((p) => p.pos === pos && p.minutes === 0);
+  if (zero) {
+    if (!Number.isFinite(zero.xgi90)) throw new Error("divide by zero leaked");
+    // At 0 minutes there's no observed rate at all - should fall back to
+    // exactly the position baseline, not some other default.
+    if (Math.abs(zero.xgi90 - baseline90) > 1e-9) {
+      throw new Error(`0-minute player should equal the position baseline exactly, got ${zero.xgi90} vs ${baseline90}`);
+    }
+  }
+
+  const light = [...S.players].filter((p) => p.pos === pos && p.minutes > 0 && p.minutes < 100);
+  if (light.length) {
+    const p = light[0];
+    const rawLightRate = (p.xgi * 90) / p.minutes;
+    // A tiny sample should sit meaningfully closer to the baseline than to
+    // its own noisy raw rate (unless the two are already close together).
+    if (Math.abs(rawLightRate - baseline90) > 1) {
+      const distToRaw = Math.abs(p.xgi90 - rawLightRate);
+      const distToBaseline = Math.abs(p.xgi90 - baseline90);
+      if (distToRaw < distToBaseline) {
+        throw new Error("a low-minutes player's shrunk rate should lean toward the position baseline, not their own raw rate");
+      }
+    }
+  }
+
+  return `FWD baseline ${baseline90.toFixed(2)} xGI/90; high-minutes player barely shrunk, low-minutes player pulled toward it`;
 });
 
 check("fixture index handles blanks, doubles and unscheduled", () => {
@@ -298,28 +333,35 @@ check("hub prompts to connect a team before showing rank, not a crash", () => {
   return "connect prompt shown, no rank rendered";
 });
 
-check("hub captaincy shortlist matches the Planner's own projection engine", () => {
+check("hub captaincy shortlist ranks by attacking returns, not total points", () => {
   renderHub(panel("panel-hub"));
 
   const gw = S.nextGw || S.currentGw || 1;
-  const best = S.players
+  const projected = S.players
     // Same floors as captaincyWidget(): expected to start, and enough season
     // minutes that xg90/xa90 aren't a tiny, noisy sample.
     .filter((p) => p.xMin >= 60 && p.minutes >= 270)
-    .map((p) => ({ p, total: projectPlayer(p, 1, gw).total }))
-    .sort((a, b) => b.total - a.total)[0];
+    .map((p) => ({ p, ...projectPlayer(p, 1, gw) }));
+
+  const best = [...projected].sort((a, b) => b.attack - a.attack)[0];
 
   const firstVal = panel("panel-hub").querySelector(".hub-val.gold")?.textContent;
-  if (firstVal !== best.total.toFixed(1)) {
-    throw new Error(`top captaincy pick should be ${best.p.name} at ${best.total.toFixed(1)}, hub shows ${firstVal}`);
+  if (firstVal !== best.attack.toFixed(1)) {
+    throw new Error(`top captaincy pick should be ${best.p.name} at ${best.attack.toFixed(1)} (attack), hub shows ${firstVal}`);
   }
-  if (best.total > 100) {
-    throw new Error(`top captaincy pick projects ${best.total.toFixed(1)} pts in one gameweek - the small-sample-size guard isn't working`);
+  if (best.attack > 100) {
+    throw new Error(`top captaincy pick projects ${best.attack.toFixed(1)} pts in one gameweek - the small-sample-size guard isn't working`);
+  }
+  // attack must be strictly less than total for anyone expected to start -
+  // appearance points alone guarantee that gap. If they're ever equal, the
+  // widget has silently gone back to reading total instead of attack.
+  if (best.attack >= best.total) {
+    throw new Error(`attack (${best.attack}) should be less than total (${best.total}) - appearance/clean-sheet points are missing`);
   }
 
   const nav = panel("panel-hub").querySelectorAll("[data-goto]");
   if (nav.length < 2) throw new Error("expected at least 2 cross-tab nav links (fixtures, teams)");
-  return `top pick ${best.p.name} at ${firstVal}pts, ${nav.length} nav links`;
+  return `top pick ${best.p.name} at ${firstVal}pts (attack), ${nav.length} nav links`;
 });
 
 check("captaincy shortlist shows a riser/faller trend from today's net transfers", () => {
@@ -903,6 +945,62 @@ check("xMin is computed and bounded 0-90", () => {
   const injured = S.players.find((p) => ["i", "s", "u"].includes(p.status));
   if (injured && injured.xMin !== 0) throw new Error("sidelined player should have xMin 0");
   return `computed for ${S.players.length} players, all 0-90`;
+});
+
+check("xMin's no-recent-form fallback scales by how much of the season a player actually started", () => {
+  // Regression case: a real player (Bournemouth's Brooks, checked against
+  // production's live data) had 13 starts in a 38-game season but played
+  // ~91 minutes each time he did start - the old fallback (minutes/starts
+  // alone) read that as a nailed-on 90, identical to a genuine ever-present.
+  // A rotation player who's rarely picked should read as low-minutes even
+  // if he plays close to full time on the rare gameweeks he does start.
+  //
+  // Forces the pre-season case (S.currentGw = 0, falls back to a 38-game
+  // season) rather than trusting whatever gameweek the mock env happens to
+  // be on - this is the actual real-world scenario the fix targets, and
+  // the only one where "starts" safely stays below the season-games
+  // denominator for both profiles below.
+  const savedGw = S.currentGw;
+  S.currentGw = 0;
+
+  const everPresent = { minutes: 2953, starts: 34 }; // Haaland's real profile
+  const rotationOption = { minutes: 1188, starts: 13 }; // Brooks' real profile
+  const neverStarted = { minutes: 45, starts: 0 };
+
+  const everPresentXMin = startShareFallback(everPresent);
+  const expectedEverPresent = Math.min(90, 2953 / 34) * (34 / 38);
+  if (Math.abs(everPresentXMin - expectedEverPresent) > 1e-9) {
+    S.currentGw = savedGw;
+    throw new Error(`ever-present mismatch: got ${everPresentXMin}, expected ${expectedEverPresent}`);
+  }
+
+  const rotationXMin = startShareFallback(rotationOption);
+  const expectedRotation = Math.min(90, 1188 / 13) * (13 / 38);
+  if (Math.abs(rotationXMin - expectedRotation) > 1e-9) {
+    S.currentGw = savedGw;
+    throw new Error(`rotation-option mismatch: got ${rotationXMin}, expected ${expectedRotation}`);
+  }
+
+  // The actual point of the fix: a rotation player who's near-90 whenever
+  // he DOES start should still read meaningfully lower than a genuine
+  // ever-present, not the same number.
+  if (rotationXMin >= everPresentXMin) {
+    S.currentGw = savedGw;
+    throw new Error(`rotation option (${rotationXMin}) should read lower than the ever-present (${everPresentXMin})`);
+  }
+  // Pre-season, the fix should pull a genuine fringe player's minutes down
+  // substantially, not just nudge them - otherwise it's too weak to
+  // actually change who tops the captaincy shortlist.
+  if (rotationXMin > 60) {
+    S.currentGw = savedGw;
+    throw new Error(`rotation option should read as a clear rotation risk (well under 60), got ${rotationXMin}`);
+  }
+
+  const neverStartedXMin = startShareFallback(neverStarted);
+  S.currentGw = savedGw;
+  if (neverStartedXMin !== 0) throw new Error("a player with 0 starts should get 0 expected minutes");
+
+  return `ever-present ${everPresentXMin.toFixed(1)}' vs rotation option ${rotationXMin.toFixed(1)}' (pre-season, 38-game fallback)`;
 });
 
 check("xMin column and set-piece flags render", () => {

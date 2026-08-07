@@ -82,18 +82,27 @@ export function projectPlayerFixture(p, fixture) {
 /**
  * Expected points for one player across a window of gameweeks.
  * Handles blanks (no fixture → 0) and doubles (two fixtures → summed).
+ *
+ * attack is broken out alongside total specifically for captaincy-style
+ * rankings: total mixes in appearance and clean-sheet points, which gives
+ * a defender in a great fixture the same kind of "safe floor" that can
+ * crowd out a genuine goal threat with more upside but less of a guaranteed
+ * baseline. attack alone - goals and assists, fixture-adjusted - is the
+ * actual ceiling being captained for.
  */
 export function projectPlayer(p, span = 5, from = null) {
   const rows = upcoming(p.teamId, span, from);
   const perGw = rows.map((slot) => {
-    if (!slot.list.length) return { gw: slot.gw, total: 0, blank: true };
+    if (!slot.list.length) return { gw: slot.gw, total: 0, attack: 0, blank: true };
     // Double gameweek: sum both fixtures.
     const parts = slot.list.map((fx) => projectPlayerFixture(p, fx));
     const total = parts.reduce((a, x) => a + x.total, 0);
-    return { gw: slot.gw, total, blank: false, double: slot.list.length > 1 };
+    const attack = parts.reduce((a, x) => a + x.attack, 0);
+    return { gw: slot.gw, total, attack, blank: false, double: slot.list.length > 1 };
   });
   const total = perGw.reduce((a, x) => a + x.total, 0);
-  return { total, perGw };
+  const attack = perGw.reduce((a, x) => a + x.attack, 0);
+  return { total, attack, perGw };
 }
 
 /* =========================================================

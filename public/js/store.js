@@ -120,6 +120,7 @@ export async function load({ onProgress = () => {} } = {}) {
   buildTeams(boot);
   buildGameweeks(boot);
   buildPlayers(boot);
+  applyRateShrinkage();
   buildFixtureIndex(fixtures);
   buildCurrentStrength();
 
@@ -254,6 +255,60 @@ function buildPlayers(boot) {
   S.players.forEach((p) => (S.playerById[p.id] = p));
 }
 
+/**
+ * Shrinks xG90/xA90/xGI90 toward each position's own baseline rate,
+ * weighted by how many minutes a player has actually played - the same
+ * regression-to-the-mean trick a serious model always applies to a raw
+ * rate stat. Without it, two goals in 45 minutes reads identically to two
+ * goals a game over a full season, so a fringe player's small-sample spike
+ * can briefly out-rank a nailed-on elite (Haaland, Bruno Fernandes...) on
+ * pure per-90 rate - exactly what happens pre-season, when the FPL API is
+ * still serving last season's leftover totals as a placeholder until this
+ * season's real minutes accumulate, and general enough to keep guarding
+ * against the same kind of fluke all season, not just in August.
+ *
+ * SHRINK_PRIOR_MINUTES (270 = three full matches) reuses the "minimum
+ * trustworthy sample" bar the site already applies elsewhere (Player
+ * Finder's default filter, the Hub's Best Performers panel) - here as a
+ * smooth blend instead of a hard cutoff. A player with a genuine
+ * multi-game sample is barely touched; a player with a handful of minutes
+ * leans heavily on the position average until they've proven otherwise.
+ */
+const SHRINK_PRIOR_MINUTES = 270;
+
+/** Pooled (minutes-weighted) rate for one position - not a naive average
+    of individual per-90 rates, which would just reintroduce the same
+    small-sample noise into the baseline it's meant to correct for. */
+function positionBaseline90(players, pos, totalKey, minMinutes = SHRINK_PRIOR_MINUTES) {
+  const qualified = players.filter((p) => p.pos === pos && p.minutes >= minMinutes);
+  const pool = qualified.length ? qualified : players.filter((p) => p.pos === pos && p.minutes > 0);
+  const totalStat = pool.reduce((a, p) => a + p[totalKey], 0);
+  const totalMins = pool.reduce((a, p) => a + p.minutes, 0);
+  return totalMins > 0 ? (totalStat * 90) / totalMins : 0;
+}
+
+/** Blends a player's own rate with the position baseline, weighted by
+    minutes vs. the prior - at 0 minutes this returns exactly the baseline;
+    with minutes >> priorMinutes it converges on the player's raw rate. */
+function shrink90(totalStat, minutes, baseline90, priorMinutes = SHRINK_PRIOR_MINUTES) {
+  return (totalStat * 90 + baseline90 * priorMinutes) / (minutes + priorMinutes);
+}
+
+function applyRateShrinkage() {
+  ["GKP", "DEF", "MID", "FWD"].forEach((pos) => {
+    const baseXg = positionBaseline90(S.players, pos, "xg");
+    const baseXa = positionBaseline90(S.players, pos, "xa");
+    const baseXgi = positionBaseline90(S.players, pos, "xgi");
+    S.players
+      .filter((p) => p.pos === pos)
+      .forEach((p) => {
+        p.xg90 = shrink90(p.xg, p.minutes, baseXg);
+        p.xa90 = shrink90(p.xa, p.minutes, baseXa);
+        p.xgi90 = shrink90(p.xgi, p.minutes, baseXgi);
+      });
+  });
+}
+
 function attachForm() {
   const { points, minutes } = S.form;
   S.players.forEach((p) => {
@@ -275,9 +330,12 @@ function attachForm() {
  *
  *   1. Recency-weighted average of recent gameweek minutes (most recent counts
  *      most), which captures a player working his way in or out of the side.
- *   2. Scaled down by the official "chance of playing next round" when a player
+ *   2. Without any recent gameweeks to lean on (pre-season, typically), the
+ *      season average minutes-per-start is scaled by how much of the season
+ *      he actually started — see startShareFallback() below for why.
+ *   3. Scaled down by the official "chance of playing next round" when a player
  *      is flagged injured or doubtful.
- *   3. Fully sidelined players (status 'i','s','u') return 0.
+ *   4. Fully sidelined players (status 'i','s','u') return 0.
  */
 function expectedMinutes(p) {
   // Suspended, injured-out, or unavailable — no minutes coming.
@@ -297,9 +355,7 @@ function expectedMinutes(p) {
     });
     base = weightedSum / weightTotal;
   } else {
-    // No recent gameweek data (e.g. early season) — fall back to the season
-    // average, from total minutes over appearances.
-    base = p.starts > 0 ? Math.min(90, p.minutes / Math.max(1, p.starts)) : 0;
+    base = startShareFallback(p);
   }
 
   // Apply the availability flag. 'chance' is a 0–100 percentage, or null when
@@ -309,6 +365,28 @@ function expectedMinutes(p) {
   }
 
   return Math.max(0, Math.min(90, Math.round(base)));
+}
+
+/**
+ * The pre-season (or no-recent-form) fallback for expected minutes.
+ *
+ * Minutes-per-start alone can't tell a nailed-on regular from a rotation
+ * option who just happens to play close to 90 the few times he's actually
+ * picked - a player who started 13 of 38 games last season but played the
+ * full 90 each time still averages ~90 minutes/start, the same number a
+ * true ever-present would show. Scaling by how much of the season he
+ * actually started fixes that: a player who started every available game
+ * keeps his full average, one who started a third of them gets a third of
+ * it. This is exactly why a low-owned rotation player can otherwise look
+ * as "nailed-on" as a genuine starter in the gap before this season's own
+ * form data exists.
+ */
+export function startShareFallback(p) {
+  if (!(p.starts > 0)) return 0;
+  const perStart = Math.min(90, p.minutes / p.starts);
+  const seasonGames = S.currentGw > 0 ? S.currentGw : 38;
+  const startShare = Math.min(1, p.starts / seasonGames);
+  return perStart * startShare;
 }
 
 function attachPrices() {

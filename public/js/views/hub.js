@@ -204,8 +204,13 @@ function captaincyWidget() {
     // aren't a tiny, noisy sample - otherwise one lucky cameo can produce an
     // xg90 spike that blows up the whole projection.
     .filter((p) => p.xMin >= 60 && p.minutes >= MIN_MINS)
-    .map((p) => ({ p, total: projectPlayer(p, 1, g).total }))
-    .sort((a, b) => b.total - a.total)
+    .map((p) => ({ p, attack: projectPlayer(p, 1, g).attack }))
+    // Ranked by attacking returns (goals + assists, fixture-adjusted), not
+    // total points - total also folds in appearance and clean-sheet points,
+    // which gives a defender in a great fixture the same "safe floor" a
+    // captain pick doesn't actually need, and can crowd out genuine goal
+    // threats that carry more of the ceiling you're captaining for.
+    .sort((a, b) => b.attack - a.attack)
     // Eight, not six - a longer shortlist so this widget runs about the same
     // length as Fixtures next to it, rather than leaving a short column.
     .slice(0, 8);
@@ -213,8 +218,9 @@ function captaincyWidget() {
   return `<div class="chart-box hub-w">
     <h3>Captaincy shortlist</h3>
     <p class="cap">
-      Top projected points for GW${g} alone, from the same engine the Planner uses.
-      Ownership is season-to-date; the arrow is net transfers in or out over the last day.
+      Ranked by attacking returns for GW${g} alone (goals + assists, not clean sheets or
+      appearance points) - the same engine the Planner uses. Ownership is season-to-date;
+      the arrow is net transfers in or out over the last day.
     </p>
     <div class="hub-list">
       ${rows
@@ -229,7 +235,7 @@ function captaincyWidget() {
           <span class="hub-name-top">${esc(r.p.name)}${availabilityFlag(r.p)}</span>
           <span class="hub-name-sub sub-t">${esc(r.p.short)} · ${f1(r.p.selected)}% owned ${trend}</span>
         </span>
-        <span class="hub-val gold">${r.total.toFixed(1)}</span>
+        <span class="hub-val gold">${r.attack.toFixed(1)}</span>
       </div>`;
         })
         .join("")}
