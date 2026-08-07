@@ -12,6 +12,7 @@ import { divergingBars } from "../charts.js";
 let tab = "diary"; // diary | patterns
 let showSync = false;
 let syncError = "";
+let justLoggedId = null; // decision id to scroll to and highlight after a save, then cleared
 
 export function renderJournal(root) {
   const rerender = () => renderJournal(root);
@@ -254,6 +255,7 @@ function optionChip(o, chosen) {
 function decisionCard(d) {
   const s = scoreDecision(d);
   const w = windowOf(d);
+  const justLogged = d.id === justLoggedId ? " just-logged" : "";
 
   let verdict;
   if (s.status.state === "pending") {
@@ -268,7 +270,7 @@ function decisionCard(d) {
   const maxPts = Math.max(1, ...s.rows.map((r) => r.pts));
   const running = s.status.state === "running";
 
-  return `<div class="dcard">
+  return `<div class="dcard${justLogged}" data-decision-id="${d.id}">
     <div class="top">
       <div>
         <div class="title">
@@ -501,8 +503,18 @@ function wireDiary(root, rerender) {
   bind("#jSave", "onclick", async () => {
     J.saving = true;
     rerender();
-    await saveDraft();
+    const before = new Set(J.decisions.map((x) => x.id));
+    const ok = await saveDraft();
+    if (ok) {
+      const added = J.decisions.find((x) => !before.has(x.id));
+      justLoggedId = added?.id ?? null;
+    }
     rerender();
+    if (justLoggedId != null) {
+      const card = $(`[data-decision-id="${justLoggedId}"]`, root);
+      card?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      justLoggedId = null;
+    }
   });
 
   bind("#jClear", "onclick", () => {

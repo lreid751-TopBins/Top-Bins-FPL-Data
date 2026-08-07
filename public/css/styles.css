@@ -927,6 +927,18 @@ textarea::placeholder { color: var(--muted-2); }
   border: 1px solid var(--line); border-radius: 14px; margin-bottom: 12px;
   overflow: hidden; background: var(--panel);
 }
+/* One-shot flash on the card just logged, so a form submit that scrolls the
+   page still has a clear "yes, that saved" moment - same one-shot flag
+   pattern as .slot.just-added (see planner.js), cleared right after the
+   render that used it so a later unrelated render doesn't replay it. */
+@keyframes dcardLogged {
+  from { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(231, 193, 94, 0.25); }
+  to { border-color: var(--line); box-shadow: 0 0 0 0 rgba(231, 193, 94, 0); }
+}
+.dcard.just-logged { animation: dcardLogged 1.6s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .dcard.just-logged { animation: none; border-color: var(--gold); }
+}
 .dcard .top {
   display: flex; justify-content: space-between; align-items: center; gap: 12px;
   padding: 13px 15px; background: var(--panel-2); border-bottom: 1px solid var(--line); flex-wrap: wrap;

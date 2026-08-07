@@ -1227,6 +1227,41 @@ check("patterns tab renders the breakdowns", () => {
   });
 }
 
+{
+  // Regression: submitting the (often tall) log-a-call form used to just
+  // clear the fields, with no confirmation the entry actually saved unless
+  // the user scrolled down to spot it in the list themselves - worse on
+  // mobile, where the Save button itself sits past the fold. Clicking
+  // #jSave (rather than calling saveDraft() directly, as the test above
+  // does) exercises the real handler that flags the new card and scrolls
+  // to it.
+  const mid = S.players.find((p) => p.pos === "MID");
+  const other = S.players.find((p) => p.pos === "MID" && p.id !== mid.id);
+  J.draft = {
+    kind: "captain", gw: S.nextGw, horizon: "1", title: "Test the save flash",
+    options: [
+      { id: mid.id, name: mid.name, short: mid.short, pos: mid.pos },
+      { id: other.id, name: other.name, short: other.short, pos: other.pos },
+    ],
+    chosen: mid.id, confidence: 3, reasons: [], note: "",
+  };
+  renderJournal(panel("panel-journal"));
+  await panel("panel-journal").querySelector("#jSave").onclick();
+  check("logging a call flashes and scrolls to the new entry, then the flag clears", () => {
+    const flashed = panel("panel-journal").querySelector(".dcard.just-logged");
+    if (!flashed) throw new Error("no .dcard.just-logged after saving - the new entry gives no save confirmation");
+    if (!flashed.textContent.includes("Test the save flash")) {
+      throw new Error("the flashed card isn't the one that was just logged");
+    }
+    // A later, unrelated render shouldn't keep replaying the flash on the same card.
+    renderJournal(panel("panel-journal"));
+    if (panel("panel-journal").querySelector(".dcard.just-logged")) {
+      throw new Error(".just-logged should not persist across renders once cleared");
+    }
+    return "new entry flashed once and was distinguishable from the rest";
+  });
+}
+
 check("the diary key can be revealed and swapped", () => {
   renderJournal(panel("panel-journal"));
   const open = panel("panel-journal").querySelector("#jSyncOpen");
