@@ -867,6 +867,79 @@ check("transfer scratchpad compares two players", () => {
   return `${deltas.length} comparison figures`;
 });
 
+check("transfer scratchpad's In field is browsable without typing a name", () => {
+  const squadIds = squadPicks.map((p) => p.element);
+  S.ui.swapOut = squadIds[3];
+  const outP = S.playerById[S.ui.swapOut];
+  S.ui.swapIn = null;
+  renderSquad(panel("panel-squad"));
+
+  const search = panel("panel-squad").querySelector("#swapSearch");
+  const drop = panel("panel-squad").querySelector("#swapDrop");
+  if (!search) throw new Error("no In search field rendered");
+  search.value = "";
+  search.dispatchEvent(new window.Event("focus"));
+
+  const hits = [...drop.querySelectorAll("[data-add]")];
+  if (!hits.length) throw new Error("focusing the In field with no text typed should still show browsable candidates");
+
+  // Regression: should be locked to the Out player's position, and never
+  // offer someone already in the squad.
+  const offeredIds = hits.map((b) => +b.dataset.add);
+  if (offeredIds.some((id) => squadIds.includes(id))) {
+    throw new Error("a player already in the squad was offered as a transfer-in candidate");
+  }
+  if (offeredIds.some((id) => S.playerById[id].pos !== outP.pos)) {
+    throw new Error(`candidates should all be ${outP.pos}, at least one wasn't`);
+  }
+
+  return `${hits.length} browsable ${outP.pos} candidates shown on focus, no typing needed`;
+});
+
+check("transfer scratchpad's In field can be sorted", () => {
+  const squadIds = squadPicks.map((p) => p.element);
+  S.ui.swapOut = squadIds[3];
+  S.ui.swapIn = null;
+  S.ui.swapSort = { k: "total_points", dir: -1 };
+  renderSquad(panel("panel-squad"));
+
+  const sortSel = panel("panel-squad").querySelector("#swapSort");
+  if (!sortSel) throw new Error("no sort-by control rendered in the transfer scratchpad");
+
+  sortSel.value = "price";
+  sortSel.dispatchEvent(new window.Event("change"));
+  if (S.ui.swapSort.k !== "price") throw new Error("choosing a sort field should update S.ui.swapSort");
+
+  const drop = panel("panel-squad").querySelector("#swapDrop");
+  const prices = [...drop.querySelectorAll("[data-add]")].map((b) => {
+    const p = S.playerById[+b.dataset.add];
+    return p.price;
+  });
+  if (prices.length < 2) throw new Error("not enough candidates to verify sort order");
+  const sortedDesc = prices.every((v, i) => i === 0 || prices[i - 1] >= v);
+  if (!sortedDesc) throw new Error("In candidates aren't actually sorted by price (highest first)");
+
+  S.ui.swapSort = { k: "total_points", dir: -1 };
+  return `${prices.length} candidates sorted by price, highest first`;
+});
+
+check("clicking outside the transfer scratchpad's In field closes its dropdown", () => {
+  const squadIds = squadPicks.map((p) => p.element);
+  S.ui.swapOut = squadIds[3];
+  S.ui.swapIn = null;
+  renderSquad(panel("panel-squad"));
+
+  const search = panel("panel-squad").querySelector("#swapSearch");
+  search.dispatchEvent(new window.Event("focus"));
+  const drop = panel("panel-squad").querySelector("#swapDrop");
+  if (!drop.innerHTML) throw new Error("setup: dropdown didn't open on focus");
+
+  document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (drop.innerHTML) throw new Error("clicking outside the In field should close its dropdown");
+
+  return "outside click closes the In dropdown";
+});
+
 check("hub shows crests, rank and mini-leagues once a manager is connected", () => {
   renderHub(panel("panel-hub"));
   const html = panel("panel-hub").innerHTML;

@@ -132,19 +132,24 @@ export function th(col, sortKey, dir) {
   return `<th data-k="${col.k}" class="${cls}"${title}>${col.l}</th>`;
 }
 
-/* ---------------- Player search dropdown ---------------- */
-export function playerSearchResults(query, { exclude = new Set(), limit = 8, pos = null } = {}) {
+/* ---------------- Player search dropdown ----------------
+   allowEmpty and sort are opt-in (both default to the original name-search-
+   only behaviour) so existing callers - Journal's "log a decision about"
+   search - are untouched. The transfer scratchpad passes both, turning
+   this from a blind type-to-search box into a real browsable, sortable
+   candidate list. */
+export function playerSearchResults(query, { exclude = new Set(), limit = 8, pos = null, sort = null, allowEmpty = false } = {}) {
   const q = query.toLowerCase().trim();
-  if (!q) return [];
-  return S.players
-    .filter(
-      (p) =>
-        !exclude.has(p.id) &&
-        (!pos || p.pos === pos) &&
-        (p.name.toLowerCase().includes(q) || p.fullName.toLowerCase().includes(q))
-    )
-    .sort((a, b) => b.total_points - a.total_points)
-    .slice(0, limit);
+  if (!q && !allowEmpty) return [];
+  const results = S.players.filter(
+    (p) =>
+      !exclude.has(p.id) &&
+      (!pos || p.pos === pos) &&
+      (!q || p.name.toLowerCase().includes(q) || p.fullName.toLowerCase().includes(q))
+  );
+  const { k, dir } = sort || { k: "total_points", dir: -1 };
+  results.sort((a, b) => (k === "name" ? String(a.name).localeCompare(b.name) * -dir : (n(a[k]) - n(b[k])) * dir));
+  return results.slice(0, limit);
 }
 
 export function dropdownHTML(hits, attr = "data-add") {

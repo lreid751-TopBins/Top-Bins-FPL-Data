@@ -625,6 +625,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   display: flex; align-items: center; justify-content: center;
   font-family: "Anton", sans-serif; font-size: 24px; color: var(--gold);
 }
+.swap-sort { margin-bottom: 8px; }
 .delta-grid {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px;
 }

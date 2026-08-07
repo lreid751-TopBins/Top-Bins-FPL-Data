@@ -49,6 +49,7 @@ export const S = {
     // Transfer scratchpad
     swapOut: null,
     swapIn: null,
+    swapSort: { k: "total_points", dir: -1 }, // sort applied to the "In" candidate list
   },
 };
 

@@ -9,6 +9,26 @@ import { openPlayerDetail } from "../playerDetail.js";
 let liveById = {};
 let loadError = "";
 let loading = false;
+
+// The transfer scratchpad's "In" dropdown now opens on focus (browsable,
+// not just typeahead), so it needs an explicit close - wired once here,
+// not inside wire() (which reruns every render), so this doesn't pile up
+// a fresh document-level listener on every rerender. Looks up #swapDrop
+// fresh each time it fires rather than a captured reference, since the
+// element itself gets replaced on every rerender.
+if (typeof document !== "undefined") {
+  document.addEventListener("click", (e) => {
+    const drop = document.getElementById("swapDrop");
+    if (!drop || !drop.innerHTML) return;
+    if (e.target.closest(".swap-slot.in")) return; // inside the panel - not an outside click
+    drop.innerHTML = "";
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    const drop = document.getElementById("swapDrop");
+    if (drop && drop.innerHTML) drop.innerHTML = "";
+  });
+}
 // Hub's "Your season" widget shows the same manager data and refreshes on
 // the same 90s tick, but lives in its own module with no other way to know
 // a fetch is in flight.
@@ -270,6 +290,18 @@ function gwOpponent(teamId, gw) {
 /* =========================================================
    Transfer scratchpad
    ========================================================= */
+// Sort options for the "In" candidate list - a smaller set than Planner's
+// browse list (this is a quick one-off comparison, not a squad-builder),
+// but the same underlying pattern so it feels familiar rather than like a
+// different tool.
+const SWAP_SORT_COLS = [
+  { k: "total_points", l: "Points", dir: -1 },
+  { k: "form", l: "Form", dir: -1 },
+  { k: "xgi90", l: "xGI/90", dir: -1 },
+  { k: "ppm", l: "Value (pts/£m)", dir: -1 },
+  { k: "price", l: "Price", dir: -1 },
+];
+
 function scratchpad(picks) {
   const out = S.ui.swapOut ? S.playerById[S.ui.swapOut] : null;
   const inc = S.ui.swapIn ? S.playerById[S.ui.swapIn] : null;
@@ -302,15 +334,21 @@ function scratchpad(picks) {
 
       <div class="swap-slot in">
         <div class="lab">In</div>
+        <div class="sort-by swap-sort">
+          <label for="swapSort">Sort by</label>
+          <select id="swapSort" aria-label="Sort candidates by">
+            ${SWAP_SORT_COLS.map((c) => `<option value="${c.k}" ${c.k === S.ui.swapSort.k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
+          </select>
+        </div>
         <div class="cand-search">
-          <input id="swapSearch" placeholder="${out ? `Search a ${out.pos}…` : "Search any player…"}" autocomplete="off" aria-label="Player to transfer in">
+          <input id="swapSearch" placeholder="${out ? `Search or browse ${out.pos}s…` : "Search or browse any player…"}" autocomplete="off" aria-label="Player to transfer in">
           <div id="swapDrop"></div>
         </div>
         ${inc ? slotDetail(inc) : ""}
       </div>
     </div>
 
-    ${out && inc ? deltas(out, inc) : `<p class="hint">Pick both sides to compare.</p>`}
+    ${out && inc ? deltas(out, inc) : `<p class="hint">Pick both sides to compare — click into "In" to browse candidates, sorted and filtered to match, without typing a name.</p>`}
   </div>`;
 }
 
@@ -382,21 +420,38 @@ function wire(root, rerender, picks) {
 
   const search = $("#swapSearch", root);
   const drop = $("#swapDrop", root);
-  if (search)
-    search.oninput = () => {
-      const outP = S.ui.swapOut ? S.playerById[S.ui.swapOut] : null;
-      const exclude = new Set(picks.map((p) => p.element));
-      const hits = playerSearchResults(search.value, {
-        exclude,
-        pos: outP ? outP.pos : null,
-      });
-      drop.innerHTML = search.value.trim() ? dropdownHTML(hits) : "";
-      $$("[data-add]", drop).forEach((b) => {
-        b.onclick = () => {
-          S.ui.swapIn = +b.dataset.add;
-          rerender();
-        };
-      });
+  const sortSel = $("#swapSort", root);
+  // Shared by typing, focusing (browse without typing a name at all), and
+  // changing the sort - all just refresh the same dropdown in place rather
+  // than a full rerender, so the list updates without losing focus or
+  // closing on you mid-browse.
+  const refreshDrop = () => {
+    const outP = S.ui.swapOut ? S.playerById[S.ui.swapOut] : null;
+    const exclude = new Set(picks.map((p) => p.element));
+    const hits = playerSearchResults(search.value, {
+      exclude,
+      pos: outP ? outP.pos : null,
+      sort: S.ui.swapSort,
+      allowEmpty: true,
+      limit: 20,
+    });
+    drop.innerHTML = dropdownHTML(hits);
+    $$("[data-add]", drop).forEach((b) => {
+      b.onclick = () => {
+        S.ui.swapIn = +b.dataset.add;
+        rerender();
+      };
+    });
+  };
+  if (search) {
+    search.oninput = refreshDrop;
+    search.onfocus = refreshDrop;
+  }
+  if (sortSel)
+    sortSel.onchange = () => {
+      const col = SWAP_SORT_COLS.find((c) => c.k === sortSel.value);
+      S.ui.swapSort = { k: sortSel.value, dir: col?.dir ?? -1 };
+      refreshDrop();
     };
 }
 
