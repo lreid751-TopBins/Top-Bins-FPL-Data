@@ -2218,6 +2218,23 @@ check("table zebra striping comes before the hover rule in the cascade", () => {
   return "hover correctly comes after zebra striping, so it wins on even rows too";
 });
 
+check("wide data tables get the same mobile scroll-edge fade as the tab bar", () => {
+  // Regression: an audit walkthrough at 375px found Player Finder's table
+  // (25 columns) just looked like it stopped mid-column on mobile, with no
+  // hint there was more to scroll to - unlike the tab bar and Fixture
+  // Ticker, which already fade their scrollable edge. jsdom doesn't apply
+  // external stylesheets, so this is a check on the raw CSS text.
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  const mobileBlock = css.slice(css.indexOf("@media (max-width: 720px)"));
+  const twrapStart = mobileBlock.indexOf(".twrap {");
+  if (twrapStart === -1) throw new Error(".twrap has no rule inside the max-width:720px block");
+  const twrapRule = mobileBlock.slice(twrapStart, mobileBlock.indexOf("}", twrapStart) + 1);
+  if (!twrapRule.includes("mask-image")) {
+    throw new Error(".twrap needs the same mask-image scroll-edge fade as .tabs, inside the max-width:720px block");
+  }
+  return "wide tables (.twrap) fade their right edge on mobile, same as the tab bar";
+});
+
 /* ---------------- Report ---------------- */
 console.log("");
 for (const [state, name, note] of results) {

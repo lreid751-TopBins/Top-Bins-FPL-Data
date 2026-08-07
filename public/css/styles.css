@@ -840,6 +840,13 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
     mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
     -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
   }
+  /* Same hint on every data table (Player Finder, Teams, Hub's league table,
+     the Planner's table view) - they're too wide for a phone screen and
+     otherwise just look like they end mid-column with nothing to scroll to. */
+  .twrap {
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+  }
   .board { padding: 14px 12px; }
   .plr { width: 88px; }
   .pl-six { width: 130px; height: 26px; }
