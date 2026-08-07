@@ -329,7 +329,8 @@ function filledSlot(p) {
   const jersey = p.jersey
     ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
     : "";
-  return `<div class="slot filled">
+  const justAdded = PL.justAddedId === p.id ? " just-added" : "";
+  return `<div class="slot filled${justAdded}">
     <div class="slot-top">
       <span></span>
       <button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
@@ -369,7 +370,8 @@ function lineupSlot(p, starting, gw) {
     ? `<button class="cap-corner c ${isC ? "on" : ""}" data-cap="${p.id}" aria-label="${isC ? "Captain — click to unset" : "Set as captain"}">C</button>
        <button class="cap-corner v ${isV ? "on" : ""}" data-vice="${p.id}" aria-label="${isV ? "Vice-captain — click to unset" : "Set as vice-captain"}">V</button>`
     : `<span></span><span></span>`;
-  return `<div class="slot filled ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
+  const justAdded = PL.justAddedId === p.id ? " just-added" : "";
+  return `<div class="slot filled${justAdded} ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
     tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap">
     <div class="slot-top">${capControls}</div>
     ${jersey}
@@ -658,6 +660,36 @@ function compareBody(cmp) {
 function wire(root, rerender) {
   const bind = (sel, ev, fn) => { const el = $(sel, root); if (el) el[ev] = fn; };
 
+  // Every "add a player" path (browse button, browse row double-click, name
+  // search) funnels through here, so all three feel like the same action:
+  //   - the browse list doesn't reset to the top on every add - a full
+  //     rerender recreates the list from scratch, which otherwise loses
+  //     scroll position on every single pick, forcing a re-scroll for each
+  //     of the 15 players you add;
+  //   - filling a position's last slot moves the browse tab straight to
+  //     the next one still needed, instead of leaving you looking at a
+  //     list of players you can no longer add;
+  //   - the card that just landed on the pitch gets a one-shot pop-in
+  //     (see .just-added), so adding a player reads as something actually
+  //     happening, not an instant, silent DOM swap.
+  const addAndRerender = (p) => {
+    if (!p) { rerender(); return; }
+    const wrap = $(".browse-wrap", root);
+    const scrollTop = wrap ? wrap.scrollTop : 0;
+    const check = addPlayer(p);
+    if (check.ok) {
+      PL.justAddedId = p.id;
+      if (!needed().some((x) => x.pos === PL.browsePos)) {
+        const next = needed()[0];
+        if (next) PL.browsePos = next.pos;
+      }
+    }
+    rerender();
+    PL.justAddedId = null;
+    const newWrap = $(".browse-wrap", root);
+    if (newWrap) newWrap.scrollTop = scrollTop;
+  };
+
   // Player name → profile drawer. A div, not a button, so Enter/Space needs
   // wiring by hand alongside the tabindex that makes it reachable. On a
   // lineup card this also has to stop short of the card's own click
@@ -804,7 +836,7 @@ function wire(root, rerender) {
   // which is wired separately below since its contents replace #plDrop
   // without a full rerender).
   $$("[data-browseadd]", root).forEach((b) => {
-    b.onclick = () => { const p = S.playerById[b.dataset.browseadd]; if (p) addPlayer(p); rerender(); };
+    b.onclick = () => addAndRerender(S.playerById[b.dataset.browseadd]);
   });
 
   // Double-click anywhere on a browse row to add that player - faster than
@@ -814,9 +846,7 @@ function wire(root, rerender) {
   $$("[data-browserow]", root).forEach((row) => {
     row.ondblclick = (e) => {
       if (e.target.closest("[data-browseadd]")) return;
-      const p = S.playerById[row.dataset.browserow];
-      if (p) addPlayer(p);
-      rerender();
+      addAndRerender(S.playerById[row.dataset.browserow]);
     };
   });
 
@@ -920,9 +950,7 @@ function wire(root, rerender) {
       }</div>`;
       $$("[data-add]", drop).forEach((b) => {
         b.onclick = () => {
-          const p = S.playerById[b.dataset.add];
-          if (p) addPlayer(p);
-          rerender();
+          addAndRerender(S.playerById[b.dataset.add]);
           $("#plSearch", root)?.focus();
         };
       });

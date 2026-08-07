@@ -24,10 +24,10 @@ export function renderHub(root) {
 
     <div class="hub-grid">
       ${leagueTableWidget()}
+      ${rankWidget()}
       ${fixturesWidget()}
       ${captaincyWidget()}
       ${teamShapeWidget()}
-      ${rankWidget()}
       ${performersWidget()}
       ${availabilityWidget()}
       ${priceMoversWidget()}
@@ -265,11 +265,22 @@ function rankTrendSvg(history) {
 
 function rankWidget() {
   if (!S.entry) {
+    // Second thing on the page, with a real button rather than a small
+    // text link - this is the one thing a first-time visitor actually
+    // needs to do something with, so it shouldn't depend on scrolling
+    // past three other widgets to find it. Offers both paths, since
+    // "connect" only makes sense if they already play FPL - someone
+    // starting fresh wants the Planner instead. Stays narrow (hub-w, not
+    // hub-w-wide) to match the connected/hero card's width - keeps this
+    // pairing up with Fixtures in the two-column grid instead of forcing
+    // its own full row, which otherwise leaves a gap before Best performers.
     return `<div class="chart-box hub-w">
       <h3>Your season</h3>
-      <p class="cap">Overall rank, its trend, and where you stand in your mini-leagues.</p>
-      <p class="hint">Not connected yet.</p>
-      <button class="hub-goto" data-goto="squad">Connect your team →</button>
+      <p class="cap">Overall rank, its trend, and where you stand in your mini-leagues - once you're connected.</p>
+      <div class="hub-cta-actions">
+        <button class="btn primary" data-goto="squad">Connect your FPL team →</button>
+        <button class="btn ghost" data-goto="planner">Or build a squad in the Planner →</button>
+      </div>
     </div>`;
   }
 

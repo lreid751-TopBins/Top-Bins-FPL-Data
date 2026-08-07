@@ -763,6 +763,11 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .hub-goto:hover { color: var(--gold-2); }
 
+/* First-time-visitor CTA on the not-connected "Your season" widget - two
+   real buttons, not a small text link, since this is the one thing a new
+   visitor actually needs to act on. */
+.hub-cta-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+
 .fdr-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; vertical-align: middle; }
 /* Same idea as .fxi: size rises with difficulty so the dot doesn't rely on
    colour alone. Higher specificity than the base rule above, so this always
@@ -1159,6 +1164,20 @@ textarea::placeholder { color: var(--muted-2); }
   background: var(--panel); padding: 8px; position: relative; display: flex;
   flex-direction: column; align-items: center; text-align: center;
 }
+/* One-shot pop-in for the card that just landed on the pitch - a full
+   rerender recreates every card's DOM node on every render, so this can't
+   just be "animate on insert"; the render marks the ONE player who was
+   actually just added (PL.justAddedId, cleared immediately after use) so
+   only that card plays it, not all 15 replaying it on every unrelated
+   render. */
+@keyframes slotPopIn {
+  from { opacity: 0; transform: scale(0.92) translateY(4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+.slot.just-added { animation: slotPopIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .slot.just-added { animation: none; }
+}
 .slot.empty {
   border-style: dashed; cursor: pointer; justify-content: center; color: var(--muted-2);
 }
@@ -1225,7 +1244,17 @@ textarea::placeholder { color: var(--muted-2); }
 .add-row-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
 .add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
 .twrap.browse-wrap { max-height: 320px; }
-.browse-wrap .btn { padding: 5px 9px; font-size: 12px; }
+/* A plain ghost button reads as barely-there in a dense table - a real,
+   if quiet, gold-tinted pill instead, so "you can add this player" doesn't
+   depend on noticing a faint outline (or a native title tooltip, which
+   needs a hover that never happens on touch). Disabled rows stay muted,
+   which reads as its own signal: not addable right now. */
+.browse-wrap .btn {
+  padding: 5px 9px; font-size: 12px; font-weight: 600;
+  background: var(--raise); border-color: var(--gold-deep); color: var(--gold);
+}
+.browse-wrap .btn:hover:not([disabled]) { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.browse-wrap .btn[disabled] { background: transparent; border-color: var(--line); color: var(--muted-2); }
 /* Double-click anywhere on an addable row to add that player - cursor cue
    only where it's actually legal, same rows that leave + Add enabled. */
 .browse-row.addable { cursor: pointer; }

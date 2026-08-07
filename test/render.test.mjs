@@ -248,23 +248,44 @@ check("hub renders every widget with no undefined or NaN", () => {
 
 check("hub widget order leaves no empty cell in the two-column grid", () => {
   // .hub-grid is a plain 2-column CSS grid with no explicit placement, so the
-  // DOM order alone decides which widget lands under which. "Team shape" and
-  // "Your season" are both narrow (one column) and sit side by side on
-  // purpose, immediately after the narrow Fixtures/Captaincy row - if either
-  // one moved without the other, the wide "Best performers" row after them
-  // can't backfill the gap that leaves (it needs both columns at once), so
-  // the row before it renders lopsided with a blank cell.
+  // DOM order alone decides which widget lands under which. "Your season" and
+  // "Fixtures" are both narrow (one column) and sit side by side right after
+  // the league table, then "Captaincy shortlist" and "Team shape" pair up -
+  // every narrow widget needs an even-numbered partner before each full-width
+  // ("Best performers", "Club colours") row, or that row's own placement
+  // leaves a blank cell behind it (sparse grid packing never backfills).
   renderHub(panel("panel-hub"));
   const widgets = [...panel("panel-hub").querySelectorAll(".hub-grid > .chart-box")].map(
     (box) => box.querySelector("h3")?.textContent
   );
-  const order = ["Premier League table", "Fixtures", "Captaincy shortlist", "Team shape", "Your season", "Best performers", "Availability watch", "Price movers"];
+  const order = ["Premier League table", "Your season", "Fixtures", "Captaincy shortlist", "Team shape", "Best performers", "Availability watch", "Price movers"];
   for (let i = 0; i < order.length; i++) {
     if (!widgets[i]?.includes(order[i])) {
       throw new Error(`expected "${order[i]}" at position ${i}, got "${widgets[i]}" - order: ${widgets.join(" | ")}`);
     }
   }
-  return "Team shape and Your season pair up under Fixtures/Captaincy with no gap";
+  return "Your season and Fixtures pair up right after the league table, with no gap";
+});
+
+check("hub CTA card for a disconnected user stays narrow, not full-width", () => {
+  // The not-connected branch of rankWidget once used hub-w-wide so its two
+  // buttons had room to breathe - but a full-width card there breaks the
+  // narrow-widget pairing above and leaves a gap before Best performers.
+  // It must stay the same width as the connected/hero branch.
+  const savedEntry = S.entry;
+  S.entry = null;
+  renderHub(panel("panel-hub"));
+  const cards = [...panel("panel-hub").querySelectorAll(".hub-grid > .chart-box")];
+  const rankCard = cards.find((c) => c.querySelector("h3")?.textContent.trim() === "Your season");
+  if (!rankCard) throw new Error("no 'Your season' card rendered for a disconnected user");
+  if (rankCard.classList.contains("hub-w-wide"))
+    throw new Error("disconnected 'Your season' card is hub-w-wide again - this breaks the grid pairing, see the test above");
+  const btns = [...rankCard.querySelectorAll("button")].map((b) => b.dataset.goto);
+  if (!btns.includes("squad") || !btns.includes("planner"))
+    throw new Error(`expected Connect + Planner CTA buttons, got goto targets: ${btns.join(", ")}`);
+  S.entry = savedEntry;
+  renderHub(panel("panel-hub"));
+  return "disconnected CTA card stays narrow, with both Connect and Planner buttons";
 });
 
 check("every club theme has a matching team and a CSS block", () => {
@@ -1846,6 +1867,81 @@ check("double-clicking a browse row adds that player to the squad being built", 
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
   return `GKP #${id} added to the draft by double-click`;
+});
+
+check("adding a player auto-advances the browse list once that position is filled", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const addFirst = () => {
+    const row = panel("panel-planner").querySelector(".browse-row[data-browserow]");
+    if (!row) throw new Error("no addable browse row rendered");
+    row.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
+  };
+
+  addFirst();
+  if (PL.browsePos !== "GKP")
+    throw new Error(`browse list shouldn't advance until GKP (2 needed) is full, got ${PL.browsePos}`);
+
+  addFirst();
+  if (PL.browsePos !== "DEF")
+    throw new Error(`expected browse list to auto-advance to DEF once GKP filled, got ${PL.browsePos}`);
+  const pressed = panel("panel-planner").querySelector("[data-browsepos][aria-pressed=\"true\"]");
+  if (pressed.dataset.browsepos !== "DEF") throw new Error("DEF tab isn't shown as active after auto-advance");
+
+  PL.draft = savedDraft;
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  return "filling GKP auto-advanced the browse list to DEF";
+});
+
+check("adding a player plays a one-shot 'just added' animation on its new slot, then clears", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const row = panel("panel-planner").querySelector(".browse-row[data-browserow]");
+  const id = +row.dataset.browserow;
+  row.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
+
+  const slot = panel("panel-planner").querySelector(`[data-lineup="${id}"], .slot.filled`);
+  const justAdded = panel("panel-planner").querySelector(".slot.just-added");
+  if (!justAdded) throw new Error("newly added slot should carry .just-added for its one-shot animation");
+  if (PL.justAddedId !== null) throw new Error("PL.justAddedId should be cleared right after the render that used it");
+
+  // A later render (unrelated to this add) should not keep replaying the animation.
+  renderPlanner(panel("panel-planner"));
+  if (panel("panel-planner").querySelector(".slot.just-added"))
+    throw new Error(".just-added should not persist across renders once cleared");
+
+  PL.draft = savedDraft;
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  return "added slot animated once, then the flag cleared";
+});
+
+check("adding a player from the browse list preserves its scroll position", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const wrap = panel("panel-planner").querySelector(".browse-wrap");
+  wrap.scrollTop = 150;
+  const row = wrap.querySelector(".browse-row[data-browserow]");
+  row.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
+
+  const newWrap = panel("panel-planner").querySelector(".browse-wrap");
+  if (newWrap.scrollTop !== 150)
+    throw new Error(`expected browse list scroll position to survive the add, got ${newWrap.scrollTop}`);
+
+  PL.draft = savedDraft;
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  return "browse list scroll position survived adding a player";
 });
 
 check("Planner browse list can sort by projected points, form, value, fixture ease and ownership", () => {

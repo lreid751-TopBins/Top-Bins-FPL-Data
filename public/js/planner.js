@@ -55,6 +55,7 @@ export const PL = {
   searchCollapsed: false, // whether the search/analysis column is slid out of view
   searchWidthPct: 29,     // width of the search/analysis column, user-adjustable by dragging
   savedSquadsOpen: false, // whether the saved-squads list is expanded below its tab
+  justAddedId: null, // player id to play a one-shot "just added" animation for, then cleared
 };
 
 export function blankDraft() {
