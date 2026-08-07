@@ -85,7 +85,7 @@ export function renderFixtures(root) {
     <div class="team-focus-row">
       ${S.teamList
         .map(
-          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-focus="${t.id}">
+          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-focus="${t.id}" aria-pressed="${focus.has(t.id)}">
             ${teamCrest(t.id, 14)}<span>${esc(t.short)}</span>
           </button>`
         )

@@ -104,8 +104,8 @@ function savedSquadsBar() {
           (sq) => `<button class="squad-tab ${sq.id === PL.activeId ? "on" : ""}" data-load="${sq.id}">
             <span class="st-name">${esc(sq.name)}</span>
             <span class="st-meta">${sq.picks.length}/15</span>
-            <span class="st-branch" data-branch="${sq.id}" title="Branch: clone this squad to try a swap against it">⑂</span>
-            <span class="st-x" data-del="${sq.id}" title="Delete" role="button">×</span>
+            <span class="st-branch" data-branch="${sq.id}" title="Branch: clone this squad to try a swap against it" role="button" tabindex="0" aria-label="Branch ${esc(sq.name)}">⑂</span>
+            <span class="st-x" data-del="${sq.id}" title="Delete" role="button" tabindex="0" aria-label="Delete ${esc(sq.name)}">×</span>
           </button>`
         )
         .join("")}
@@ -187,7 +187,7 @@ function seasonTicker() {
     <div class="team-focus-row mini">
       ${S.teamList
         .map(
-          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-seasonfocus="${t.id}">
+          (t) => `<button class="team-focus-tag${focus.has(t.id) ? " on" : ""}" data-seasonfocus="${t.id}" aria-pressed="${focus.has(t.id)}">
             ${teamCrest(t.id, 14)}<span>${esc(t.short)}</span>
           </button>`
         )
@@ -726,17 +726,21 @@ function wire(root, rerender) {
     };
   });
   $$("[data-branch]", root).forEach((x) => {
-    x.onclick = (e) => {
+    const go = (e) => {
       e.stopPropagation();
       const sq = PL.squads.find((s) => s.id === x.dataset.branch);
       if (sq) { branchSquad(sq); rerender(); }
     };
+    x.onclick = go;
+    x.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
   });
   $$("[data-del]", root).forEach((x) => {
-    x.onclick = async (e) => {
+    const go = async (e) => {
       e.stopPropagation();
       if (confirm("Delete this squad?")) { await deleteSquad(x.dataset.del); rerender(); }
     };
+    x.onclick = go;
+    x.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
   });
 
   // Remove / captain / vice

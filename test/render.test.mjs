@@ -468,13 +468,21 @@ check("fixture ticker team-focus filter narrows the table down", () => {
   renderFixtures(panel("panel-fixtures"));
   const rows = panel("panel-fixtures").querySelectorAll(".ticker tbody tr");
   if (rows.length !== 2) throw new Error(`expected 2 focused rows, got ${rows.length}`);
+
+  // Regression: the toggle-state class (.on) had no aria-pressed alongside
+  // it, so a focused team's state wasn't announced to assistive tech.
+  const onTag = panel("panel-fixtures").querySelector(`[data-focus="${a.id}"]`);
+  if (onTag.getAttribute("aria-pressed") !== "true") throw new Error("a focused team's tag should have aria-pressed=true");
+  const offTag = [...panel("panel-fixtures").querySelectorAll("[data-focus]")].find((el) => !el.classList.contains("on"));
+  if (offTag && offTag.getAttribute("aria-pressed") !== "false") throw new Error("an unfocused team's tag should have aria-pressed=false");
+
   const clearBtn = panel("panel-fixtures").querySelector("[data-focus-clear]");
   if (!clearBtn) throw new Error("expected a clear-focus control once teams are focused");
 
   clearBtn.click();
   const allRows = panel("panel-fixtures").querySelectorAll(".ticker tbody tr");
   if (allRows.length !== 20) throw new Error(`clearing focus should show all 20 teams again, got ${allRows.length}`);
-  return `focused to 2, cleared back to ${allRows.length}`;
+  return `focused to 2, cleared back to ${allRows.length}, aria-pressed tracked correctly`;
 });
 
 check("fixture ticker gameweek range picker supports a past range", () => {
@@ -502,6 +510,33 @@ check("player finder renders", () => {
   if (svgs.length < 2) throw new Error(`expected 2 charts, got ${svgs.length}`);
   if (panel("panel-scout").innerHTML.includes("NaN")) throw new Error("NaN rendered into the table");
   return `${rows.length} rows, ${svgs.length} charts`;
+});
+
+check("Player Finder rows can open a player's profile", () => {
+  // Regression: an audit found the flagship scouting table had no way to
+  // drill into a player's profile at all - the name was plain text, while
+  // the same underlying player row in the Planner's browse list, Journal's
+  // candidate search, and everywhere else on the pitch could already do
+  // this. The star (watchlist) button sits right next to it and must stay
+  // independently clickable.
+  renderScout(panel("panel-scout"));
+  const nameEl = panel("panel-scout").querySelector("tbody tr [data-playerid]");
+  if (!nameEl) throw new Error("no clickable player name found in the Player Finder table");
+  const id = +nameEl.dataset.playerid;
+
+  nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (PD.openId !== id) throw new Error("clicking a Player Finder row name should open that player's profile");
+  document.getElementById("pdClose").click();
+
+  const star = panel("panel-scout").querySelector(`[data-star="${id}"]`);
+  const wasStarred = star.classList.contains("on");
+  star.click(); // triggers a full rerender, so re-query rather than reuse `star`
+  if (PD.openId != null) throw new Error("clicking the watchlist star shouldn't also open the profile drawer");
+  const starAfter = panel("panel-scout").querySelector(`[data-star="${id}"]`);
+  if (starAfter.classList.contains("on") === wasStarred) throw new Error("watchlist star should still toggle independently");
+  starAfter.click(); // restore
+
+  return `opened player #${id}'s profile from the row, watchlist star still independent`;
 });
 
 check("fixture strip pills are self-sized, not dependent on an ancestor selector", () => {
@@ -886,6 +921,36 @@ check("transfer scratchpad compares two players", () => {
   if (deltas.length !== 6) throw new Error(`expected 6 deltas, got ${deltas.length}`);
   if (panel("panel-squad").innerHTML.includes("NaN")) throw new Error("NaN in deltas");
   return `${deltas.length} comparison figures`;
+});
+
+check("transfer scratchpad can log a compared swap to the journal", () => {
+  // Regression: the Planner's branch-compare has had this since the
+  // Planner->Journal wiring work, but the My Team scratchpad - comparing a
+  // transfer against your actual live squad, arguably the more natural
+  // moment to capture "I'm considering this" - had no equivalent button.
+  const squadIds = squadPicks.map((p) => p.element);
+  S.ui.swapOut = squadIds[3];
+  const outP = S.playerById[S.ui.swapOut];
+  const inP = S.players.find((p) => p.pos === outP.pos && !squadIds.includes(p.id));
+  S.ui.swapIn = inP.id;
+  renderSquad(panel("panel-squad"));
+
+  const btn = panel("panel-squad").querySelector("#swapLogDecision");
+  if (!btn) throw new Error("expected a Log this as a decision button once both sides are picked");
+  btn.onclick();
+
+  if (J.draft.kind !== "transfer") throw new Error(`expected a transfer draft, got ${J.draft.kind}`);
+  if (J.draft.title !== `${inP.name} in for ${outP.name}`) {
+    throw new Error(`expected title "${inP.name} in for ${outP.name}", got "${J.draft.title}"`);
+  }
+  if (J.draft.chosen !== inP.id) throw new Error("the incoming player should be pre-marked as chosen");
+  if (J.draft.options.length !== 2) throw new Error(`expected 2 options, got ${J.draft.options.length}`);
+  if (J.draft.confidence == null || !Array.isArray(J.draft.reasons)) {
+    throw new Error("should still carry blank-draft defaults for confidence/reasons");
+  }
+  S.ui.swapOut = null;
+  S.ui.swapIn = null;
+  return `"${J.draft.title}" queued for the journal`;
 });
 
 check("transfer scratchpad's In field is browsable without typing a name", () => {
@@ -2086,6 +2151,34 @@ check("squad table view shows the same 15 with a remove action", () => {
     if (tabs.length < 2) throw new Error("expected 2+ tabs");
     PL.savedSquadsOpen = false;
     return `${tabs.length} squads side by side`;
+  });
+
+  check("a saved squad's branch/delete icons are keyboard-reachable, not just clickable", () => {
+    // Regression: these are spans with an onclick, not real buttons - with
+    // no tabindex a keyboard user could never reach "branch" or "delete" at
+    // all, only ever load the squad (the one action on a real <button>).
+    PL.savedSquadsOpen = true;
+    renderPlanner(panel("panel-planner"));
+    const branchIcon = panel("panel-planner").querySelector("[data-branch]");
+    const delIcon = panel("panel-planner").querySelector("[data-del]");
+    if (!branchIcon || !delIcon) throw new Error("expected branch/delete icons on a saved squad tab");
+    for (const [name, el] of [["branch", branchIcon], ["delete", delIcon]]) {
+      if (el.getAttribute("tabindex") !== "0") throw new Error(`${name} icon isn't in the tab order`);
+      if (el.getAttribute("role") !== "button") throw new Error(`${name} icon has no button role for screen readers`);
+    }
+
+    const countBefore = PL.squads.length;
+    branchIcon.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    if (PL.compareId == null) throw new Error("Enter on the branch icon didn't set up a comparison the way a click does");
+
+    delIcon.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true }));
+    // jsdom doesn't implement window.confirm - it returns undefined (falsy)
+    // rather than throwing, so this exercises the keydown wiring itself
+    // without actually deleting anything.
+    if (PL.squads.length !== countBefore) throw new Error("space on the delete icon shouldn't have deleted without confirming");
+
+    PL.savedSquadsOpen = false;
+    return "branch and delete icons both reachable and Enter/Space-activatable";
   });
 }
 

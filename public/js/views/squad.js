@@ -5,6 +5,7 @@ import {
   availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash, profileHint,
 } from "../ui.js";
 import { openPlayerDetail } from "../playerDetail.js";
+import { J, blankDraft as blankJournalDraft } from "../journal.js";
 
 let liveById = {};
 let loadError = "";
@@ -386,7 +387,11 @@ function deltas(out, inc) {
   <p class="hint" style="margin-top:10px">
     Fixture swing is the difference in average difficulty over the next five gameweeks. Positive means the
     player coming in has the kinder run.
-  </p>`;
+  </p>
+  <div class="compare-log" style="margin-top:10px">
+    <button class="btn primary" id="swapLogDecision">Log this as a decision →</button>
+    <p class="hint">Sends it to the Journal, pre-filled with who's in and who's out — set your confidence and reasoning there.</p>
+  </div>`;
 }
 
 /* =========================================================
@@ -452,6 +457,24 @@ function wire(root, rerender, picks) {
       const col = SWAP_SORT_COLS.find((c) => c.k === sortSel.value);
       S.ui.swapSort = { k: sortSel.value, dir: col?.dir ?? -1 };
       refreshDrop();
+    };
+
+  const logBtn = $("#swapLogDecision", root);
+  if (logBtn)
+    logBtn.onclick = () => {
+      const outP = S.ui.swapOut ? S.playerById[S.ui.swapOut] : null;
+      const incP = S.ui.swapIn ? S.playerById[S.ui.swapIn] : null;
+      if (!outP || !incP) return;
+      const asOption = (p) => ({ id: p.id, name: p.name, short: p.short, pos: p.pos });
+      J.draft = {
+        ...blankJournalDraft(),
+        kind: "transfer",
+        gw: S.nextGw,
+        title: `${incP.name} in for ${outP.name}`,
+        options: [asOption(incP), asOption(outP)],
+        chosen: incP.id,
+      };
+      document.querySelector('[data-tab="journal"]')?.click();
     };
 }
 

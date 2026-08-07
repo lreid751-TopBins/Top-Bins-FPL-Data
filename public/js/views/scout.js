@@ -1,8 +1,9 @@
 import { S, runDifficulty, saveWatchlist, n, f1, f2, signed } from "../store.js";
 import {
-  $, $$, esc, th, sparkline, fixtureStrip, availabilityFlag, setPieceFlag,
+  $, $$, esc, th, sparkline, fixtureStrip, availabilityFlag, setPieceFlag, profileHint,
 } from "../ui.js";
 import { scatter, POS_COLOR } from "../charts.js";
+import { openPlayerDetail } from "../playerDetail.js";
 
 function columns(per90) {
   return [
@@ -152,7 +153,7 @@ function row(p, u, maxDefcon) {
   return `<tr>
     <td class="name">
       <button class="star ${starred ? "on" : ""}" data-star="${p.id}" aria-label="${starred ? "Remove from" : "Add to"} watchlist">${starred ? "★" : "☆"}</button>
-      ${esc(p.name)}${availabilityFlag(p)}${setPieceFlag(p)}
+      <span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${setPieceFlag(p)}${profileHint()}</span>
     </td>
     <td class="sub-t">${p.short}</td>
     <td><span class="pos-chip pos-${p.pos}">${p.pos}</span></td>
@@ -223,6 +224,12 @@ function buyZonePoints(data) {
 function wire(root) {
   const u = S.ui;
   const re = () => renderScout(root);
+
+  $$("[data-playerid]", root).forEach((el) => {
+    const go = (e) => { e.stopPropagation(); openPlayerDetail(+el.dataset.playerid); };
+    el.onclick = go;
+    el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
+  });
 
   $$("[data-p90]", root).forEach((b) => (b.onclick = () => { u.per90 = b.dataset.p90 === "1"; re(); }));
 
