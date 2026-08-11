@@ -58,10 +58,17 @@ public/
     views/              squad.js scout.js fixtures.js teams.js planner.js journal.js
 supabase/
   functions/fpl/
-    index.ts            entrypoint: real PostgREST deps injected into the handler
-    handler.ts          routing, caching, validation, CORS, journal + squads + points
-    handler.test.ts     Deno tests (36 passing)
-  migrations/           api_cache, price_history, decisions, squads
+    index.ts               entrypoint: real PostgREST deps injected into the handler
+    handler.ts             routing, caching, validation, CORS, journal/squads/points/rate-team
+    handler.test.ts        Deno tests for handler.ts
+    rating.ts               Team Rater scoring — imports public/js/{store,planner,teamRating}.js
+                            directly, so browser and server can never drift apart
+    localStoragePolyfill.ts stubs globalThis.localStorage before store.js can read it — MUST
+                            be the first import of anything that (transitively) imports store.js
+    rating.test.ts          proves rating.ts survives without a native localStorage (Supabase's
+                            runtime has none; the local Deno CLI does, which is why this needs
+                            its own file — see the gotcha below)
+  migrations/           api_cache, price_history, decisions, squads, team_ratings
 test/
   mock-data.mjs         deterministic fake FPL data (+ jerseys, set-piece, points)
   mock-server.mjs       localhost:3100 preview server (mock data, no network)
@@ -74,8 +81,9 @@ test/
   (no Supabase, no real FPL). Use this to test every change before pushing.
 - **Always test locally before pushing.** This has caught real bugs repeatedly.
 - Tests: `node test/render.test.mjs` (front-end) and
-  `deno test --no-remote supabase/functions/fpl/handler.test.ts` (backend).
-  Keep both green. Add a regression test for every bug fixed.
+  `deno test --no-remote supabase/functions/fpl/handler.test.ts supabase/functions/fpl/rating.test.ts`
+  (backend, two files — see the localStorage gotcha below for why). Keep both
+  green. Add a regression test for every bug fixed.
 
 ## The projection engine (`public/js/projection.js`)
 
@@ -129,6 +137,38 @@ We built the branching feature in three parts, engine-first:
 
 ## Hard-won gotchas (don't relearn these)
 
+- **The local Deno CLI has a native `localStorage` global; Supabase's actual
+  edge runtime does not.** `store.js` reads `localStorage.getItem(...)` at
+  module top level (S.ui's default managerId/watchlist/theme) — harmless in
+  the browser, and `deno check`/`deno test` never catch a problem with it
+  either, because Deno itself ships a working `localStorage`. Supabase's
+  deployed runtime doesn't, so importing `store.js` there throws
+  `ReferenceError: localStorage is not defined` before any request can be
+  routed — and because `handler.ts` imports `rating.ts` which imports
+  `store.js`, that ReferenceError crashed the ENTIRE site (every endpoint,
+  not just Team Rater), twice, before this was understood. A same-file
+  `globalThis.localStorage = {...}` stub written *before* the `import`
+  statement does **not** fix it — ES modules evaluate all of a module's
+  imports (and their transitive imports) before that module's own top-level
+  code runs, regardless of source order, so the stub was always running
+  after `store.js` had already crashed. The actual fix is
+  `localStoragePolyfill.ts`: a separate file with zero imports of its own,
+  imported *first* in `rating.ts` — see its header comment.
+  `rating.test.ts` is the regression test, and it has to live in its own
+  file: `deno test` only evaluates a given module once per process, so if
+  anything else already statically imported `rating.ts` first, deleting
+  `localStorage` afterward would test nothing.
+  **The debugging lesson, not just the bug:** two earlier fixes both shipped
+  based on a theory (cross-directory imports don't resolve in Supabase's
+  deploy) that turned out to be wrong, and both re-crashed production,
+  because `deno check`/`deno test` passing was trusted as proof instead of
+  checked against real deployed behavior. The actual cause only surfaced by
+  pulling real logs — `npx supabase login` then querying
+  `https://api.supabase.com/v1/projects/<ref>/analytics/endpoints/logs.all`
+  (table `function_logs`, needs `iso_timestamp_start`/`iso_timestamp_end` or
+  it silently returns nothing) — which had the exact stack trace the whole
+  time. Pull real logs before re-guessing at a second fix for a production
+  incident; don't re-deploy on theory alone.
 - **CORS:** the edge function's `Access-Control-Allow-Headers` MUST include
   `x-journal-token` (handler.ts). Missing it silently blocks every journal/squad
   request in the browser. There's a regression test for this — keep it.

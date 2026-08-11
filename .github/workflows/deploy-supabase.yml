@@ -31,7 +31,7 @@ jobs:
           deno-version: v2.x
 
       - name: Test the handler
-        run: deno test --no-remote supabase/functions/fpl/handler.test.ts
+        run: deno test --no-remote supabase/functions/fpl/handler.test.ts supabase/functions/fpl/rating.test.ts
 
       - uses: supabase/setup-cli@v1
         with:

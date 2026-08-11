@@ -14,16 +14,12 @@
  * one way and the two files can't form an import cycle.
  *
  * store.js reads localStorage at module load time (S.ui's default
- * managerId/watchlist/theme) - none of that matters here, so it's stubbed
- * out before the import rather than pulling in a real storage backend for a
- * value nothing in this file reads.
+ * managerId/watchlist/theme) - none of that matters here, so it's polyfilled
+ * away rather than pulling in a real storage backend for a value nothing in
+ * this file reads. That polyfill MUST be imported first, before store.js -
+ * see localStoragePolyfill.ts for why a same-file statement doesn't work.
  */
-// deno-lint-ignore no-explicit-any
-(globalThis as any).localStorage = {
-  getItem: () => null,
-  setItem: () => {},
-  removeItem: () => {},
-};
+import "./localStoragePolyfill.ts";
 
 import { S, buildFromData } from "../../../public/js/store.js";
 import { blankDraft, SQUAD_RULES } from "../../../public/js/planner.js";
