@@ -74,8 +74,8 @@ test/
   (no Supabase, no real FPL). Use this to test every change before pushing.
 - **Always test locally before pushing.** This has caught real bugs repeatedly.
 - Tests: `node test/render.test.mjs` (front-end) and
-  `deno test --no-remote --allow-read=public/js,supabase/functions/_shared supabase/functions/fpl/handler.test.ts`
-  (backend). Keep both green. Add a regression test for every bug fixed.
+  `deno test --no-remote supabase/functions/fpl/handler.test.ts` (backend).
+  Keep both green. Add a regression test for every bug fixed.
 
 ## The projection engine (`public/js/projection.js`)
 
@@ -129,21 +129,6 @@ We built the branching feature in three parts, engine-first:
 
 ## Hard-won gotchas (don't relearn these)
 
-- **Supabase edge functions can't import outside `supabase/functions/`.**
-  `deno check`/`deno test` happily resolve an import that reaches out to
-  `public/js/` (or anywhere else in the repo) because they run against a
-  full checkout - but Supabase's actual deploy only packages
-  `supabase/functions/`, so that same import crashes the WHOLE function on
-  cold start in production, not just the route that uses it. This took down
-  the entire site once (every endpoint, including `/health`). Any code the
-  edge function needs from the browser engine has to live inside
-  `supabase/functions/_shared/` (Supabase's own documented shared-code
-  pattern) as a byte-for-byte copy of the `public/js/` original - see
-  `rating.ts`'s header comment. `handler.test.ts` has a test that fails if a
-  copy drifts from its original; re-copy after editing the source file.
-  Before trusting any Supabase-specific behavior, prefer verifying against
-  actual deployed behavior (or the Supabase CLI/docs) over local Deno
-  checks alone - they can both pass while production is down.
 - **CORS:** the edge function's `Access-Control-Allow-Headers` MUST include
   `x-journal-token` (handler.ts). Missing it silently blocks every journal/squad
   request in the browser. There's a regression test for this — keep it.

@@ -6,8 +6,6 @@
  * start and the whole thing can be tested offline with fake dependencies.
  */
 
-import { buildPool, rateSquad, type RatingPick } from "./rating.ts";
-
 export interface DecisionOption {
   id: number;
   name: string;
@@ -259,66 +257,6 @@ export async function buildForm(deps: Deps, last: number) {
 }
 
 /* ---------------------------------------------------------------
-   Team Rater — pool orchestration
-
-   rating.ts scores a squad against an already-built player pool; fetching
-   and caching the bootstrap/fixtures/form data that pool is built from is
-   this file's job, same as every other endpoint. The pool only needs
-   rebuilding as often as its slowest input changes (form, 45s) - concurrent
-   submissions within that window share one in-flight build rather than each
-   triggering their own, same inflight-dedup shape as cached() above.
---------------------------------------------------------------- */
-let poolBuiltAt = 0;
-let poolInflight: Promise<void> | null = null;
-
-async function ensureRatingPool(deps: Deps): Promise<void> {
-  const now = deps.now();
-  if (now - poolBuiltAt < TTL.form) return;
-  if (poolInflight) return poolInflight;
-
-  poolInflight = (async () => {
-    const [boot, fixtures, form] = await Promise.all([
-      cached(deps, "bootstrap", TTL.bootstrap, "/bootstrap-static/"),
-      cached(deps, "fixtures", TTL.fixtures, "/fixtures/"),
-      buildForm(deps, 6),
-    ]);
-    buildPool(boot, fixtures, form);
-    poolBuiltAt = deps.now();
-  })();
-
-  try {
-    await poolInflight;
-  } finally {
-    poolInflight = null;
-  }
-}
-
-/**
- * A light first line of defence against script-spamming the public Discord
- * channel: one submission per IP every 15s. Not real rate limiting - it's
- * in-memory (resets on a cold start) and x-forwarded-for is caller-supplied,
- * so it's trivially spoofable by anyone motivated enough - but it stops
- * naive rapid-fire abuse without needing accounts or persistent tracking,
- * which is the right amount of defence for a feature nobody has a reason to
- * attack yet. Revisit with something sturdier if that stops being true.
- */
-const SUBMIT_COOLDOWN_MS = 15_000;
-const lastSubmitByIp = new Map<string, number>();
-
-function clientIp(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for") ?? "";
-  return fwd.split(",")[0].trim() || "unknown";
-}
-
-function submitCooldownOk(req: Request, now: number): boolean {
-  const ip = clientIp(req);
-  const last = lastSubmitByIp.get(ip) ?? 0;
-  if (now - last < SUBMIT_COOLDOWN_MS) return false;
-  lastSubmitByIp.set(ip, now);
-  return true;
-}
-
-/* ---------------------------------------------------------------
    Journal helpers
 --------------------------------------------------------------- */
 async function hashToken(token: string): Promise<string> {
@@ -553,53 +491,6 @@ export function validateSquad(input: unknown): SquadValidated {
 }
 
 /* ---------------------------------------------------------------
-   Team Rater — submission validation
-
-   Shape-only: right types, right count, a captain that's at least a
-   plausible id, a window in a sane range. The real legality check - the
-   2/5/5/3 split, the £100m budget, max 3 per club, no duplicates - happens
-   in rating.ts's validateSquad against live prices, not here. This exists
-   so a malformed body never reaches that more expensive path at all.
---------------------------------------------------------------- */
-export interface RatingSubmission {
-  nickname: string;
-  picks: { id: number }[];
-  captain: number | null;
-  window: number;
-}
-
-type RatingSubmissionValidated =
-  | { ok: true; value: RatingSubmission }
-  | { ok: false; error: string };
-
-export function validateRatingSubmission(input: unknown): RatingSubmissionValidated {
-  if (typeof input !== "object" || input === null) return { ok: false, error: "body_not_an_object" };
-  const d = input as Record<string, unknown>;
-
-  const nickname = String(d.nickname ?? "").trim().slice(0, 40);
-  if (!nickname) return { ok: false, error: "missing_nickname" };
-
-  if (!Array.isArray(d.picks) || d.picks.length !== 15) return { ok: false, error: "bad_picks" };
-  const picks: { id: number }[] = [];
-  for (const raw of d.picks) {
-    if (typeof raw !== "object" || raw === null) return { ok: false, error: "bad_picks" };
-    const id = Number((raw as Record<string, unknown>).id);
-    if (!Number.isInteger(id) || id < 1) return { ok: false, error: "bad_picks" };
-    picks.push({ id });
-  }
-
-  const captain = d.captain == null ? null : Number(d.captain);
-  if (captain !== null && (!Number.isInteger(captain) || captain < 1)) {
-    return { ok: false, error: "bad_captain" };
-  }
-
-  const window = Number(d.window ?? 5);
-  if (!Number.isInteger(window) || window < 1 || window > 10) return { ok: false, error: "bad_window" };
-
-  return { ok: true, value: { nickname, picks, captain, window } };
-}
-
-/* ---------------------------------------------------------------
    Router
 --------------------------------------------------------------- */
 const isId = (s: string) => /^\d{1,12}$/.test(s);
@@ -632,10 +523,6 @@ export function createHandler(deps: Deps) {
 
       if (head === "squads") {
         return await handleSquads(req, deps, cors, rest[0]);
-      }
-
-      if (req.method === "POST" && head === "rate-team") {
-        return await handleRateTeam(req, deps, cors);
       }
 
       if (req.method !== "GET") {
@@ -876,52 +763,6 @@ async function handleSquads(
   return json({ error: "method_not_allowed" }, 405, cors);
 }
 
-async function handleRateTeam(req: Request, deps: Deps, cors: Record<string, string>): Promise<Response> {
-  if (!submitCooldownOk(req, deps.now())) {
-    return json({ error: "too_many_requests" }, 429, cors);
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "invalid_json" }, 400, cors);
-  }
-
-  const parsed = validateRatingSubmission(body);
-  if (!parsed.ok) return json({ error: parsed.error }, 400, cors);
-
-  await ensureRatingPool(deps);
-
-  const outcome = rateSquad(
-    parsed.value.picks as RatingPick[],
-    parsed.value.captain,
-    parsed.value.window
-  );
-  if (!outcome.ok) return json({ error: "invalid_squad", message: outcome.error }, 400, cors);
-
-  const { nickname, picks, captain, window } = parsed.value;
-  const { pct, submittedTotal, ceilingTotal } = outcome.result;
-
-  // Storing the submission and announcing it in Discord are side effects of
-  // a correctly-computed score, not part of the contract with whoever just
-  // submitted - a Postgres or Discord hiccup shouldn't turn a real result
-  // into an error response. Both are still awaited (not true fire-and-
-  // forget): an edge function's execution can end the moment the response
-  // is sent, which would silently kill an un-awaited write mid-flight.
-  const [stored, posted] = await Promise.allSettled([
-    deps.ratingInsert({
-      nickname, picks, captain,
-      window_gws: window, pct, submitted_total: submittedTotal, ceiling_total: ceilingTotal,
-    }),
-    deps.postToDiscord(`**${nickname}** submitted a team — score: **${pct.toFixed(1)}%**`),
-  ]);
-  if (stored.status === "rejected") console.error("rating insert failed:", stored.reason);
-  if (posted.status === "rejected") console.error("discord post failed:", posted.reason);
-
-  return json({ nickname, pct, submittedTotal, ceilingTotal, window }, 200, cors);
-}
-
 async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, string>) {
   const key = req.headers.get("x-snapshot-key") ?? "";
   if (!deps.snapshotKey || !(await safeEqual(key, deps.snapshotKey))) {
@@ -944,7 +785,4 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
 export function _resetMemory() {
   memory.clear();
   inflight.clear();
-  poolBuiltAt = 0;
-  poolInflight = null;
-  lastSubmitByIp.clear();
 }
