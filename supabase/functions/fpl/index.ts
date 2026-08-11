@@ -3,8 +3,10 @@
  *
  * Environment (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected
  * automatically; the rest you set with `supabase secrets set`):
- *   SNAPSHOT_KEY      shared secret for POST /snapshot
- *   ALLOWED_ORIGINS   comma-separated list, or * for any
+ *   SNAPSHOT_KEY        shared secret for POST /snapshot
+ *   ALLOWED_ORIGINS     comma-separated list, or * for any
+ *   DISCORD_WEBHOOK_URL where Team Rater submissions get announced. Unset =
+ *                       scoring and storage still work, just no announcement.
  */
 
 import {
@@ -14,6 +16,8 @@ import {
   type NewDecision,
   type SquadRow,
   type NewSquad,
+  type RatingRow,
+  type NewRating,
 } from "./handler.ts";
 
 const FPL = "https://fantasy.premierleague.com/api";
@@ -181,6 +185,28 @@ const deps: Deps = {
     const range = res.headers.get("content-range") ?? "";
     const total = Number(range.split("/")[1]);
     return Number.isFinite(total) ? total : 0;
+  },
+
+  async ratingInsert(row: NewRating) {
+    const res = await fetch(`${REST}/team_ratings`, {
+      method: "POST",
+      headers: { ...restHeaders, Prefer: "return=representation" },
+      body: JSON.stringify(row),
+    });
+    if (!res.ok) throw new Error(`rating write failed (${res.status})`);
+    const rows = (await res.json()) as RatingRow[];
+    return rows[0];
+  },
+
+  async postToDiscord(message: string) {
+    const url = Deno.env.get("DISCORD_WEBHOOK_URL");
+    if (!url) return; // announcements are optional - scoring and storage work without one
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+    if (!res.ok) throw new Error(`discord webhook failed (${res.status})`);
   },
 
   snapshotKey: Deno.env.get("SNAPSHOT_KEY") ?? "",

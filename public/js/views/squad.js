@@ -6,6 +6,7 @@ import {
 } from "../ui.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
+import { openRater } from "../teamRater.js";
 
 let liveById = {};
 let loadError = "";
@@ -194,6 +195,7 @@ export function renderSquad(root) {
       <h2>${esc(S.entry.name || "My Team")}</h2>
       <div class="controls">
         <span class="hint">${esc(S.entry.player_first_name || "")} ${esc(S.entry.player_last_name || "")} · ID ${S.entry.id}</span>
+        <button class="btn ghost" id="mgrRate" data-open-rater>Rate my team</button>
         <button class="btn ghost" id="mgrSwitch">Change team</button>
       </div>
     </div>
@@ -413,6 +415,13 @@ function wire(root, rerender, picks) {
       S.picks = null;
       S.ui.swapOut = S.ui.swapIn = null;
       rerender();
+    };
+
+  const rate = $("#mgrRate", root);
+  if (rate)
+    rate.onclick = () => {
+      const captain = picks.find((p) => p.is_captain)?.element ?? null;
+      openRater(picks.map((p) => ({ id: p.element })), captain);
     };
 
   const out = $("#swapOut", root);

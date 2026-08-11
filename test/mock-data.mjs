@@ -128,14 +128,42 @@ elements.forEach((e) => {
   formMinutes[e.id] = gws.map(() => (rnd() > 0.15 ? ri(20, 90) : 0));
 });
 
-const squadPicks = elements
-  .filter((e) => e.element_type <= 4)
-  .slice(0, 15)
-  .map((e, i) => ({
-    element: e.id, position: i + 1,
-    multiplier: i === 0 ? 1 : i === 1 ? 2 : i < 11 ? 1 : 0,
-    is_captain: i === 1, is_vice_captain: i === 2,
-  }));
+// A real FPL squad is 2 GKP/5 DEF/5 MID/3 FWD, max 3 from one club, under
+// £100m - slicing the first 15 elements used to just grab team 1's entire
+// goalkeeper/defender/midfielder pool (each team's mock players are
+// generated GKP-DEF-MID-FWD in a block, so the first 15 elements overall
+// were 2 GKP + 6 DEF + 7 MID + 0 FWD). Building it properly here means the
+// mock "My Team" squad is legal wherever real FPL legality actually
+// matters - the Team Rater in particular, which rejects anything that
+// isn't.
+const SQUAD_NEED = { 1: 2, 2: 5, 3: 5, 4: 3 };
+const squadElements = [];
+{
+  const byClub = {};
+  const have = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  const pool = [...elements].filter((e) => e.element_type <= 4).sort((a, b) => a.now_cost - b.now_cost);
+  for (const e of pool) {
+    if (have[e.element_type] >= SQUAD_NEED[e.element_type]) continue;
+    if ((byClub[e.team] || 0) >= 3) continue;
+    squadElements.push(e);
+    have[e.element_type]++;
+    byClub[e.team] = (byClub[e.team] || 0) + 1;
+    if (squadElements.length === 15) break;
+  }
+}
+// Order as a legal 4-4-2 starting XI (slots 1-11) plus a 4-man bench
+// (12-15): 1 GKP/4 DEF/4 MID/2 FWD starting, the rest benched.
+const byPos = { 1: [], 2: [], 3: [], 4: [] };
+squadElements.forEach((e) => byPos[e.element_type].push(e));
+const ordered = [
+  ...byPos[1].slice(0, 1), ...byPos[2].slice(0, 4), ...byPos[3].slice(0, 4), ...byPos[4].slice(0, 2),
+  ...byPos[1].slice(1), ...byPos[2].slice(4), ...byPos[3].slice(4), ...byPos[4].slice(2),
+];
+const squadPicks = ordered.map((e, i) => ({
+  element: e.id, position: i + 1,
+  multiplier: i === 0 ? 1 : i === 1 ? 2 : i < 11 ? 1 : 0,
+  is_captain: i === 1, is_vice_captain: i === 2,
+}));
 
 // A handful of players have moved price; the rest are absent, exactly as the
 // price_moves SQL function returns them.

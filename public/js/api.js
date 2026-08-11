@@ -41,12 +41,18 @@ async function get(url, { ttl = 0, method = "GET", headers, body } = {}) {
 
   const res = await fetch(url, { method, headers, body });
   if (!res.ok) {
-    let detail = "";
+    let errBody = {};
     try {
-      detail = (await res.json()).error || "";
+      errBody = await res.json();
     } catch { /* body wasn't JSON */ }
-    const err = new Error(detail || `Request failed (${res.status})`);
+    const err = new Error(errBody.error || `Request failed (${res.status})`);
     err.status = res.status;
+    // Most endpoints return a short machine code in .error, which callers
+    // map to their own copy (see journal.js's ERROR_COPY). A few - notably
+    // rate-team's squad-legality check - also carry a ready-to-show reason
+    // in .message, kept here rather than folded into err.message so callers
+    // can tell "here's the human sentence" apart from "here's the code".
+    err.body = errBody;
     throw err;
   }
   const data = await res.json();
@@ -119,6 +125,15 @@ export const api = {
         headers: { "x-journal-token": journalToken() },
       }),
   },
+
+  // Anonymous by design - no journal token. A submission isn't owned by
+  // anyone, it's a public score with a nickname attached.
+  rateTeam: (payload) =>
+    get(`${BASE}/rate-team`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+    }),
 
   clear: () => memo.clear(),
 };

@@ -12,6 +12,23 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MOCK, pointsPayload, teamsWindowPayload, seedDecisions, CURRENT_GW } from "./mock-data.mjs";
 
+// store.js reads localStorage at module load time (S.ui's default
+// managerId/watchlist/theme) - stub it before importing so the real engine
+// runs here too. This lets the local preview server score "Rate my team"
+// for real, against the mock 380-player pool, instead of faking a number -
+// the same reasoning as the edge function's own rating.ts.
+globalThis.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+const { buildFromData } = await import("../public/js/store.js");
+const { blankDraft } = await import("../public/js/planner.js");
+const { scoreSquad } = await import("../public/js/teamRating.js");
+
+let ratingPoolReady = false;
+function ensureRatingPool() {
+  if (ratingPoolReady) return;
+  buildFromData(MOCK["/api/bootstrap"], MOCK["/api/fixtures"], MOCK["/api/form?last=6"]);
+  ratingPoolReady = true;
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, "../public");
 const PORT = process.env.PORT || 3100;
@@ -89,6 +106,28 @@ const server = http.createServer(async (req, res) => {
       const id = url.pathname.split("/").pop();
       squads = squads.filter((s2) => s2.id !== id);
       return send(200, { ok: true });
+    }
+  }
+
+  if (url.pathname === "/api/rate-team" && req.method === "POST") {
+    const body = await readBody(req);
+    const nickname = String(body?.nickname ?? "").trim().slice(0, 40);
+    if (!nickname) return send(400, { error: "missing_nickname" });
+    if (!Array.isArray(body?.picks) || body.picks.length !== 15) {
+      return send(400, { error: "bad_picks" });
+    }
+    const windowGws = Number(body.window ?? 5);
+    if (!Number.isInteger(windowGws) || windowGws < 1 || windowGws > 10) {
+      return send(400, { error: "bad_window" });
+    }
+
+    ensureRatingPool();
+    const draft = { ...blankDraft(), picks: body.picks.map((p, i) => ({ id: p.id, slot: i + 1 })), captain: body.captain ?? null };
+    try {
+      const result = scoreSquad(draft, windowGws);
+      return send(200, { nickname, ...result });
+    } catch (err) {
+      return send(400, { error: "invalid_squad", message: err.message });
     }
   }
 

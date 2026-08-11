@@ -96,6 +96,22 @@ global.fetch = async (url, init = {}) => {
     }
   }
 
+  if (p === "/api/rate-team" && method === "POST") {
+    const body = JSON.parse(init.body);
+    const nickname = String(body.nickname ?? "").trim().slice(0, 40);
+    if (!nickname) return { ok: false, status: 400, json: async () => ({ error: "missing_nickname" }) };
+    if (!Array.isArray(body.picks) || body.picks.length !== 15) {
+      return { ok: false, status: 400, json: async () => ({ error: "bad_picks" }) };
+    }
+    const draft = { ...blankDraft(), picks: body.picks.map((pk, i) => ({ id: pk.id, slot: i + 1 })), captain: body.captain ?? null };
+    try {
+      const result = scoreSquad(draft, body.window ?? 5);
+      return ok({ nickname, ...result });
+    } catch (err) {
+      return { ok: false, status: 400, json: async () => ({ error: "invalid_squad", message: err.message }) };
+    }
+  }
+
   if (p in MOCK) return ok(MOCK[p]);
   misses.push(p);
   return { ok: false, status: 404, json: async () => ({ error: "not_found" }) };
@@ -121,8 +137,11 @@ const {
   PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
   draftPlayers, branchSquad, compareTotals, deleteSquad, transferLogDraft,
+  SQUAD_RULES, POSITION_ORDER, blankDraft,
 } = await import("../public/js/planner.js");
 const { PD, openPlayerDetail, closePlayerDetail } = await import("../public/js/playerDetail.js");
+const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
+const { optimalSquad, scoreSquad, validateSquad } = await import("../public/js/teamRating.js");
 
 const results = [];
 const check = (name, fn) => {
@@ -1026,6 +1045,104 @@ check("clicking outside the transfer scratchpad's In field closes its dropdown",
   return "outside click closes the In dropdown";
 });
 
+check("Rate my team on My Team opens the rater with the loaded squad", () => {
+  const btn = panel("panel-squad").querySelector("#mgrRate");
+  if (!btn) throw new Error("no Rate my team button on a loaded My Team squad");
+
+  // Regression: the trigger button must carry data-open-rater, or the
+  // click that opens the drawer bubbles to the document's own
+  // outside-click dismiss listener and closes it again immediately -
+  // openRater() has already run and set hidden=false by the time that
+  // listener sees the event, so its "was this click on the trigger"
+  // check has to actually recognise the trigger.
+  if (!btn.hasAttribute("data-open-rater")) {
+    throw new Error("the trigger button needs data-open-rater so the dismiss listener doesn't close what it just opened");
+  }
+
+  btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+  const drawer = document.getElementById("teamRater");
+  if (drawer.hidden) throw new Error("the rater should no longer be hidden once opened - the trigger click shouldn't have also closed it");
+  if (RT.picks.length !== 15) throw new Error(`expected 15 picks queued, got ${RT.picks.length}`);
+  if (RT.captain == null) throw new Error("expected a captain to be pre-filled from the loaded squad");
+  return "drawer opened and stayed open, with 15 picks and a captain queued";
+});
+
+await (async () => {
+  const nickname = document.getElementById("trNickname");
+  nickname.value = "Regression Tester";
+  nickname.dispatchEvent(new window.Event("input", { bubbles: true }));
+  await document.getElementById("trSubmit").onclick();
+
+  check("submitting a nickname scores the loaded squad and shows the result", () => {
+    const drawer = document.getElementById("teamRater");
+    if (!RT.result) throw new Error("expected a result after submitting");
+    if (!(RT.result.pct >= 0 && RT.result.pct <= 100)) throw new Error(`pct out of range: ${RT.result.pct}`);
+    if (!drawer.innerHTML.includes("Your score")) throw new Error("result view didn't render");
+    if (!drawer.innerHTML.includes("Regression Tester")) throw new Error("result should credit the submitted nickname");
+    if (!drawer.innerHTML.includes("tr-bar-fill")) throw new Error("expected the score bar to render");
+    return `scored ${RT.result.pct.toFixed(1)}%`;
+  });
+
+  check("the nickname is remembered in localStorage for next time", () => {
+    if (localStorage.getItem("tb:raterNickname") !== "Regression Tester") {
+      throw new Error("submitting should save the nickname for the next visit");
+    }
+    return "nickname persisted";
+  });
+})();
+
+check("Rate another squad resets to the form, not a stale result", () => {
+  const again = document.getElementById("trAgain");
+  if (!again) throw new Error("no 'Rate another squad' control on the result view");
+  again.click();
+  if (RT.result) throw new Error("RT.result should be cleared");
+  const drawer = document.getElementById("teamRater");
+  if (!drawer.querySelector("#trNickname")) throw new Error("expected the form to render again");
+  return "back to the form";
+});
+
+// 15 syntactically-valid picks (right shape, so it passes the same-shape
+// check a truncated submission would fail on), but the same player 15
+// times over - illegal for a very different reason, one only the deeper
+// validateSquad check catches server-side, so this actually exercises the
+// "server's specific message" path rather than the generic bad_picks one.
+openRater(Array.from({ length: 15 }, () => ({ id: squadPicks[0].element })), null);
+await document.getElementById("trSubmit").onclick();
+
+check("a rejected submission shows the server's specific reason", () => {
+  const drawer = document.getElementById("teamRater");
+  if (!drawer.innerHTML.includes("same player")) {
+    throw new Error(`expected the "same player can't appear twice" reason, drawer shows: ${drawer.innerHTML.slice(0, 400)}`);
+  }
+  return "server's rejection reason shown verbatim, not a generic error";
+});
+closeRater();
+
+check("Escape dismisses the rater", () => {
+  const btn = panel("panel-squad").querySelector("#mgrRate");
+  btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (document.getElementById("teamRater").hidden) throw new Error("setup: rater should be open");
+
+  document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  if (document.getElementById("teamRater").classList.contains("show")) {
+    throw new Error("Escape should have started closing the rater (the .show class comes off immediately)");
+  }
+  return "Escape closes the rater";
+});
+
+check("a click outside the rater dismisses it", () => {
+  const btn = panel("panel-squad").querySelector("#mgrRate");
+  btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (document.getElementById("teamRater").hidden) throw new Error("setup: rater should be open");
+
+  document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (document.getElementById("teamRater").classList.contains("show")) {
+    throw new Error("a click outside the rater should dismiss it");
+  }
+  return "outside click closes the rater";
+});
+
 check("hub shows crests, rank and mini-leagues once a manager is connected", () => {
   renderHub(panel("panel-hub"));
   const html = panel("panel-hub").innerHTML;
@@ -1393,6 +1510,23 @@ check("planner auto-picks a legal starting XI once the squad is full", () => {
   const gks = starting.filter((p) => p.pos === "GKP").length;
   if (gks !== 1) throw new Error(`expected exactly 1 starting GK, got ${gks}`);
   return `${formationLabel()} formation, ${bench.length} on the bench`;
+});
+
+check("Rate my team on the Planner opens the rater with the current draft", () => {
+  renderPlanner(panel("panel-planner"));
+  const btn = panel("panel-planner").querySelector("#plRate");
+  if (!btn) throw new Error("no Rate my team button once the squad is complete");
+  if (!btn.hasAttribute("data-open-rater")) {
+    throw new Error("the trigger button needs data-open-rater, same as My Team's, or its own click closes the drawer it just opened");
+  }
+
+  btn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const drawer = document.getElementById("teamRater");
+  if (drawer.hidden) throw new Error("the rater should be open");
+  if (RT.picks.length !== 15) throw new Error(`expected 15 picks from the draft, got ${RT.picks.length}`);
+  if (RT.span !== PL.projWindow) throw new Error(`expected the rater to use the Planner's own projection window (${PL.projWindow}), got ${RT.span}`);
+  closeRater();
+  return "drawer opened with the draft's 15 picks and the Planner's projection window";
 });
 
 check("lineup swap rejects two players from the same side", () => {
@@ -2361,6 +2495,128 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
     throw new Error(".twrap needs the same mask-image scroll-edge fade as .tabs, inside the max-width:720px block");
   }
   return "wide tables (.twrap) fade their right edge on mobile, same as the tab bar";
+});
+
+/* =========================================================
+   Team Rater — scoring engine
+   ========================================================= */
+check("optimalSquad builds a legal 15 - budget, position quotas, and per-club limit all hold", () => {
+  const draft = optimalSquad(5);
+  if (draft.picks.length !== 15) throw new Error(`expected 15 picks, got ${draft.picks.length}`);
+
+  const ids = draft.picks.map((pk) => pk.id);
+  if (new Set(ids).size !== 15) throw new Error("duplicate player in the optimal squad");
+
+  const spend = ids.reduce((sum, id) => sum + S.playerById[id].price, 0);
+  if (spend > SQUAD_RULES.budget + 1e-6) throw new Error(`over budget: £${spend}m`);
+
+  const byPos = { GKP: 0, DEF: 0, MID: 0, FWD: 0 };
+  const byClub = {};
+  for (const id of ids) {
+    const p = S.playerById[id];
+    byPos[p.pos]++;
+    byClub[p.teamId] = (byClub[p.teamId] || 0) + 1;
+  }
+  if (byPos.GKP !== 2 || byPos.DEF !== 5 || byPos.MID !== 5 || byPos.FWD !== 3) {
+    throw new Error(`wrong position split: ${JSON.stringify(byPos)}`);
+  }
+  const overClub = Object.entries(byClub).find(([, count]) => count > 3);
+  if (overClub) throw new Error(`more than 3 from one club: team ${overClub[0]} has ${overClub[1]}`);
+
+  if (draft.captain == null || !ids.includes(draft.captain)) throw new Error("captain must be one of the 15");
+  if (!startingPlayers(draft).some((p) => p.id === draft.captain)) throw new Error("captain must be in the starting XI, not on the bench");
+
+  return `15 legal picks, £${spend.toFixed(1)}m of £${SQUAD_RULES.budget}m, captain set`;
+});
+
+check("optimalSquad is deterministic for the same inputs", () => {
+  const a = optimalSquad(5).picks.map((pk) => pk.id).sort();
+  const b = optimalSquad(5).picks.map((pk) => pk.id).sort();
+  if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error("two runs with identical inputs picked different squads");
+  return "same 15 players both times";
+});
+
+check("scoreSquad rates a cheap-fodder squad far below a near-optimal one", () => {
+  // Cheapest legal squad money can buy - a deliberately weak baseline.
+  const cheapDraft = blankDraft();
+  for (const pos of POSITION_ORDER) {
+    const cheapest = S.players.filter((p) => p.pos === pos).sort((a, b) => a.price - b.price);
+    let added = 0;
+    for (const p of cheapest) {
+      if (added >= SQUAD_RULES.positions[pos]) break;
+      if (canAdd(p, cheapDraft).ok) { cheapDraft.picks.push({ id: p.id, slot: cheapDraft.picks.length + 1 }); added++; }
+    }
+  }
+  if (cheapDraft.picks.length !== 15) throw new Error("test setup couldn't build a legal cheap squad");
+
+  const cheapScore = scoreSquad(cheapDraft, 5);
+  const optimal = optimalSquad(5);
+  const optimalScore = scoreSquad(optimal, 5);
+
+  if (cheapScore.pct >= optimalScore.pct) {
+    throw new Error(`expected the cheap squad to score lower: cheap ${cheapScore.pct}% vs optimal ${optimalScore.pct}%`);
+  }
+  if (optimalScore.pct < 99.9) throw new Error(`the optimal squad scored against itself should read ~100%, got ${optimalScore.pct}%`);
+  if (cheapScore.pct < 0 || cheapScore.pct > 100 || optimalScore.pct > 100) {
+    throw new Error(`score out of the 0-100 range: cheap ${cheapScore.pct}, optimal ${optimalScore.pct}`);
+  }
+  return `cheap squad ${cheapScore.pct.toFixed(1)}%, optimal squad ${optimalScore.pct.toFixed(1)}%`;
+});
+
+check("scoreSquad auto-picks a lineup and captain for a squad that hasn't set one", () => {
+  const optimal = optimalSquad(5);
+  const noLineup = { ...optimal, picks: optimal.picks.map((pk) => ({ ...pk, slot: 0 })), captain: null, vice: null };
+  const scored = scoreSquad(noLineup, 5);
+  if (!(scored.pct > 0)) throw new Error("an unset lineup/captain should still score, not read as zero");
+  return `scored ${scored.pct.toFixed(1)}% without a pre-set lineup or captain`;
+});
+
+check("validateSquad rejects anything that isn't a legal 15-man FPL squad", () => {
+  // A submission is untrusted input - it may come straight off the wire
+  // from a client that could send anything. Every one of these must be
+  // rejected with a reason, not silently scored.
+  const legal = optimalSquad(5).picks;
+
+  const wrongCount = legal.slice(0, 14);
+  if (validateSquad(wrongCount).ok) throw new Error("14 players should be rejected");
+
+  const dup = [...legal.slice(0, 14), legal[0]];
+  if (validateSquad(dup).ok) throw new Error("a duplicated player should be rejected");
+
+  const unknown = [...legal.slice(0, 14), { id: -999 }];
+  if (validateSquad(unknown).ok) throw new Error("an unknown player id should be rejected");
+
+  // Swap a GKP for an extra DEF-position player to break the 2/5/5/3 split.
+  const gkpId = legal.find((pk) => S.playerById[pk.id].pos === "GKP").id;
+  const extraDef = S.players.find((p) => p.pos === "DEF" && !legal.some((pk) => pk.id === p.id));
+  const wrongSplit = legal.map((pk) => (pk.id === gkpId ? { id: extraDef.id, slot: pk.slot } : pk));
+  if (validateSquad(wrongSplit).ok) throw new Error("a 1 GKP / 6 DEF split should be rejected");
+
+  // Force over budget: swap the cheapest player for the priciest same-position one.
+  const cheapest = [...legal].sort((a, b) => S.playerById[a.id].price - S.playerById[b.id].price)[0];
+  const cheapestP = S.playerById[cheapest.id];
+  const priciest = S.players.filter((p) => p.pos === cheapestP.pos).sort((a, b) => b.price - a.price)[0];
+  const overBudget = legal.map((pk) => (pk.id === cheapest.id ? { id: priciest.id, slot: pk.slot } : pk));
+  const spend = overBudget.reduce((s, pk) => s + S.playerById[pk.id].price, 0);
+  if (spend > SQUAD_RULES.budget && validateSquad(overBudget).ok) throw new Error("an over-budget squad should be rejected");
+
+  // A genuinely legal squad should pass.
+  if (!validateSquad(legal).ok) throw new Error("the optimal squad itself should validate as legal");
+
+  return "wrong count, duplicate, unknown player, wrong position split, and over-budget all rejected";
+});
+
+check("scoreSquad throws rather than silently scoring an illegal squad", () => {
+  const tooFew = { ...blankDraft(), picks: optimalSquad(5).picks.slice(0, 10) };
+  let threw = false;
+  try {
+    scoreSquad(tooFew, 5);
+  } catch (err) {
+    threw = true;
+    if (!err.message) throw new Error("the thrown error should carry a readable reason");
+  }
+  if (!threw) throw new Error("scoreSquad should throw on an illegal squad, not return a bogus percentage");
+  return `rejected with: "${(() => { try { scoreSquad(tooFew, 5); } catch (e) { return e.message; } })()}"`;
 });
 
 /* ---------------- Report ---------------- */

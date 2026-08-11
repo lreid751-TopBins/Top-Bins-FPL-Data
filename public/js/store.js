@@ -147,7 +147,38 @@ export async function load({ onProgress = () => {} } = {}) {
   return S;
 }
 
-function buildTeams(boot) {
+/**
+ * Build the enriched player pool from already-fetched bootstrap/fixtures/
+ * form data, with no network calls of its own - the exact same sequence
+ * load() runs, minus the fetching. load() doesn't call this (its own
+ * sequence is untouched, to avoid risking any change to the one path every
+ * page load already depends on); this exists for the Team Rater, which runs
+ * server-side in the Supabase edge function against data it already has
+ * cached there. Same functions, same order, so xg90/xa90 shrinkage, xMin,
+ * and fixture difficulty come out byte-identical to what the browser shows -
+ * one implementation, not two hand-kept-in-sync copies of the same math.
+ * Skips price history (S.priceMoves/attachPrices) - nothing this feeds into
+ * displays a price move.
+ */
+export function buildFromData(boot, fixtures, form) {
+  S.boot = boot;
+  S.fixtures = fixtures;
+
+  buildTeams(boot);
+  buildGameweeks(boot);
+  buildPlayers(boot);
+  applyRateShrinkage();
+  buildFixtureIndex(fixtures);
+  buildCurrentStrength();
+
+  S.form = form;
+  attachForm();
+
+  S.ready = true;
+  return S;
+}
+
+export function buildTeams(boot) {
   S.teams = {};
   S.teamList = (boot.teams || []).map((t) => {
     const team = { ...t, id: t.id, name: t.name, short: t.short_name };
@@ -156,7 +187,7 @@ function buildTeams(boot) {
   });
 }
 
-function buildGameweeks(boot) {
+export function buildGameweeks(boot) {
   const events = boot.events || [];
   const current = events.find((e) => e.is_current);
   const next = events.find((e) => e.is_next);
@@ -168,7 +199,7 @@ function buildGameweeks(boot) {
   S.events = events;
 }
 
-function buildPlayers(boot) {
+export function buildPlayers(boot) {
   const types = {};
   (boot.element_types || []).forEach((t) => {
     types[t.id] = { short: t.singular_name_short, name: t.singular_name };
@@ -295,7 +326,7 @@ function shrink90(totalStat, minutes, baseline90, priorMinutes = SHRINK_PRIOR_MI
   return (totalStat * 90 + baseline90 * priorMinutes) / (minutes + priorMinutes);
 }
 
-function applyRateShrinkage() {
+export function applyRateShrinkage() {
   ["GKP", "DEF", "MID", "FWD"].forEach((pos) => {
     const baseXg = positionBaseline90(S.players, pos, "xg");
     const baseXa = positionBaseline90(S.players, pos, "xa");
@@ -310,7 +341,7 @@ function applyRateShrinkage() {
   });
 }
 
-function attachForm() {
+export function attachForm() {
   const { points, minutes } = S.form;
   S.players.forEach((p) => {
     p.formSeries = points?.[p.id] || [];
@@ -399,7 +430,7 @@ function attachPrices() {
   });
 }
 
-function buildFixtureIndex(fixtures) {
+export function buildFixtureIndex(fixtures) {
   S.fxByTeamGw = {};
   const add = (teamId, gw, obj) => {
     if (!S.fxByTeamGw[teamId]) S.fxByTeamGw[teamId] = {};
@@ -488,7 +519,7 @@ export function teamSeasonXG(teamId) {
  * data to trust them, fully phased in by 6 games played - so a brand-new
  * season behaves exactly like the old static-only bands did.
  */
-function buildCurrentStrength() {
+export function buildCurrentStrength() {
   const ramp = (gp) => Math.min(1, gp / 6);
 
   const teamStats = S.teamList.map((t) => {

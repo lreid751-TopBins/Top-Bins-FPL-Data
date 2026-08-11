@@ -13,6 +13,7 @@ import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
 import { tickerRow } from "./fixtures.js";
+import { openRater } from "../teamRater.js";
 
 const TOTAL_GWS = 38;
 // How far the search/analysis column can be dragged, as a % of the layout's
@@ -550,7 +551,8 @@ function totalsPanel(t, complete) {
 
     ${
       complete
-        ? `<div class="totals-ok">Full, legal squad ✓</div>`
+        ? `<div class="totals-ok">Full, legal squad ✓</div>
+           <button class="btn ghost" id="plRate" data-open-rater style="width:100%;margin-top:8px">Rate my team</button>`
         : `<div class="totals-need">Still need: ${needs.map((x) => `${x.want} ${x.pos}`).join(", ")}</div>`
     }
 
@@ -971,6 +973,10 @@ function wire(root, rerender) {
     if (!draft) return;
     J.draft = { ...blankJournalDraft(), ...draft };
     document.querySelector('[data-tab="journal"]')?.click();
+  });
+
+  bind("#plRate", "onclick", () => {
+    openRater(draftPlayers(PL.draft), PL.draft.captain, PL.projWindow);
   });
 
   bind("#plSave", "onclick", async () => {
