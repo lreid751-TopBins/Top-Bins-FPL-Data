@@ -1,38 +1,41 @@
 /* =========================================================
    Top Bins — FPL Data Room
-   Palette carried over from the channel's thumbnail identity:
-   floodlit pitch green, chalk white, and the Top Bins gold.
+   Heritage-crest palette: a 90s-Saturday-afternoon feel (Barclays-era
+   Premier League broadcast, matchday programme, the pitch under floodlights)
+   carried by restraint rather than pastiche - one burnished gold as the
+   brand anchor, deep ink and pitch green underneath, a serif voice for
+   headlines. See CLAUDE.md's design-pass notes for the full direction.
    ========================================================= */
 
 :root {
-  --pitch: #08170e;
-  /* The stand: a cool graphite, deliberately not pitch green, so the pitch
+  --pitch: #0c1f13;
+  /* The stand: warm heritage ink, deliberately not pitch green, so the pitch
      itself reads as an object sitting inside the app rather than more of
      the same colour. Scoped to My Team's pitch for now - see CLAUDE.md. */
-  --stand: #12181c;
-  --panel: #0c2013;
-  --panel-2: #0f2a19;
-  --raise: #123521;
-  --line: #1c4230;
-  --line-soft: #14301e;
+  --stand: #14120e;
+  --panel: #171310;
+  --panel-2: #1b1813;
+  --raise: #211c15;
+  --line: #332c1e;
+  --line-soft: #241f16;
 
-  --chalk: #eaf3ec;
-  --muted: #7e9f8b;
-  --muted-2: #5c7a67;
+  --chalk: #ece4d2;
+  --muted: #8f8567;
+  --muted-2: #6b6350;
 
-  --gold: #e7c15e;
-  --gold-2: #f3d888;
-  --gold-deep: #b58f35;
+  --gold: #c9a227;
+  --gold-2: #ddbb4e;
+  --gold-deep: #8a742b;
   /* Text/icon colour sitting on a solid --gold fill (captain badge, primary
      button, active chip...). Its own token because a club theme can swap
      --gold for a colour dark enough that this needs to flip light. */
-  --ink: #1a1200;
+  --ink: #14120e;
   /* Same colour as --gold, as an r,g,b triplet - lets a couple of subtle
      glow backgrounds tint themselves without hardcoding the hex twice. */
-  --gold-rgb: 231, 193, 94;
+  --gold-rgb: 201, 162, 39;
 
-  --pos: #5fd3a2;
-  --neg: #ea8a6a;
+  --pos: #5b8a6e;
+  --neg: #b0563c;
   --cool: #74b8c9;
 
   /* Fixture difficulty ramp — pitch green through to clay red */
@@ -42,8 +45,10 @@
   --fdr-4: #c2603c;
   --fdr-5: #8e2f2a;
 
+  --font-serif: Georgia, "Iowan Old Style", "Times New Roman", serif;
+
   --shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.7);
-  --r: 14px;
+  --r: 3px;
 }
 
 /* ---------------------------------------------------------------
@@ -140,8 +145,8 @@ html, body {
 
 body {
   background:
-    radial-gradient(1200px 600px at 80% -10%, rgba(231, 193, 94, 0.07), transparent 60%),
-    radial-gradient(900px 500px at -10% 10%, rgba(95, 211, 162, 0.05), transparent 55%),
+    radial-gradient(1200px 600px at 80% -10%, rgba(var(--gold-rgb), 0.07), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(95, 211, 162, 0.04), transparent 55%),
     var(--pitch);
   min-height: 100vh;
 }
@@ -155,9 +160,9 @@ a { color: var(--gold); }
   font-variant-numeric: tabular-nums;
 }
 .anton {
-  font-family: "Anton", sans-serif;
-  font-weight: 400;
-  letter-spacing: 0.02em;
+  font-family: var(--font-serif);
+  font-weight: 700;
+  letter-spacing: 0;
 }
 .pos { color: var(--pos); }
 .neg { color: var(--neg); }
@@ -170,35 +175,35 @@ a { color: var(--gold); }
 /* ---------------- Masthead ---------------- */
 .mast {
   position: sticky; top: 0; z-index: 40;
-  background: linear-gradient(180deg, rgba(9, 25, 15, 0.97), rgba(9, 25, 15, 0.86));
+  background: linear-gradient(180deg, rgba(20, 18, 14, 0.97), rgba(20, 18, 14, 0.88));
   backdrop-filter: blur(10px);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--gold-deep);
 }
 .mast-inner {
   max-width: 1240px; margin: 0 auto; padding: 12px 16px;
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
-.crest { width: 40px; height: 40px; flex: 0 0 auto; }
+.crest { width: 38px; height: 38px; flex: 0 0 auto; }
 .brand { display: flex; flex-direction: column; line-height: 1; gap: 3px; }
 .brand .wm {
-  font-family: "Anton", sans-serif; font-size: 22px; letter-spacing: 0.04em;
-  color: var(--chalk); text-transform: uppercase;
+  font-family: var(--font-serif); font-weight: 700; font-size: 21px; letter-spacing: 0.01em;
+  color: var(--chalk);
 }
-.brand .wm b { color: var(--gold); }
+.brand .wm b { color: var(--gold); font-weight: 700; }
 .brand .sub {
-  font-size: 9.5px; letter-spacing: 0.34em; color: var(--muted); text-transform: uppercase;
+  font-size: 9.5px; letter-spacing: 0.3em; color: var(--gold-deep); text-transform: uppercase;
 }
 .mast-spacer { flex: 1 1 auto; }
 
 .gw-badge {
   display: flex; align-items: center; gap: 10px;
   border: 1px solid var(--line); background: var(--panel-2);
-  border-radius: 10px; padding: 6px 12px;
+  border-radius: var(--r); padding: 6px 12px;
 }
 .gw-badge .lab {
   font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--muted);
 }
-.gw-badge .val { font-family: "Anton", sans-serif; font-size: 19px; color: var(--gold); line-height: 1; }
+.gw-badge .val { font-family: var(--font-serif); font-weight: 700; font-style: italic; font-size: 18px; color: var(--gold); line-height: 1; }
 .gw-badge .deadline { font-size: 10.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
 
 .status {
@@ -241,18 +246,18 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
 
 /* ---------------- Tabs ---------------- */
 .tabs {
-  max-width: 1240px; margin: 0 auto; padding: 14px 16px 0;
-  display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none;
+  max-width: 1240px; margin: 0 auto; padding: 0 16px;
+  display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none;
+  background: var(--panel-2); border-bottom: 1px solid var(--line);
 }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
-  background: transparent; border: 1px solid transparent; border-bottom: none;
-  color: var(--muted); padding: 11px 16px; border-radius: 11px 11px 0 0;
+  background: transparent; border: none;
+  color: var(--muted); padding: 12px 16px;
   font-size: 13px; font-weight: 600; white-space: nowrap;
 }
 .tab[aria-selected="true"] {
-  color: var(--chalk); background: var(--panel); border-color: var(--line);
-  box-shadow: inset 0 2px 0 var(--gold);
+  color: var(--ink); background: var(--gold);
 }
 
 /* ---------------- Shell ---------------- */
@@ -262,19 +267,19 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
   border-radius: 0 0 var(--r) var(--r); padding: 18px; box-shadow: var(--shadow);
 }
 .eyebrow {
-  font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.16em;
-  font-size: 12px; color: var(--gold); display: flex; align-items: center; gap: 10px;
+  text-transform: uppercase; letter-spacing: 0.16em;
+  font-size: 11px; color: var(--gold-deep); display: flex; align-items: center; gap: 10px;
 }
 .eyebrow::before {
-  content: ""; width: 22px; height: 2px; background: var(--gold); display: inline-block;
+  content: ""; width: 22px; height: 1px; background: var(--gold-deep); display: inline-block;
 }
 .section-head {
   display: flex; align-items: flex-end; justify-content: space-between;
   gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
 }
 .section-head h2 {
-  font-family: "Anton", sans-serif; font-size: 26px; letter-spacing: 0.01em;
-  text-transform: uppercase; margin-top: 6px;
+  font-family: var(--font-serif); font-weight: 700; font-size: 25px; letter-spacing: 0;
+  margin-top: 6px;
 }
 .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
@@ -522,7 +527,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   text-align: center; margin-bottom: 10px;
 }
 .plr {
-  width: 104px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  width: 104px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
   padding: 8px 6px; text-align: center; position: relative;
   /* Lifts the card off the pitch/stand rather than letting it sit flush,
      now that the pitch has its own background separate from the page. */
@@ -700,12 +705,23 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   100% { left: 53px; bottom: -4px; }
 }
 .load-txt {
-  font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.12em; font-size: 15px;
+  font-family: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; font-size: 14px;
 }
 .load-sub { font-size: 12px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
 
+.foot-discord {
+  max-width: 1240px; margin: 22px auto 0; padding: 0 16px;
+  font-size: 13px; text-align: center;
+}
+.foot-discord a {
+  color: var(--gold); font-weight: 600; text-decoration: none;
+  border-bottom: 1px solid var(--gold-deep); padding-bottom: 1px;
+}
+.foot-discord a:hover { color: var(--gold-2); border-color: var(--gold-2); }
+.foot-discord a:focus-visible { outline: 2px solid var(--gold); outline-offset: 3px; }
+
 .foot-src {
-  max-width: 1240px; margin: 18px auto 0; padding: 0 16px;
+  max-width: 1240px; margin: 8px auto 0; padding: 0 16px;
   font-size: 11px; color: var(--muted-2); text-align: center;
 }
 .foot-src a { color: var(--muted); }
@@ -871,8 +887,8 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   padding: 16px; margin-bottom: 22px;
 }
 .form h3 {
-  font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em;
-  font-size: 15px; margin-bottom: 10px; color: var(--gold);
+  font-family: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 12px; margin-bottom: 10px; color: var(--gold-deep);
 }
 .frow { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; align-items: flex-start; }
 .field { display: flex; flex-direction: column; gap: 5px; flex: 0 1 auto; }
@@ -918,8 +934,8 @@ textarea::placeholder { color: var(--muted-2); }
   padding-bottom: 8px; border-bottom: 1px solid var(--line);
 }
 .gw-head .anton {
-  font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.08em;
-  font-size: 14px; color: var(--chalk);
+  font-family: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em;
+  font-size: 12px; color: var(--chalk);
 }
 
 /* ---------------- One entry ---------------- */
@@ -1003,8 +1019,8 @@ textarea::placeholder { color: var(--muted-2); }
   margin-bottom: 18px;
 }
 .insight-l {
-  font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.1em;
-  font-size: 12px; color: var(--gold); margin-bottom: 6px;
+  font-family: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em;
+  font-size: 11px; color: var(--gold-deep); margin-bottom: 6px;
 }
 .insight p { margin: 0; font-size: 14px; line-height: 1.55; }
 
@@ -1034,10 +1050,11 @@ textarea::placeholder { color: var(--muted-2); }
 }
 
 /* ---------------- Jerseys & set-piece flags (added) ---------------- */
-.plr .jersey {
-  display: block; width: 42px; height: auto; margin: 2px auto 4px;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.4));
+.jersey-icon {
+  display: block; width: 100%; height: 100%;
+  image-rendering: pixelated; image-rendering: crisp-edges;
 }
+.plr .jersey-wrap { width: 56px; height: 40px; margin: 2px auto 4px; }
 .sp-flag {
   display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
   font-weight: 700; letter-spacing: 0.02em; padding: 1px 4px; margin-left: 5px;
@@ -1162,6 +1179,17 @@ textarea::placeholder { color: var(--muted-2); }
 
 .squad-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
+/* Sits right below the squad header the moment the squad's complete, not
+   buried under the player table and totals grid - see rateBar() for why. */
+.rate-bar {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  border: 1px solid var(--gold-deep); border-radius: var(--r);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.08), transparent);
+  padding: 10px 14px; margin-bottom: 14px;
+}
+.rate-bar .btn { flex: none; }
+.rate-bar .hint { margin: 0; flex: 1 1 220px; }
+
 /* Position rows + slots */
 .pos-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
 .pos-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
@@ -1221,7 +1249,7 @@ textarea::placeholder { color: var(--muted-2); }
 }
 .cap-corner.c.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 .cap-corner.v.on { background: var(--raise); color: var(--gold); border-color: var(--line); }
-.slot-jersey { width: 50px; height: auto; margin: 3px 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)); }
+.slot-jersey { width: 50px; height: 36px; margin: 3px 0; }
 .slot-name { font-size: 11.5px; font-weight: 600; line-height: 1.1; margin-top: 3px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
   cursor: pointer; border-radius: 4px; }
@@ -1285,7 +1313,10 @@ textarea::placeholder { color: var(--muted-2); }
   padding: 14px;
 }
 .totals-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-.totals-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
+.totals-head .anton {
+  font-family: inherit; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.14em; font-size: 11px; color: var(--gold-deep);
+}
 .totals-ok { color: var(--pos); font-size: 12px; margin-bottom: 12px; }
 .totals-need { color: var(--gold); font-size: 12px; margin-bottom: 12px; }
 .totals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -1300,7 +1331,7 @@ textarea::placeholder { color: var(--muted-2); }
   background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.09), transparent);
   margin-bottom: 10px; text-align: center;
 }
-.proj-num { font-family: "Anton", sans-serif; font-size: 38px; line-height: 1; color: var(--gold); }
+.proj-num { font-family: var(--font-serif); font-weight: 700; font-size: 36px; line-height: 1; color: var(--gold); }
 .proj-unit { font-size: 15px; color: var(--muted); margin-left: 5px; font-family: "JetBrains Mono", monospace; }
 .proj-sub { font-size: 11px; color: var(--muted); margin-top: 7px; display: flex; align-items: center; justify-content: center; gap: 6px; }
 .proj-window {
@@ -1311,7 +1342,10 @@ textarea::placeholder { color: var(--muted-2); }
 
 /* ---------------- Team pitch header (gw-nav, formation) ---------------- */
 .lineup-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
-.lineup-head .anton { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.06em; font-size: 14px; }
+.lineup-head .anton {
+  font-family: inherit; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.14em; font-size: 11px; color: var(--gold-deep);
+}
 .lineup-bench { margin-top: 6px; padding-top: 12px; border-top: 1px dashed var(--line-soft); }
 .gw-nav { display: flex; align-items: center; gap: 8px; }
 .gw-nav-btn {
@@ -1418,7 +1452,7 @@ textarea::placeholder { color: var(--muted-2); }
   background: var(--panel-2); box-shadow: 0 0 0 2px var(--panel-2);
 }
 
-.pd-name { font-family: "Anton", sans-serif; font-size: 19px; letter-spacing: 0.01em; line-height: 1.15; }
+.pd-name { font-family: var(--font-serif); font-weight: 700; font-size: 20px; letter-spacing: 0; line-height: 1.15; }
 .pd-sub { font-size: 12px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; display: flex; align-items: center; gap: 5px; }
 .pd-news { font-size: 12px; color: var(--neg); background: rgba(234, 138, 106, 0.1); border: 1px solid rgba(234, 138, 106, 0.35); border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
 
@@ -1429,7 +1463,7 @@ textarea::placeholder { color: var(--muted-2); }
 .pd-stat-v.neg { color: var(--neg); }
 .pd-stat-l { font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
 
-.pd-h3 { font-family: "Anton", sans-serif; text-transform: uppercase; letter-spacing: 0.05em; font-size: 12.5px; color: var(--muted); margin: 18px 0 4px; }
+.pd-h3 { font-family: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; font-size: 11px; color: var(--muted); margin: 18px 0 4px; }
 /* Group headers ahead of a stat grid sit closer to the grid above them than
    the section headers (Recent results, Fixtures ahead) that open a fresh
    block of the panel. */

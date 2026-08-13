@@ -13,6 +13,7 @@ import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
 import { tickerRow } from "./fixtures.js";
+import { jerseyIcon } from "../jersey.js";
 import { openRater } from "../teamRater.js";
 
 const TOTAL_GWS = 38;
@@ -160,7 +161,21 @@ function teamSection(complete) {
       <button data-squadview="table" ${PL.squadView === "table" ? 'aria-pressed="true"' : ""}>Table</button>
     </div>
   </div>
+  ${complete ? rateBar() : ""}
   ${PL.squadView === "table" ? squadTable() : pitchView(complete)}`;
+}
+
+/* A full, legal squad can be scored against the strongest legal squad
+   buildable this window - pulled up here, right below the squad header, so
+   it's visible the moment the squad's complete rather than buried under the
+   player table and totals grid. The one-line explanation exists because
+   "Rate my team" alone doesn't say what it's rating against or why the
+   number matters. */
+function rateBar() {
+  return `<div class="rate-bar">
+    <button class="btn ghost" id="plRate" data-open-rater>Rate my team</button>
+    <p class="hint">See your squad's score against the strongest legal team you could build this window — same £100m/2-5-5-3/max-3-per-club rules as everywhere else.</p>
+  </div>`;
 }
 
 /* ---------------- Full-season fixture ticker ----------------
@@ -327,9 +342,7 @@ function squadTableRow(p) {
 }
 
 function filledSlot(p) {
-  const jersey = p.jersey
-    ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
-    : "";
+  const jersey = `<div class="slot-jersey">${jerseyIcon(p)}</div>`;
   const justAdded = PL.justAddedId === p.id ? " just-added" : "";
   return `<div class="slot filled${justAdded}">
     <div class="slot-top">
@@ -358,9 +371,7 @@ function lineupSlot(p, starting, gw) {
   const isC = PL.draft.captain === p.id;
   const isV = PL.draft.vice === p.id;
   const selected = PL.lineupSelect === p.id;
-  const jersey = p.jersey
-    ? `<img class="slot-jersey" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
-    : "";
+  const jersey = `<div class="slot-jersey">${jerseyIcon(p)}</div>`;
   // C/V used to be a separate button row below the fixture chip - moved up
   // into the corners of .slot-top instead, doubling as both the control and
   // the "who's captain" indicator (no more separate read-only badge), so a
@@ -551,8 +562,7 @@ function totalsPanel(t, complete) {
 
     ${
       complete
-        ? `<div class="totals-ok">Full, legal squad ✓</div>
-           <button class="btn ghost" id="plRate" data-open-rater style="width:100%;margin-top:8px">Rate my team</button>`
+        ? `<div class="totals-ok">Full, legal squad ✓</div>`
         : `<div class="totals-need">Still need: ${needs.map((x) => `${x.want} ${x.pos}`).join(", ")}</div>`
     }
 

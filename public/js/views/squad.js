@@ -7,6 +7,7 @@ import {
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { openRater } from "../teamRater.js";
+import { jerseyIcon } from "../jersey.js";
 
 let liveById = {};
 let loadError = "";
@@ -266,10 +267,7 @@ function playerCard(pick, benched) {
     ? `<span class="tag v">${armband}V</span>`
     : "";
 
-  const jersey = p.jersey
-    ? `<img class="jersey" src="${p.jersey}" alt="" loading="lazy"
-         onerror="this.style.display='none'">`
-    : "";
+  const jersey = `<div class="jersey-wrap">${jerseyIcon(p)}</div>`;
 
   return `<div class="plr ${benched ? "benched" : ""} ${playing ? "playing" : ""}">
     ${tag}
