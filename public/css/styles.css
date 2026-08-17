@@ -1178,8 +1178,6 @@ textarea::placeholder { color: var(--muted-2); }
 .budget-fill { display: block; height: 100%; background: linear-gradient(90deg, var(--gold-deep), var(--gold)); }
 .budget-fill.over { background: linear-gradient(90deg, #7a3428, var(--neg)); }
 
-.squad-section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-
 /* Sits right below the squad header the moment the squad's complete, not
    buried under the player table and totals grid - see rateBar() for why. */
 .rate-bar {
@@ -1190,6 +1188,14 @@ textarea::placeholder { color: var(--muted-2); }
 }
 .rate-bar .btn { flex: none; }
 .rate-bar .hint { margin: 0; flex: 1 1 220px; }
+
+/* Cards/Table toggle has no permanent header row of its own - it has to
+   stay reachable from both views (you need a way back to Cards once you've
+   switched to Table), so each view places it differently: a small floating
+   pill in the pitch's own corner, or a slim row above the table. */
+.pitch-toggle { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.pitch-toggle .seg { background: rgba(8, 20, 10, 0.72); backdrop-filter: blur(2px); }
+.table-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
 /* Bench row (still a labelled position-row grid, same as before) */
 .pos-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
@@ -1203,24 +1209,27 @@ textarea::placeholder { color: var(--muted-2); }
    marker component, two layouts, so a jersey looks the same whichever state
    you're in. */
 .chip-slot {
-  width: 62px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  width: 80px; display: flex; flex-direction: column; align-items: center; text-align: center;
   position: relative;
 }
+/* Grown from an original 40px once removing the "Your team"/Cards-Table
+   header row freed up the height to spend on it - about 40% bigger, using
+   exactly the space that row used to take. */
 .chip-jersey {
-  width: 40px; height: 40px; border-radius: var(--r); background: var(--raise);
+  width: 56px; height: 56px; border-radius: var(--r); background: var(--raise);
   border: 1.5px solid var(--gold-deep); display: flex; align-items: center; justify-content: center;
   overflow: hidden; box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5); transition: border-color 0.12s;
 }
 .chip-jersey svg { width: 100%; height: 100%; }
 .chip-jersey-empty {
-  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 16px;
+  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 20px;
 }
 .chip-slot.chip-empty:hover .chip-jersey-empty, .chip-slot.chip-empty:focus-visible .chip-jersey-empty {
   border-color: var(--gold); color: var(--gold);
 }
 .chip-slot.chip-empty[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-name {
-  font-size: 9.5px; font-weight: 700; line-height: 1.15; margin-top: 4px;
+  font-size: 11px; font-weight: 700; line-height: 1.15; margin-top: 5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
   cursor: pointer; border-radius: 3px;
 }
@@ -1228,16 +1237,16 @@ textarea::placeholder { color: var(--muted-2); }
 .chip-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .chip-name.muted { color: var(--muted-2); cursor: default; }
 .chip-name.muted:hover { color: var(--muted-2); text-decoration: none; }
-.chip-price { font-size: 8px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
+.chip-price { font-size: 9px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
 .chip-fx { margin-top: 3px; }
 /* Current-gameweek opponent chip on a starting marker runs a little wider
    than the shared .fxc default (24px) for legibility at this size - same
    idea the old card's current-opponent override used, just resized down to
    fit a marker instead of a full card. */
-.chip-fx-current .fxc { width: 32px; }
+.chip-fx-current .fxc { width: 34px; }
 .chip-x {
-  position: absolute; top: -6px; right: 4px; background: var(--panel-2); border: 1px solid var(--line);
-  color: var(--muted); width: 16px; height: 16px; border-radius: 50%; font-size: 11px; line-height: 1;
+  position: absolute; top: -6px; right: 2px; background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--muted); width: 18px; height: 18px; border-radius: 50%; font-size: 12px; line-height: 1;
   padding: 0; display: flex; align-items: center; justify-content: center;
 }
 .chip-x:hover { color: var(--neg); border-color: var(--neg); }
@@ -1266,16 +1275,18 @@ textarea::placeholder { color: var(--muted-2); }
    a second line used to visually blend into whichever position sat below
    it. Scrolls sideways instead if a row somehow doesn't fit (shouldn't
    happen at this chip size, but the safety net costs nothing). */
-.build-strip { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
+.build-strip { display: flex; gap: 10px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
 
 /* Complete lineup: a real pitch diagram - each starter sits at its actual
    formation coordinate (see lineX/FORMATION_Y in planner.js) instead of a
    row per position, so an XI of any shape (4-3-3, 3-5-2...) fits the same
    fixed, compact box. Height is fixed rather than aspect-ratio so it stays
-   predictable across the column's flexible width. */
-.formation-pitch { position: relative; height: 360px; }
+   predictable across the column's flexible width - bumped from 360 to
+   400px to give the grown 60px markers the same breathing room between
+   lines they had at 44px. */
+.formation-pitch { position: relative; height: 400px; }
 .chip-slot.marker { position: absolute; transform: translate(-50%, -50%); cursor: pointer; }
-.chip-slot.marker .chip-jersey { width: 44px; height: 44px; }
+.chip-slot.marker .chip-jersey { width: 60px; height: 60px; }
 .chip-slot.marker[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-slot.marker:hover .chip-jersey { border-color: var(--gold); }
 .chip-slot.marker.selected .chip-jersey { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }

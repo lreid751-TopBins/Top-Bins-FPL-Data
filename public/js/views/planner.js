@@ -153,16 +153,20 @@ function budgetBar(left) {
    real starting XI (formation rows + bench), gameweek-navigable, with
    captain/vice right on the cards - what used to be a separate "Starting
    XI" section below this one. */
+// "Your team" carried no information the green turf/jerseys below didn't
+// already say, so it's gone rather than shrunk. The Cards/Table toggle
+// still needs to be reachable from BOTH views (you have to be able to get
+// back to Cards once you've switched to Table) - it floats as a small pill
+// in whichever view is showing (the pitch's own corner, or a slim row
+// above the table) instead of owning a permanent header row either way.
 function teamSection(complete) {
-  return `<div class="squad-section-head">
-    <span class="hint">Your team</span>
-    <div class="seg" role="group" aria-label="Squad view">
-      <button data-squadview="cards" ${PL.squadView === "cards" ? 'aria-pressed="true"' : ""}>Cards</button>
-      <button data-squadview="table" ${PL.squadView === "table" ? 'aria-pressed="true"' : ""}>Table</button>
-    </div>
-  </div>
-  ${complete ? rateBar() : ""}
-  ${PL.squadView === "table" ? squadTable() : pitchView(complete)}`;
+  const toggle = `<div class="seg" role="group" aria-label="Squad view">
+    <button data-squadview="cards" ${PL.squadView === "cards" ? 'aria-pressed="true"' : ""}>Cards</button>
+    <button data-squadview="table" ${PL.squadView === "table" ? 'aria-pressed="true"' : ""}>Table</button>
+  </div>`;
+  return `
+    ${complete ? rateBar() : ""}
+    ${PL.squadView === "table" ? squadTable(toggle) : pitchView(complete, toggle)}`;
 }
 
 /* A full, legal squad can be scored against the strongest legal squad
@@ -236,15 +240,18 @@ const PITCH_LINES = `<div class="pitch-lines" aria-hidden="true">
   <span class="pl-circle"></span>
 </div>`;
 
-function pitchWrap(inner) {
-  return `<div class="pitch-stand"><div class="squad-pitch">${PITCH_LINES}${inner}</div></div>`;
+function pitchWrap(inner, toggle) {
+  return `<div class="pitch-stand"><div class="squad-pitch">
+    ${toggle ? `<div class="pitch-toggle">${toggle}</div>` : ""}
+    ${PITCH_LINES}${inner}
+  </div></div>`;
 }
 
-function pitchView(complete) {
+function pitchView(complete, toggle) {
   if (!complete) {
     return `
-      <p class="hint" style="margin-bottom:10px">Complete your 15 to set a lineup and step through gameweeks.</p>
-      ${pitchWrap(buildingRows())}
+      ${pitchWrap(buildingRows(), toggle)}
+      <p class="hint" style="margin-top:10px">Complete your 15 to set a lineup and step through gameweeks.</p>
     `;
   }
 
@@ -285,7 +292,7 @@ function pitchView(complete) {
         : `<p class="totals-need">Formation isn't legal — click a bench player, then a starter, to swap them.</p>`
     }
     ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
-    ${pitchWrap(`<div class="formation-pitch">${markers}</div>`)}
+    ${pitchWrap(`<div class="formation-pitch">${markers}</div>`, toggle)}
     <div class="pos-row lineup-bench">
       <div class="pos-label"><span class="hint">Bench</span></div>
       <div class="bench-chip-row">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
@@ -329,15 +336,16 @@ function buildingRows() {
   </div>`;
 }
 
-function squadTable() {
+function squadTable(toggle) {
   const players = draftPlayers();
   const needs = needed();
+  const toggleRow = `<div class="table-toggle-row">${toggle}</div>`;
 
   if (!players.length) {
-    return `<p class="hint" style="margin-bottom:16px">No players yet — search below to start building.</p>`;
+    return `${toggleRow}<p class="hint" style="margin-bottom:16px">No players yet — search below to start building.</p>`;
   }
 
-  return `<div class="twrap squad-twrap" style="margin-bottom:16px">
+  return `${toggleRow}<div class="twrap squad-twrap" style="margin-bottom:16px">
     <table>
       <thead><tr>
         <th style="text-align:left">Player</th><th>Team</th><th>Pos</th><th>£</th>

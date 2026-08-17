@@ -1682,7 +1682,7 @@ check("the Starting XI's current-opponent chip is wider than the browse-list fix
   // wider .fxc override, while the browse/table "Next 5" chips keep the
   // shared default size.
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".chip-fx-current .fxc { width: 32px; }")) {
+  if (!css.includes(".chip-fx-current .fxc { width: 34px; }")) {
     throw new Error("lineup marker's current-opponent chip should override .fxc to a wider, more legible width");
   }
   renderPlanner(panel("panel-planner"));
@@ -1807,33 +1807,39 @@ check("+ New squad lives in the squad-name row, not a row it'd make taller", () 
 });
 
 check("the squad-name/note/New-squad row sits below the player table, not above it", () => {
+  const savedView = PL.squadView;
+  PL.squadView = "cards";
   renderPlanner(panel("panel-planner"));
   const colTeam = panel("panel-planner").querySelector(".col-team");
-  const pitchIdx = colTeam.innerHTML.indexOf("squad-section-head");
+  const pitchIdx = colTeam.innerHTML.indexOf("pitch-stand");
   const draftIdx = colTeam.innerHTML.indexOf("draft-head");
-  if (pitchIdx === -1) throw new Error("no player table (.squad-section-head) found in the team column");
+  if (pitchIdx === -1) throw new Error("no player pitch (.pitch-stand) found in the team column");
   if (draftIdx === -1) throw new Error("no squad-name row (.draft-head) found in the team column");
   if (draftIdx < pitchIdx) {
-    throw new Error("the squad-name/note/New-squad row should come after the player table, not before it");
+    throw new Error("the squad-name/note/New-squad row should come after the pitch, not before it");
   }
-  return "player table now renders before the squad-name/note/New-squad row";
+  PL.squadView = savedView;
+  renderPlanner(panel("panel-planner"));
+  return "pitch now renders before the squad-name/note/New-squad row";
 });
 
 check("building-phase chips are compact enough that all 4 position rows fit without scrolling", () => {
   // jsdom doesn't apply external stylesheets or lay out flex children by
   // real pixel widths, so this is a check on the raw CSS text - confirms
-  // the chip/jersey sizing actually is the small compact footprint, not
+  // the chip/jersey sizing actually is the compact footprint (grown once
+  // from an original 40px jersey after the "Your team"/Cards-Table header
+  // row was removed and its height handed to the jerseys instead), not
   // just the comment above it. Actual on-screen fit was verified live in
   // the browser (all 4 rows visible without scrolling on a normal window).
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".build-strip { display: flex; gap: 8px;")) {
-    throw new Error("build-strip should use an 8px gap, tight enough for a 5-wide row to fit");
+  if (!css.includes(".build-strip { display: flex; gap: 10px;")) {
+    throw new Error("build-strip should use a 10px gap, tight enough for a 5-wide row to fit");
   }
-  if (!css.includes("width: 62px; display: flex; flex-direction: column;")) {
-    throw new Error(".chip-slot should be a small ~62px-wide chip, not a full-size card");
+  if (!css.includes("width: 80px; display: flex; flex-direction: column;")) {
+    throw new Error(".chip-slot should be a small ~80px-wide chip, not a full-size card");
   }
-  if (!css.includes("width: 40px; height: 40px; border-radius: var(--r);")) {
-    throw new Error(".chip-jersey should be a compact 40px jersey, not the old 50x36 card jersey");
+  if (!css.includes("width: 56px; height: 56px; border-radius: var(--r);")) {
+    throw new Error(".chip-jersey should be a compact 56px jersey, not the old 50x36 card jersey");
   }
   return "build-strip gap and chip-slot/chip-jersey sizing confirmed compact";
 });
@@ -1843,9 +1849,9 @@ check("add-player row sits above the squad, with a full browse-by-position list"
   renderPlanner(panel("panel-planner"));
   const html = panel("panel-planner").innerHTML;
   const addRowAt = html.indexOf('id="addRow"');
-  const squadAt = html.indexOf('class="squad-section-head"');
+  const squadAt = html.indexOf('class="col-team"');
   if (addRowAt === -1 || squadAt === -1 || addRowAt > squadAt) {
-    throw new Error("add-player row should render above the squad list");
+    throw new Error("add-player row should render above the squad column");
   }
 
   // No position picked yet -> defaults to the first position still needed.
@@ -1923,7 +1929,7 @@ check("building-phase and lineup chips share the same base marker component", ()
   if (!lineupMarker.querySelector(".chip-name")) throw new Error("lineup marker should use the shared .chip-name");
 
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".chip-slot.marker .chip-jersey { width: 44px; height: 44px; }")) {
+  if (!css.includes(".chip-slot.marker .chip-jersey { width: 60px; height: 60px; }")) {
     throw new Error("expected the marker's jersey-size override to still exist");
   }
 
