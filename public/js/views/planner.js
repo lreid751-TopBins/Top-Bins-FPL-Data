@@ -515,7 +515,7 @@ function browseList() {
         <th style="text-align:left">Player</th><th>Team</th>
         ${extraCol ? `<th title="${esc(BROWSE_EXTRA_HELP[extraCol.k]())}">${esc(extraCol.short || extraCol.l)}</th>` : ""}
         <th>£</th>
-        <th>xMin</th><th>xGI</th><th>Pts</th><th>DC/90</th><th>Next 5</th><th></th>
+        <th>xMin</th><th>xGI</th><th>Pts</th><th>DC/90</th><th>Next 5</th>
       </tr></thead>
       <tbody>${candidates.map((p) => browseRow(p, extraCol)).join("")}</tbody>
     </table>
@@ -526,7 +526,12 @@ function browseRow(p, extraCol) {
   const check = canAdd(p);
   return `<tr class="browse-row${check.ok ? " addable" : ""}" data-browserow="${p.id}"
     ${check.ok ? 'title="Double-click to add to your squad"' : ""}>
-    <td class="name"><span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</span></td>
+    <td class="name"><span class="browse-name-inner">
+      <button class="row-add" data-browseadd="${p.id}" ${check.ok ? "" : "disabled"}
+        aria-label="${esc(check.ok ? `Add ${p.name} to squad` : check.reason)}"
+        title="${esc(check.ok ? "Add to squad" : check.reason)}">+</button>
+      <span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</span>
+    </span></td>
     <td class="sub-t">${esc(p.short)}</td>
     ${extraCol ? `<td>${formatBrowseStat(p, extraCol.k)}</td>` : ""}
     <td>£${f1(p.price)}</td>
@@ -535,8 +540,6 @@ function browseRow(p, extraCol) {
     <td>${p.total_points}</td>
     <td>${f1(p.defcon90)}</td>
     <td><span style="display:inline-flex;gap:3px">${fixtureChips(p.teamId, 5)}</span></td>
-    <td><button class="btn ghost" data-browseadd="${p.id}" ${check.ok ? "" : "disabled"}
-      title="${esc(check.ok ? "Add to squad" : check.reason)}">+ Add</button></td>
   </tr>`;
 }
 

@@ -1291,17 +1291,21 @@ textarea::placeholder { color: var(--muted-2); }
 .add-row-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
 .add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
 .twrap.browse-wrap { max-height: 320px; }
-/* A plain ghost button reads as barely-there in a dense table - a real,
-   if quiet, gold-tinted pill instead, so "you can add this player" doesn't
-   depend on noticing a faint outline (or a native title tooltip, which
-   needs a hover that never happens on touch). Disabled rows stay muted,
-   which reads as its own signal: not addable right now. */
-.browse-wrap .btn {
-  padding: 5px 9px; font-size: 12px; font-weight: 600;
-  background: var(--raise); border-color: var(--gold-deep); color: var(--gold);
+/* The add control lives inside the sticky Player column instead of its own
+   column at the end of a wide table - it used to need a horizontal scroll
+   just to reach "+ Add". A small round icon button reads as an action
+   without the bulk of a labeled pill; the inner span (not the td itself)
+   carries the flex layout, same reasoning as .ticker-team-inner. Disabled
+   rows stay muted, which reads as its own signal: not addable right now. */
+.browse-name-inner { display: flex; align-items: center; gap: 8px; }
+.row-add {
+  flex: none; width: 24px; height: 24px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; line-height: 1;
+  background: var(--raise); border: 1px solid var(--gold-deep); color: var(--gold);
 }
-.browse-wrap .btn:hover:not([disabled]) { background: var(--gold); color: var(--ink); border-color: var(--gold); }
-.browse-wrap .btn[disabled] { background: transparent; border-color: var(--line); color: var(--muted-2); }
+.row-add:hover:not([disabled]) { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.row-add[disabled] { background: transparent; border-color: var(--line); color: var(--muted-2); cursor: not-allowed; }
 /* Double-click anywhere on an addable row to add that player - cursor cue
    only where it's actually legal, same rows that leave + Add enabled. */
 .browse-row.addable { cursor: pointer; }
