@@ -37,6 +37,14 @@ Live at **https://fpl.topbinswithtwins.com** (also `lreid751-topbins.github.io/T
 - GitHub secrets already set: `SUPABASE_ACCESS_TOKEN`, `SUPABASE_DB_PASSWORD`,
   `SNAPSHOT_KEY`. Variable: `SUPABASE_PROJECT_REF`. The same `SNAPSHOT_KEY` is
   set on Supabase via `npx supabase secrets set`.
+- Supabase secrets (edge function env, `npx supabase secrets set`, not the
+  same list as the GitHub secrets above): `DISCORD_WEBHOOK_URL` (Team Rater
+  announcements), `DISCORD_PRICE_WEBHOOK_URL` (nightly risers/fallers
+  digest, posted from the `snapshot-prices` workflow via `POST /snapshot` —
+  see handler.ts's `announcePriceChanges`). Both are optional — unset means
+  that feature's scoring/storage still works, it just doesn't post. Discord
+  webhooks are one-per-channel, so these are two different webhook URLs
+  even though they're the same server.
 
 ## File map
 

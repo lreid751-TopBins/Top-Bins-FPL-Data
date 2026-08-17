@@ -96,6 +96,8 @@ export interface Deps {
   ratingInsert: (row: NewRating) => Promise<RatingRow>;
   /** Post one message to the community Discord channel. A no-op if no webhook is configured. */
   postToDiscord: (message: string) => Promise<void>;
+  /** Post one message to the #price-changes Discord channel. A no-op if no webhook is configured. */
+  postPriceChangesToDiscord: (message: string) => Promise<void>;
   /** Shared secret guarding the snapshot endpoint. */
   snapshotKey: string;
   /** Allowed browser origins, or ["*"]. */
@@ -937,7 +939,44 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
   const stored = await deps.snapshotPrices(
     elements.map((e) => ({ element: e.id, now_cost: e.now_cost, web_name: e.web_name }))
   );
+
+  // Best-effort, same pattern as Team Rater's announcement: the snapshot
+  // itself (the thing every other feature depends on) must succeed and
+  // respond regardless of whether Discord is reachable or even configured.
+  try {
+    await announcePriceChanges(deps, elements);
+  } catch (err) {
+    console.error("price-change announcement failed:", err);
+  }
+
   return json({ ok: true, stored }, 200, cors);
+}
+
+/** Diffs today's snapshot against yesterday's (via the same price_moves the
+ * client's own "Price move" column reads) and posts a risers/fallers digest
+ * to the #price-changes Discord channel. A no-op if nothing moved. */
+async function announcePriceChanges(deps: Deps, elements: Array<{ id: number; web_name: string }>) {
+  const moves = await deps.priceMoves(1);
+  const nameById = new Map(elements.map((e) => [e.id, e.web_name]));
+  const risers: Array<{ name: string; latest: number }> = [];
+  const fallers: Array<{ name: string; latest: number }> = [];
+  for (const [elementStr, { change, latest }] of Object.entries(moves)) {
+    const name = nameById.get(Number(elementStr));
+    if (!name) continue; // e.g. a player removed from the game entirely
+    (change > 0 ? risers : fallers).push({ name, latest });
+  }
+  if (!risers.length && !fallers.length) return;
+
+  risers.sort((a, b) => a.name.localeCompare(b.name));
+  fallers.sort((a, b) => a.name.localeCompare(b.name));
+  const fmt = (rows: Array<{ name: string; latest: number }>) =>
+    rows.map((r) => `${r.name} → £${(r.latest / 10).toFixed(1)}m`).join("\n");
+
+  const today = new Date().toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  const parts = [`💰 **Price changes — ${today}**`];
+  if (risers.length) parts.push(`📈 **Risers (${risers.length})**\n${fmt(risers)}`);
+  if (fallers.length) parts.push(`📉 **Fallers (${fallers.length})**\n${fmt(fallers)}`);
+  await deps.postPriceChangesToDiscord(parts.join("\n\n"));
 }
 
 /** Exposed so tests can start from a clean slate. */

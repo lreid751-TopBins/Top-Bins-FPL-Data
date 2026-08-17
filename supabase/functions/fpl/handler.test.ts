@@ -39,6 +39,7 @@ interface Harness {
   squads: Map<string, SquadRow[]>;
   ratings: RatingRow[];
   discordMessages: string[];
+  priceDiscordMessages: string[];
   clock: { t: number };
   fail: { on: boolean };
 }
@@ -51,6 +52,7 @@ function harness(overrides: Partial<Deps> = {}): Harness {
   const squads = new Map<string, SquadRow[]>();
   const ratings: RatingRow[] = [];
   const discordMessages: string[] = [];
+  const priceDiscordMessages: string[] = [];
   let nextId = 0;
   let nextSquadId = 0;
   let nextRatingId = 0;
@@ -173,13 +175,16 @@ function harness(overrides: Partial<Deps> = {}): Harness {
     async postToDiscord(message: string) {
       discordMessages.push(message);
     },
+    async postPriceChangesToDiscord(message: string) {
+      priceDiscordMessages.push(message);
+    },
     snapshotKey: "s3cret",
     allowedOrigins: ["*"],
     now: () => clock.t,
     ...overrides,
   };
 
-  return { deps, calls, store, prices, journal, squads, ratings, discordMessages, clock, fail };
+  return { deps, calls, store, prices, journal, squads, ratings, discordMessages, priceDiscordMessages, clock, fail };
 }
 
 const GET = (path: string, init?: RequestInit) =>
@@ -337,6 +342,49 @@ Deno.test("snapshot stays locked when no secret is configured", async () => {
     GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "" } })
   );
   assertEquals(res.status, 401, "an unset secret must not mean open access");
+});
+
+Deno.test("snapshot posts a risers/fallers digest to the #price-changes Discord channel", async () => {
+  const h = harness({
+    async priceMoves() {
+      return {
+        "1": { change: 5, latest: 145 }, // Salah, riser
+        "2": { change: -3, latest: 78 }, // Gordon, faller
+      };
+    },
+  });
+  const res = await createHandler(h.deps)(
+    GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "s3cret" } })
+  );
+  assertEquals(res.status, 200);
+  assertEquals(h.priceDiscordMessages.length, 1, "one digest should be posted");
+  const msg = h.priceDiscordMessages[0];
+  assert(msg.includes("Salah"), "the digest should name the riser");
+  assert(msg.includes("£14.5m"), "the digest should show the riser's new price");
+  assert(msg.includes("Gordon"), "the digest should name the faller");
+  assert(msg.includes("£7.8m"), "the digest should show the faller's new price");
+  assert(msg.includes("Risers"), "the digest should label risers");
+  assert(msg.includes("Fallers"), "the digest should label fallers");
+});
+
+Deno.test("snapshot posts nothing to #price-changes when no prices moved", async () => {
+  const h = harness({ async priceMoves() { return {}; } });
+  const res = await createHandler(h.deps)(
+    GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "s3cret" } })
+  );
+  assertEquals(res.status, 200);
+  assertEquals(h.priceDiscordMessages.length, 0, "nothing moved, so nothing should be posted");
+});
+
+Deno.test("snapshot still succeeds if the #price-changes announcement fails", async () => {
+  const h = harness();
+  h.deps.postPriceChangesToDiscord = async () => { throw new Error("discord is down"); };
+  const res = await createHandler(h.deps)(
+    GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "s3cret" } })
+  );
+  assertEquals(res.status, 200, "the snapshot itself must not fail just because the announcement did");
+  const body = await res.json() as { ok: boolean; stored: number };
+  assertEquals(body.stored, 2, "prices should still be recorded");
 });
 
 Deno.test("answers CORS preflight and honours an origin allowlist", async () => {

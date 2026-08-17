@@ -3,10 +3,15 @@
  *
  * Environment (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected
  * automatically; the rest you set with `supabase secrets set`):
- *   SNAPSHOT_KEY        shared secret for POST /snapshot
- *   ALLOWED_ORIGINS     comma-separated list, or * for any
- *   DISCORD_WEBHOOK_URL where Team Rater submissions get announced. Unset =
- *                       scoring and storage still work, just no announcement.
+ *   SNAPSHOT_KEY              shared secret for POST /snapshot
+ *   ALLOWED_ORIGINS           comma-separated list, or * for any
+ *   DISCORD_WEBHOOK_URL       where Team Rater submissions get announced.
+ *                             Unset = scoring and storage still work, just
+ *                             no announcement.
+ *   DISCORD_PRICE_WEBHOOK_URL where the nightly risers/fallers digest gets
+ *                             posted (a separate webhook, since it's a
+ *                             different channel than DISCORD_WEBHOOK_URL).
+ *                             Unset = the snapshot still runs, just no post.
  */
 
 import {
@@ -207,6 +212,17 @@ const deps: Deps = {
       body: JSON.stringify({ content: message }),
     });
     if (!res.ok) throw new Error(`discord webhook failed (${res.status})`);
+  },
+
+  async postPriceChangesToDiscord(message: string) {
+    const url = Deno.env.get("DISCORD_PRICE_WEBHOOK_URL");
+    if (!url) return; // optional, same as postToDiscord - a separate webhook for a separate channel
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+    if (!res.ok) throw new Error(`discord price webhook failed (${res.status})`);
   },
 
   snapshotKey: Deno.env.get("SNAPSHOT_KEY") ?? "",
