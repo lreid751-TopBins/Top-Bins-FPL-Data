@@ -18,6 +18,14 @@
  * away rather than pulling in a real storage backend for a value nothing in
  * this file reads. That polyfill MUST be imported first, before store.js -
  * see localStoragePolyfill.ts for why a same-file statement doesn't work.
+ *
+ * Because this imports public/js/store.js directly, this edge function's
+ * bundle only picks up a store.js fix once "Deploy Supabase" actually runs -
+ * and that workflow only triggers on changes under supabase/**, not
+ * public/**. A store.js-only push (e.g. the buildCurrentStrength()
+ * attack/defence fallback) silently leaves Team Rater scoring against the
+ * stale bundled copy until something here forces a redeploy. This comment
+ * update is that trigger.
  */
 import "./localStoragePolyfill.ts";
 
