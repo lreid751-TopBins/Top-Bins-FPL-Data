@@ -324,6 +324,7 @@ thead th:first-child { z-index: 3; }
 tbody td:first-child { background: var(--panel); }
 thead th.up::after { content: " ▲"; color: var(--gold); }
 thead th.down::after { content: " ▼"; color: var(--gold); }
+thead th[data-k]:hover { color: var(--gold-2); }
 tbody td {
   padding: 8px 10px; text-align: right; border-bottom: 1px solid var(--line-soft);
   font-family: "JetBrains Mono", monospace; font-variant-numeric: tabular-nums; white-space: nowrap;
@@ -1286,11 +1287,99 @@ textarea::placeholder { color: var(--muted-2); }
   .slot-strip { justify-content: flex-start; }
 }
 
-/* Add row: search + browse-by-position, at the top of the search column */
+/* Add row: search + browse-by-position, at the top of the search column.
+   Search is the primary action here, so it gets its own visual weight
+   (icon, gold border) instead of reading like just another filter select. */
 .add-row { margin-bottom: 16px; }
-.add-row-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
-.add-row .cand-search { flex: 1 1 240px; max-width: 360px; }
+.hero-search { position: relative; }
+.hero-search .ic { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: 0.55; pointer-events: none; }
+.hero-search input {
+  width: 100%; background: var(--raise); border: 1px solid var(--gold-deep); color: var(--chalk);
+  border-radius: var(--r); padding: 11px 34px 11px 36px; font-size: 14px;
+}
+.hero-search input::placeholder { color: var(--muted); }
+.search-clear {
+  position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; border-radius: 50%; border: none; background: var(--panel-2);
+  color: var(--muted); font-size: 11px; padding: 0; display: flex; align-items: center; justify-content: center;
+}
+.search-clear[hidden] { display: none; }
+.search-clear:hover { color: var(--chalk); }
+/* Reserves its own line height even when empty, so the position row below
+   doesn't hop up and down as a search result count appears/disappears. */
+.enter-hint {
+  display: flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--muted-2);
+  height: 14px; margin-top: 6px; opacity: 0; transition: opacity 0.12s;
+}
+.enter-hint.show { opacity: 1; }
+.enter-hint .kbd { font-family: "JetBrains Mono", monospace; background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; color: var(--gold-2); }
+
+/* Browse-by-position row: full width, its own row, since it's the main
+   alternative to typing a name. While a search is active it stops driving
+   the list, so it dims - but still highlights whichever position(s) the
+   results actually belong to, rather than going fully inert. */
+.browse-pos { display: flex; gap: 6px; margin-top: 10px; }
+.browse-pos button {
+  flex: 1; background: var(--panel-2); border: 1px solid var(--line); color: var(--muted);
+  padding: 8px 0; border-radius: 8px; font-size: 12px; font-weight: 700;
+}
+.browse-pos button.on { background: var(--gold); border-color: var(--gold); color: var(--ink); }
+.browse-pos.searching button { opacity: 0.4; }
+.browse-pos.searching button.on { opacity: 1; background: var(--panel-2); border-color: var(--gold-deep); color: var(--gold-2); }
+
+/* Team / Min points / Min DEFCON-90 - filters touched less often than
+   search or position, so they're tucked behind a disclosure rather than
+   permanently on screen. Same "tucked behind one toggle" pattern already
+   used for Saved squads, just applied here too. */
+.a-filters { margin-top: 10px; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.a-filters summary {
+  list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 11px; font-size: 12px; color: var(--muted); user-select: none;
+}
+.a-filters summary::-webkit-details-marker { display: none; }
+.a-filters summary .lbl { display: flex; align-items: center; gap: 7px; }
+.a-filters summary .car { transition: transform 0.15s; color: var(--gold-deep); font-size: 10px; }
+.a-filters[open] summary .car { transform: rotate(90deg); }
+.a-filters summary .badge {
+  background: var(--raise); color: var(--gold); border: 1px solid var(--gold-deep); border-radius: 20px;
+  font-size: 10px; font-weight: 700; padding: 1px 7px; font-family: "JetBrains Mono", monospace;
+}
+.a-filters .body { padding: 4px 11px 12px; border-top: 1px solid var(--line-soft); display: grid; gap: 10px; }
+.a-field label { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-2); margin-bottom: 5px; }
+.a-slide-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.a-slide-row .v { color: var(--gold); font-size: 11px; }
+.a-field input[type="range"] { width: 100%; accent-color: var(--gold); }
+
+/* Active filters stay visible as removable chips even with Filters closed -
+   a badge alone ("2 active") gives no way to tell what they are without
+   reopening the panel. */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; background: var(--raise); border: 1px solid var(--gold-deep);
+  color: var(--gold-2); border-radius: 20px; padding: 4px 6px 4px 10px; font-size: 11px; font-family: "JetBrains Mono", monospace;
+}
+.chip button { background: transparent; border: none; color: var(--gold-2); width: 15px; height: 15px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; padding: 0; }
+.chip button:hover { background: rgba(var(--gold-rgb), 0.18); }
+
+.browse-count-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 12px; }
+.more-sort { position: relative; flex: none; }
+.more-sort > button { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 3px 8px; font-size: 10.5px; }
+.more-sort > button:hover { color: var(--chalk); border-color: var(--gold-deep); }
+.more-menu {
+  display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 160px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden;
+}
+.more-sort.open .more-menu { display: block; }
+.more-menu button { width: 100%; text-align: left; background: transparent; border: none; color: var(--chalk); font-size: 12px; padding: 8px 10px; display: flex; justify-content: space-between; }
+.more-menu button:hover { background: var(--raise); }
+.more-menu button .cur { color: var(--gold); font-size: 10px; }
+
 .twrap.browse-wrap { max-height: 320px; }
+/* The top search result gets the same "this one's selected" rail already
+   used for a picked ticker team, so Enter-to-add always targets something
+   visibly marked, not a row you have to infer. */
+.browse-wrap tbody tr.top td { box-shadow: inset 3px 0 0 var(--gold); }
+.browse-wrap tbody tr.top td:first-child { background: rgba(var(--gold-rgb), 0.07); }
 /* The add control lives inside the sticky Player column instead of its own
    column at the end of a wide table - it used to need a horizontal scroll
    just to reach "+ Add". A small round icon button reads as an action

@@ -2104,9 +2104,10 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   const expected = S.players.filter((p) => p.pos === "MID" && p.teamId === liverpool.id).length;
   if (rows.length !== expected) throw new Error(`expected ${expected} ${liverpool.name} MIDs, got ${rows.length}`);
 
-  const teamCol = browseColIdx("Team");
-  const teams = rows.map((r) => r.querySelector(`td:nth-child(${teamCol})`).textContent.trim());
-  if (!teams.every((t) => t === liverpool.short)) throw new Error("a player from another team leaked into the team-filtered list");
+  // Team no longer has its own column - it's shown inline next to the
+  // player's name (e.g. "LIV · MID"), same cell the add button lives in.
+  const teams = rows.map((r) => r.querySelector(".sub-t").textContent.trim());
+  if (!teams.every((t) => t.startsWith(liverpool.short))) throw new Error("a player from another team leaked into the team-filtered list");
 
   PL.browseTeam = "";
   PL.browsePos = null;
@@ -2213,23 +2214,21 @@ check("adding a player from the browse list preserves its scroll position", () =
   return "browse list scroll position survived adding a player";
 });
 
-check("Planner browse list can sort by projected points, form, value, fixture ease and ownership", () => {
+check("Planner browse list's More menu can sort by projected points, form, value, fixture ease and ownership", () => {
   const savedDraft = PL.draft;
   newDraft();
   PL.browsePos = "MID";
   renderPlanner(panel("panel-planner"));
 
-  const sel = panel("panel-planner").querySelector("#plBrowseSort");
-  const options = [...sel.options].map((o) => o.value);
+  const menuKeys = [...panel("panel-planner").querySelectorAll("#moreMenu [data-moresort]")].map((b) => b.dataset.moresort);
   ["projected", "form", "ppm", "fixtureEase", "selected"].forEach((k) => {
-    if (!options.includes(k)) throw new Error(`"${k}" isn't offered as a browse-list sort option`);
+    if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the browse list's More sort menu`);
   });
 
   // Projected points: a stat computed from the projection engine, not a
   // plain field - also checks a dedicated column appears since it isn't
   // one of the table's fixed columns.
-  sel.value = "projected";
-  sel.dispatchEvent(new window.Event("change"));
+  panel("panel-planner").querySelector('#moreMenu [data-moresort="projected"]').click();
   if (PL.browseSort.dir !== -1) throw new Error("projected points should default to highest-first");
   const projCol = browseColIdx("Projected pts");
   if (!projCol) throw new Error("no Projected pts column rendered while sorted by projected points");
@@ -2240,8 +2239,7 @@ check("Planner browse list can sort by projected points, form, value, fixture ea
 
   // Fixture ease: lower difficulty is kinder, so this one should default to
   // ascending (easiest run first) unlike everything else.
-  sel.value = "fixtureEase";
-  sel.dispatchEvent(new window.Event("change"));
+  panel("panel-planner").querySelector('#moreMenu [data-moresort="fixtureEase"]').click();
   if (PL.browseSort.dir !== 1) throw new Error("fixture ease should default to easiest-first (ascending)");
   const fixCol = browseColIdx("Fixture ease");
   const fixVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
@@ -2250,43 +2248,147 @@ check("Planner browse list can sort by projected points, form, value, fixture ea
   if (!fixVals.every((v, i) => i === 0 || fixVals[i - 1] <= v))
     throw new Error("browse list isn't actually sorted by fixture ease, easiest first");
 
+  PL.browseSort = { k: "total_points", dir: -1 };
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
-  return "all five new sort options present; projected points and fixture ease verified end to end";
+  return "all five More-menu sort options present; projected points and fixture ease verified end to end";
 });
 
-check("Planner browse list sort-by dropdown sorts the list", () => {
+check("Planner browse list sorts by clicking a column header, same as Player Finder/Teams/the Ticker", () => {
   const savedDraft = PL.draft;
   newDraft();
   PL.browsePos = "MID";
   renderPlanner(panel("panel-planner"));
 
-  const sel = panel("panel-planner").querySelector("#plBrowseSort");
-  if (!sel) throw new Error("no sort-by dropdown rendered in the Planner browse list");
-  const options = [...sel.options].map((o) => o.value);
-  if (!options.includes("total_points")) throw new Error("total points isn't a sort option");
-  if (!options.includes("defcon90")) throw new Error("DEFCON/90 isn't a sort option");
+  const priceTh = () => panel("panel-planner").querySelector('.browse-wrap thead th[data-k="price"]');
+  if (!priceTh()) throw new Error("no clickable £ header rendered in the Planner browse list");
 
-  sel.value = "price";
-  sel.dispatchEvent(new window.Event("change"));
-  if (PL.browseSort.k !== "price") throw new Error("choosing a sort field from the dropdown didn't update the sort");
+  priceTh().click();
+  if (PL.browseSort.k !== "price") throw new Error("clicking the £ header didn't update the sort");
+  // Clicking replaces the whole panel's HTML, so the header has to be
+  // re-queried after the click - the pre-click reference is now detached.
+  if (!priceTh().classList.contains("down")) throw new Error("£ header should show the ▼ indicator once sorted by it");
   const priceCol = browseColIdx("£");
   const prices = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
     (r) => +r.querySelector(`td:nth-child(${priceCol})`).textContent.replace("£", "")
   );
   const sortedDesc = prices.every((v, i) => i === 0 || prices[i - 1] >= v);
-  if (!sortedDesc) throw new Error("browse list isn't actually sorted by the field chosen in the dropdown");
+  if (!sortedDesc) throw new Error("browse list isn't actually sorted by the clicked header");
 
-  const dirBtn = panel("panel-planner").querySelector("#plBrowseSortDir");
   const dirBefore = PL.browseSort.dir;
-  dirBtn.click();
-  if (PL.browseSort.dir !== -dirBefore) throw new Error("direction toggle button didn't reverse the sort");
+  priceTh().click();
+  if (PL.browseSort.dir !== -dirBefore) throw new Error("clicking an already-active header didn't reverse the sort");
 
   PL.browseSort = { k: "total_points", dir: -1 };
   PL.browsePos = null;
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
-  return "dropdown and direction toggle both drive the browse list sort";
+  return "header click and re-click both drive the browse list sort";
+});
+
+check("Planner search filters the same browse table across all positions, overriding the tab", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const target = S.players.find((p) => p.pos === "FWD");
+  const query = target.name.slice(0, 4);
+  PL.browseQuery = query;
+  renderPlanner(panel("panel-planner"));
+
+  const rows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
+  if (!rows.some((r) => +r.dataset.browserow === target.id))
+    throw new Error("searching a FWD's name while browsing GKP should still surface that FWD");
+  const stillGkpOnly = rows.every((r) => S.playerById[+r.dataset.browserow]?.pos === "GKP");
+  if (stillGkpOnly) throw new Error("search should search all positions, not stay locked to the active tab");
+
+  // The position row de-emphasises itself while searching, but still marks
+  // whichever position(s) the results actually belong to.
+  const posRow = panel("panel-planner").querySelector(".browse-pos");
+  if (!posRow.classList.contains("searching")) throw new Error("position row should show its dimmed 'searching' state");
+  const fwdTab = panel("panel-planner").querySelector('[data-browsepos="FWD"]');
+  if (fwdTab.getAttribute("aria-pressed") !== "true") throw new Error("FWD tab should highlight since a FWD is among the results");
+
+  PL.browseQuery = "";
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `search for "${query}" found ${target.name} across positions`;
+});
+
+check("Enter in Planner search adds the top result and clears the query", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  renderPlanner(panel("panel-planner"));
+
+  const target = S.players.find((p) => p.pos === "MID" && canAdd(p).ok);
+  PL.browseQuery = target.name.slice(0, 4);
+  renderPlanner(panel("panel-planner"));
+
+  const topRow = panel("panel-planner").querySelector(".browse-wrap tbody tr.top");
+  if (!topRow) throw new Error("the top search result should carry the .top gold-rail class");
+  if (+topRow.dataset.browserow !== target.id) throw new Error("the top row should be the actual top-sorted match");
+
+  const search = panel("panel-planner").querySelector("#plSearch");
+  search.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+  if (!PL.draft.picks.some((pk) => pk.id === target.id))
+    throw new Error("pressing Enter in search should add the top result to the draft");
+  if (PL.browseQuery !== "") throw new Error("Enter should clear the search query after adding");
+
+  PL.draft = savedDraft;
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  return `Enter added ${target.name} and cleared the search box`;
+});
+
+check("Escape clears the Planner search box", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "GKP";
+  PL.browseQuery = "sal";
+  renderPlanner(panel("panel-planner"));
+
+  const search = panel("panel-planner").querySelector("#plSearch");
+  if (search.value !== "sal") throw new Error("search box should reflect PL.browseQuery on render");
+  search.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+  if (PL.browseQuery !== "") throw new Error("Escape should clear PL.browseQuery");
+
+  PL.draft = savedDraft;
+  PL.browsePos = null;
+  renderPlanner(panel("panel-planner"));
+  return "Escape cleared the search box";
+});
+
+check("active browse filters show as removable chips even with Filters collapsed", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "MID";
+  PL.browseMinPoints = 40;
+  const someTeam = S.teamList[0];
+  PL.browseTeam = String(someTeam.id);
+  renderPlanner(panel("panel-planner"));
+
+  const details = panel("panel-planner").querySelector("#plFilters");
+  if (details.open) throw new Error("Filters should stay collapsed by default even with active filters");
+
+  const chips = [...panel("panel-planner").querySelectorAll(".chips .chip")].map((c) => c.textContent);
+  if (!chips.some((c) => c.includes("Min pts: 40"))) throw new Error("min-points chip missing");
+  if (!chips.some((c) => c.includes(someTeam.short))) throw new Error("team chip missing");
+
+  const teamChip = [...panel("panel-planner").querySelectorAll(".chips .chip")].find((c) => c.textContent.includes(someTeam.short));
+  teamChip.querySelector("button").click();
+  if (PL.browseTeam !== "") throw new Error("clicking a chip's ✕ should clear just that filter");
+  if (PL.browseMinPoints !== 40) throw new Error("clearing one chip shouldn't clear other active filters");
+
+  PL.browseMinPoints = 0;
+  PL.browseTeam = "";
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return "chips reflected both active filters and cleared independently";
 });
 
 check("squad table view shows the same 15 with a remove action", () => {

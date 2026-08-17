@@ -8,7 +8,7 @@ import {
   loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
 } from "../planner.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
-import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint, teamCrest } from "../ui.js";
+import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint, teamCrest, th } from "../ui.js";
 import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
@@ -427,6 +427,21 @@ const BROWSE_EXTRA_HELP = {
   fixtureEase: () => `Avg fixture difficulty, next ${PL.projWindow} GWs — lower is kinder`,
   selected: () => "Selected by",
 };
+// The columns that already have a fixed place in the table, in header order -
+// click-to-sort on these (▲/▼, same convention as Player Finder/Teams/the
+// Ticker) instead of a bespoke dropdown. Everything NOT in BROWSE_NATIVE_COLS
+// (Projected pts, Form, Pts/£m, Fixture ease, Owned %) lives in the small
+// "More" menu instead, since giving five rarely-used derived stats their own
+// permanent columns would defeat the point of trimming the table down.
+const NATIVE_TH_COLS = [
+  { k: "name", l: "Player" },
+  { k: "price", l: "£" },
+  { k: "xMin", l: "xMin" },
+  { k: "xgi", l: "xGI" },
+  { k: "total_points", l: "Pts" },
+  { k: "defcon90", l: "DC/90" },
+];
+const MORE_SORT_COLS = BROWSE_SORT_COLS.filter((c) => !BROWSE_NATIVE_COLS.has(c.k));
 
 // The value a browse row is sorted/displayed by. Two of these (projected,
 // fixtureEase) aren't plain fields on the player object - they depend on the
@@ -444,101 +459,156 @@ function formatBrowseStat(p, k) {
   return f1(v);
 }
 
+/* Every player still eligible for the browse list under the current filters.
+   A non-empty search query searches by name across ALL positions (you
+   already know who you want - no reason to make you switch tabs first) and
+   overrides the position tab; Team/Min points/Min DEFCON-90 still apply
+   either way, since those are filters the user set on purpose. */
+function browseCandidates() {
+  const query = PL.browseQuery.trim().toLowerCase();
+  const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
+  return S.players.filter(
+    (p) =>
+      !inSquad.has(p.id) &&
+      (query
+        ? p.name.toLowerCase().includes(query) || p.fullName.toLowerCase().includes(query)
+        : p.pos === PL.browsePos) &&
+      (!PL.browseTeam || String(p.teamId) === String(PL.browseTeam)) &&
+      p.total_points >= PL.browseMinPoints &&
+      p.defcon90 >= PL.browseMinDefcon90
+  );
+}
+function sortedBrowseCandidates() {
+  const { k, dir } = PL.browseSort;
+  return browseCandidates().sort((a, b) =>
+    k === "name" ? String(a.name).localeCompare(b.name) * -dir : (browseStat(a, k) - browseStat(b, k)) * dir
+  );
+}
+
 function addRow() {
   if (!POSITION_ORDER.includes(PL.browsePos)) {
     PL.browsePos = needed()[0]?.pos || "GKP";
   }
-  const { k, dir } = PL.browseSort;
+  const query = PL.browseQuery.trim();
+  const searching = !!query;
+  // While searching, the position row stops driving the list (a name match
+  // already tells you the position) but still shows, dimmed, which
+  // position(s) the results actually belong to - never a mystery, never a
+  // fight with the tab you happened to be on.
+  const resultPositions = searching ? new Set(browseCandidates().map((p) => p.pos)) : null;
+  const topResult = searching ? sortedBrowseCandidates()[0] : null;
+
+  const chips = [];
+  if (PL.browseTeam) chips.push({ k: "team", l: `Team: ${esc(S.teams[PL.browseTeam]?.short || "?")}` });
+  if (PL.browseMinPoints > 0) chips.push({ k: "pts", l: `Min pts: ${PL.browseMinPoints}` });
+  if (PL.browseMinDefcon90 > 0) chips.push({ k: "dc", l: `Min DC/90: ${f1(PL.browseMinDefcon90)}` });
+
   return `<div class="add-row" id="addRow">
-    <div class="add-row-head">
-      <div class="cand-search">
-        <input id="plSearch" placeholder="Search a player to add…" autocomplete="off" aria-label="Add player">
-        <div id="plDrop"></div>
-      </div>
-      <div class="seg" role="group" aria-label="Browse a position">
-        ${POSITION_ORDER.map(
-          (pk) => `<button data-browsepos="${pk}" aria-pressed="${PL.browsePos === pk}">${pk}</button>`
-        ).join("")}
-      </div>
+    <div class="hero-search">
+      <svg class="ic" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.2" y2="16.2"/></svg>
+      <input id="plSearch" placeholder="Search any player…" autocomplete="off" aria-label="Search any player" value="${esc(PL.browseQuery)}">
+      <button type="button" class="search-clear" id="plSearchClear" aria-label="Clear search"${query ? "" : " hidden"}>✕</button>
     </div>
-    <div class="add-row-head" style="margin-top:8px">
-      <select id="plBrowseTeam" aria-label="Filter by team">
-        <option value="">All teams</option>
-        ${S.teamList
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((t) => `<option value="${t.id}" ${String(t.id) === String(PL.browseTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
-          .join("")}
-      </select>
-      <span class="range">Min points<input type="range" id="plMinPoints" min="0" max="250" step="5" value="${PL.browseMinPoints}"><b class="mono" id="plMinPointsV">${PL.browseMinPoints}</b></span>
-      <span class="range">Min DC/90<input type="range" id="plMinDefcon90" min="0" max="20" step="0.5" value="${PL.browseMinDefcon90}"><b class="mono" id="plMinDefcon90V">${f1(PL.browseMinDefcon90)}</b></span>
-      <span class="sort-by">
-        <label for="plBrowseSort">Sort by</label>
-        <select id="plBrowseSort" aria-label="Sort by">
-          ${BROWSE_SORT_COLS.map((c) => `<option value="${c.k}" ${c.k === k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
-        </select>
-        <button class="btn ghost" id="plBrowseSortDir" aria-label="Reverse sort direction" title="${dir === 1 ? "Ascending — click to reverse" : "Descending — click to reverse"}">${dir === 1 ? "▲" : "▼"}</button>
-      </span>
+    <div class="enter-hint${topResult ? " show" : ""}"><span class="kbd">↵</span> ${topResult ? `adds ${esc(topResult.name)}` : ""}</div>
+
+    <div class="browse-pos${searching ? " searching" : ""}" role="group" aria-label="Browse a position">
+      ${POSITION_ORDER.map((pk) => {
+        const on = searching ? resultPositions.has(pk) : PL.browsePos === pk;
+        return `<button data-browsepos="${pk}" class="${on ? "on" : ""}" aria-pressed="${on}">${pk}</button>`;
+      }).join("")}
     </div>
+
+    <details class="a-filters" id="plFilters"${PL.browseFiltersOpen ? " open" : ""}>
+      <summary>
+        <span class="lbl"><span class="car">▶</span> Filters</span>
+        ${chips.length ? `<span class="badge">${chips.length} active</span>` : ""}
+      </summary>
+      <div class="body">
+        <div class="a-field">
+          <label for="plBrowseTeam">Team</label>
+          <select id="plBrowseTeam" aria-label="Filter by team">
+            <option value="">All teams</option>
+            ${S.teamList
+              .slice()
+              .sort((a, b) => a.name.localeCompare(b.name))
+              .map((t) => `<option value="${t.id}" ${String(t.id) === String(PL.browseTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
+              .join("")}
+          </select>
+        </div>
+        <div class="a-field">
+          <div class="a-slide-row"><label style="margin:0">Min points</label><span class="v mono" id="plMinPointsV">${PL.browseMinPoints}</span></div>
+          <input type="range" id="plMinPoints" min="0" max="250" step="5" value="${PL.browseMinPoints}">
+        </div>
+        <div class="a-field">
+          <div class="a-slide-row"><label style="margin:0">Min DEFCON/90</label><span class="v mono" id="plMinDefcon90V">${f1(PL.browseMinDefcon90)}</span></div>
+          <input type="range" id="plMinDefcon90" min="0" max="20" step="0.5" value="${PL.browseMinDefcon90}">
+        </div>
+      </div>
+    </details>
+
+    ${chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c.l}<button type="button" data-chip-clear="${c.k}" aria-label="Clear ${c.l}">✕</button></span>`).join("")}</div>` : ""}
+
     ${browseList()}
   </div>`;
 }
 
 function browseList() {
   const posKey = PL.browsePos;
+  const query = PL.browseQuery.trim();
   const { k, dir } = PL.browseSort;
-  const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
-  const candidates = S.players
-    .filter(
-      (p) =>
-        p.pos === posKey &&
-        !inSquad.has(p.id) &&
-        (!PL.browseTeam || String(p.teamId) === String(PL.browseTeam)) &&
-        p.total_points >= PL.browseMinPoints &&
-        p.defcon90 >= PL.browseMinDefcon90
-    )
-    .sort((a, b) =>
-      k === "name"
-        ? String(a.name).localeCompare(b.name) * -dir
-        : (browseStat(a, k) - browseStat(b, k)) * dir
-    );
+  const candidates = sortedBrowseCandidates();
 
   if (!candidates.length) {
-    return `<p class="hint" style="margin-top:10px">No ${posKey} clears these filters — try lowering the points or DEFCON/90 minimums.</p>`;
+    return `<p class="hint" style="margin-top:10px">${
+      query
+        ? `No one clears these filters for "${esc(query)}" — try loosening Min points or Min DEFCON/90.`
+        : `No ${posKey} clears these filters — try lowering the points or DEFCON/90 minimums.`
+    }</p>`;
   }
 
   const extraCol = BROWSE_NATIVE_COLS.has(k) ? null : BROWSE_SORT_COLS.find((c) => c.k === k);
 
-  return `<div class="twrap browse-wrap">
-    <table>
-      <thead><tr>
-        <th style="text-align:left">Player</th><th>Team</th>
-        ${extraCol ? `<th title="${esc(BROWSE_EXTRA_HELP[extraCol.k]())}">${esc(extraCol.short || extraCol.l)}</th>` : ""}
-        <th>£</th>
-        <th>xMin</th><th>xGI</th><th>Pts</th><th>DC/90</th><th>Next 5</th>
-      </tr></thead>
-      <tbody>${candidates.map((p) => browseRow(p, extraCol)).join("")}</tbody>
-    </table>
-  </div>`;
+  return `
+    <div class="browse-count-row">
+      <span class="hint">${candidates.length} player${candidates.length === 1 ? "" : "s"}${query ? ` matching "${esc(query)}"` : ""}</span>
+      <div class="more-sort" id="moreSort">
+        <button type="button" id="moreSortBtn" aria-haspopup="true" aria-expanded="false">More ▾</button>
+        <div class="more-menu" id="moreMenu" role="menu">
+          ${MORE_SORT_COLS.map(
+            (c) => `<button type="button" role="menuitem" data-moresort="${c.k}">${esc(c.l)} <span class="cur">${k === c.k ? (dir === 1 ? "▲" : "▼") : ""}</span></button>`
+          ).join("")}
+        </div>
+      </div>
+    </div>
+    <div class="twrap browse-wrap">
+      <table>
+        <thead><tr>
+          ${NATIVE_TH_COLS.map((c) => th(c, k, dir)).join("")}
+          ${extraCol ? th({ k: extraCol.k, l: extraCol.short || extraCol.l, help: BROWSE_EXTRA_HELP[extraCol.k]() }, k, dir) : ""}
+          <th style="cursor:default">Next 5</th>
+        </tr></thead>
+        <tbody>${candidates.map((p, i) => browseRow(p, extraCol, !!query && i === 0)).join("")}</tbody>
+      </table>
+    </div>
+  `;
 }
 
-function browseRow(p, extraCol) {
+function browseRow(p, extraCol, isTop) {
   const check = canAdd(p);
-  return `<tr class="browse-row${check.ok ? " addable" : ""}" data-browserow="${p.id}"
+  return `<tr class="browse-row${check.ok ? " addable" : ""}${isTop ? " top" : ""}" data-browserow="${p.id}"
     ${check.ok ? 'title="Double-click to add to your squad"' : ""}>
     <td class="name"><span class="browse-name-inner">
       <button class="row-add" data-browseadd="${p.id}" ${check.ok ? "" : "disabled"}
         aria-label="${esc(check.ok ? `Add ${p.name} to squad` : check.reason)}"
         title="${esc(check.ok ? "Add to squad" : check.reason)}">+</button>
-      <span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</span>
+      <span class="cell-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)} <span class="sub-t">${esc(p.short)} · ${p.pos}</span>${availabilityFlag(p)}${profileHint()}</span>
     </span></td>
-    <td class="sub-t">${esc(p.short)}</td>
-    ${extraCol ? `<td>${formatBrowseStat(p, extraCol.k)}</td>` : ""}
     <td>£${f1(p.price)}</td>
     <td>${p.xMin}'</td>
     <td>${f2(p.xgi)}</td>
     <td>${p.total_points}</td>
     <td>${f1(p.defcon90)}</td>
+    ${extraCol ? `<td>${formatBrowseStat(p, extraCol.k)}</td>` : ""}
     <td><span style="display:inline-flex;gap:3px">${fixtureChips(p.teamId, 5)}</span></td>
   </tr>`;
 }
@@ -786,6 +856,7 @@ function wire(root, rerender) {
   // wiring by hand alongside the tabindex that makes them reachable.
   $$("[data-addpos]", root).forEach((s) => {
     const go = () => {
+      PL.browseQuery = "";
       PL.browsePos = s.dataset.addpos;
       if (PL.searchCollapsed) PL.searchCollapsed = false; // slid-away panel can't be searched in
       rerender();
@@ -846,14 +917,17 @@ function wire(root, rerender) {
     });
   }
 
-  // Browse-by-position tabs
+  // Browse-by-position tabs. Picking one exits search mode - you're
+  // switching to browsing, so whatever was typed no longer applies.
   $$("[data-browsepos]", root).forEach((b) => {
-    b.onclick = () => { PL.browsePos = b.dataset.browsepos; rerender(); };
+    b.onclick = () => {
+      PL.browseQuery = "";
+      PL.browsePos = b.dataset.browsepos;
+      rerender();
+    };
   });
 
-  // Add straight from the browse table (as opposed to the search dropdown,
-  // which is wired separately below since its contents replace #plDrop
-  // without a full rerender).
+  // Add straight from the browse table.
   $$("[data-browseadd]", root).forEach((b) => {
     b.onclick = () => addAndRerender(S.playerById[b.dataset.browseadd]);
   });
@@ -869,7 +943,7 @@ function wire(root, rerender) {
     };
   });
 
-  // Browse list filters and sort
+  // Browse list filters
   bind("#plBrowseTeam", "onchange", (e) => {
     PL.browseTeam = e.target.value;
     rerender();
@@ -884,18 +958,60 @@ function wire(root, rerender) {
     $("#plMinDefcon90V", root).textContent = f1(PL.browseMinDefcon90);
     rerender();
   });
-  bind("#plBrowseSort", "onchange", (e) => {
-    PL.browseSort.k = e.target.value;
-    // Each column has its own sensible default direction (e.g. fixture ease
-    // sorts ascending - lowest/kindest difficulty first - while everything
-    // else sorts best-value-first), rather than assuming descending for
-    // everything except name.
-    PL.browseSort.dir = BROWSE_SORT_COLS.find((c) => c.k === e.target.value)?.dir ?? -1;
-    rerender();
+  // The <details> element already handles its own open/closed animation -
+  // this only keeps PL in sync so an unrelated rerender elsewhere (adding a
+  // player, dragging a slider) doesn't silently snap Filters back shut.
+  bind("#plFilters", "ontoggle", (e) => { PL.browseFiltersOpen = e.target.open; });
+  $$("[data-chip-clear]", root).forEach((b) => {
+    b.onclick = () => {
+      const key = b.dataset.chipClear;
+      if (key === "team") PL.browseTeam = "";
+      if (key === "pts") PL.browseMinPoints = 0;
+      if (key === "dc") PL.browseMinDefcon90 = 0;
+      rerender();
+    };
   });
-  bind("#plBrowseSortDir", "onclick", () => {
-    PL.browseSort.dir = -PL.browseSort.dir;
-    rerender();
+
+  // Sort by clicking a column header - same convention as Player Finder,
+  // Teams and the Ticker (▲/▼ via ui.js's shared th() helper).
+  $$(".browse-wrap thead th[data-k]", root).forEach((el) => {
+    el.onclick = () => {
+      const key = el.dataset.k;
+      // Each column has its own sensible default direction (e.g. fixture
+      // ease sorts ascending - lowest/kindest difficulty first - while
+      // everything else sorts best-value-first), rather than assuming
+      // descending for everything except name.
+      PL.browseSort.dir = PL.browseSort.k === key
+        ? -PL.browseSort.dir
+        : BROWSE_SORT_COLS.find((c) => c.k === key)?.dir ?? -1;
+      PL.browseSort.k = key;
+      rerender();
+    };
+  });
+  // The handful of derived stats that aren't literal columns (Projected
+  // pts, Form, Pts/£m, Fixture ease, Owned %) live behind this small menu
+  // instead of a permanent column each. No PL state for open/closed - it's
+  // a transient popover, and picking an item rerenders anyway.
+  const moreWrap = $("#moreSort", root);
+  const moreBtn = $("#moreSortBtn", root);
+  if (moreWrap && moreBtn) {
+    moreBtn.onclick = () => {
+      const open = moreWrap.classList.toggle("open");
+      moreBtn.setAttribute("aria-expanded", String(open));
+    };
+    moreWrap.addEventListener("focusout", (e) => {
+      if (!moreWrap.contains(e.relatedTarget)) moreWrap.classList.remove("open");
+    });
+  }
+  $$("[data-moresort]", root).forEach((b) => {
+    b.onclick = () => {
+      const key = b.dataset.moresort;
+      PL.browseSort.dir = PL.browseSort.k === key
+        ? -PL.browseSort.dir
+        : BROWSE_SORT_COLS.find((c) => c.k === key)?.dir ?? -1;
+      PL.browseSort.k = key;
+      rerender();
+    };
   });
 
   // Full-season ticker's team-focus filter - same S.ui.fdrFocus set the
@@ -943,37 +1059,45 @@ function wire(root, rerender) {
     };
   });
 
-  // Player search
+  // Player search - filters the same browse table below rather than a
+  // separate floating dropdown, so a result always shows full stats and the
+  // real add button, not a stripped-down preview. Typing triggers a full
+  // rerender (same as every other browse filter here), so focus/cursor
+  // position have to be captured and restored by hand or every keystroke
+  // would bounce focus out of the field.
   const search = $("#plSearch", root);
-  const drop = $("#plDrop", root);
-  if (search)
-    search.oninput = () => {
-      const q = search.value.toLowerCase().trim();
-      if (!q) { drop.innerHTML = ""; return; }
-      const inSquad = new Set(PL.draft.picks.map((pk) => pk.id));
-      const hits = S.players
-        .filter((p) => !inSquad.has(p.id) &&
-          (p.name.toLowerCase().includes(q) || p.fullName.toLowerCase().includes(q)))
-        .sort((a, b) => b.total_points - a.total_points)
-        .slice(0, 10);
-      drop.innerHTML = `<div class="cand-drop">${
-        hits.length
-          ? hits.map((p) => {
-              const check = canAdd(p);
-              return `<button data-add="${p.id}" ${check.ok ? "" : "disabled"}>
-                <span>${esc(p.name)} <span class="sub-t">${p.short} · ${p.pos}</span></span>
-                <span class="m">£${f1(p.price)}${check.ok ? "" : " · " + esc(check.reason)}</span>
-              </button>`;
-            }).join("")
-          : `<button disabled style="color:var(--muted)">No player by that name</button>`
-      }</div>`;
-      $$("[data-add]", drop).forEach((b) => {
-        b.onclick = () => {
-          addAndRerender(S.playerById[b.dataset.add]);
-          $("#plSearch", root)?.focus();
-        };
-      });
+  if (search) {
+    const rerenderKeepingFocus = () => {
+      const pos = search.selectionStart;
+      rerender();
+      const fresh = $("#plSearch", root);
+      if (fresh) { fresh.focus(); fresh.setSelectionRange(pos, pos); }
     };
+    search.oninput = () => {
+      PL.browseQuery = search.value;
+      rerenderKeepingFocus();
+    };
+    search.onkeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!PL.browseQuery.trim()) return;
+        const top = sortedBrowseCandidates()[0];
+        if (top && canAdd(top).ok) {
+          PL.browseQuery = "";
+          addAndRerender(top);
+          $("#plSearch", root)?.focus();
+        }
+      } else if (e.key === "Escape" && PL.browseQuery) {
+        PL.browseQuery = "";
+        rerenderKeepingFocus();
+      }
+    };
+  }
+  bind("#plSearchClear", "onclick", () => {
+    PL.browseQuery = "";
+    rerender();
+    $("#plSearch", root)?.focus();
+  });
 
   const win = $("#plWindow", root);
   if (win) win.onchange = () => { PL.projWindow = +win.value; rerender(); };

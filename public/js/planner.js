@@ -52,6 +52,8 @@ export const PL = {
   browseMinPoints: 0,   // browse list filter: minimum total points
   browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
   browseTeam: "",        // browse list filter: team id, "" = all teams
+  browseQuery: "",        // live search text; non-empty searches all positions, overriding browsePos
+  browseFiltersOpen: false, // whether the Team/Min points/Min DEFCON-90 disclosure is expanded
   searchCollapsed: false, // whether the search/analysis column is slid out of view
   searchWidthPct: 29,     // width of the search/analysis column, user-adjustable by dragging
   savedSquadsOpen: false, // whether the saved-squads list is expanded below its tab
