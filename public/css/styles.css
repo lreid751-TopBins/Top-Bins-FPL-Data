@@ -1209,27 +1209,26 @@ textarea::placeholder { color: var(--muted-2); }
    marker component, two layouts, so a jersey looks the same whichever state
    you're in. */
 .chip-slot {
-  width: 80px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  width: 100px; display: flex; flex-direction: column; align-items: center; text-align: center;
   position: relative;
 }
-/* Grown from an original 40px once removing the "Your team"/Cards-Table
-   header row freed up the height to spend on it - about 40% bigger, using
-   exactly the space that row used to take. */
+/* Grown a second time, from 56px to 72px (+28%) - there was still real
+   headroom left in the building rows' height budget after the first pass. */
 .chip-jersey {
-  width: 56px; height: 56px; border-radius: var(--r); background: var(--raise);
+  width: 72px; height: 72px; border-radius: var(--r); background: var(--raise);
   border: 1.5px solid var(--gold-deep); display: flex; align-items: center; justify-content: center;
   overflow: hidden; box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5); transition: border-color 0.12s;
 }
 .chip-jersey svg { width: 100%; height: 100%; }
 .chip-jersey-empty {
-  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 20px;
+  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 24px;
 }
 .chip-slot.chip-empty:hover .chip-jersey-empty, .chip-slot.chip-empty:focus-visible .chip-jersey-empty {
   border-color: var(--gold); color: var(--gold);
 }
 .chip-slot.chip-empty[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-name {
-  font-size: 11px; font-weight: 700; line-height: 1.15; margin-top: 5px;
+  font-size: 12.5px; font-weight: 700; line-height: 1.15; margin-top: 5px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
   cursor: pointer; border-radius: 3px;
 }
@@ -1237,7 +1236,7 @@ textarea::placeholder { color: var(--muted-2); }
 .chip-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .chip-name.muted { color: var(--muted-2); cursor: default; }
 .chip-name.muted:hover { color: var(--muted-2); text-decoration: none; }
-.chip-price { font-size: 9px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
+.chip-price { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
 .chip-fx { margin-top: 3px; }
 /* Current-gameweek opponent chip on a starting marker runs a little wider
    than the shared .fxc default (24px) for legibility at this size - same
@@ -1281,12 +1280,15 @@ textarea::placeholder { color: var(--muted-2); }
    formation coordinate (see lineX/FORMATION_Y in planner.js) instead of a
    row per position, so an XI of any shape (4-3-3, 3-5-2...) fits the same
    fixed, compact box. Height is fixed rather than aspect-ratio so it stays
-   predictable across the column's flexible width - bumped from 360 to
-   400px to give the grown 60px markers the same breathing room between
-   lines they had at 44px. */
-.formation-pitch { position: relative; height: 400px; }
+   predictable across the column's flexible width - bumped to 560px (and
+   FORMATION_Y rebalanced) so a full marker's height (jersey + name + price
+   + fixture chip, ~140px) never overlaps the row above/below it, even when
+   a player lines up in the same column as one in an adjacent row - this
+   view isn't under the same "fits without scrolling" budget the building
+   rows are, so there's room to spend here. */
+.formation-pitch { position: relative; height: 560px; }
 .chip-slot.marker { position: absolute; transform: translate(-50%, -50%); cursor: pointer; }
-.chip-slot.marker .chip-jersey { width: 60px; height: 60px; }
+.chip-slot.marker .chip-jersey { width: 76px; height: 76px; }
 .chip-slot.marker[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-slot.marker:hover .chip-jersey { border-color: var(--gold); }
 .chip-slot.marker.selected .chip-jersey { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
@@ -1395,6 +1397,28 @@ textarea::placeholder { color: var(--muted-2); }
 .a-slide-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
 .a-slide-row .v { color: var(--gold); font-size: 11px; }
 .a-field input[type="range"] { width: 100%; accent-color: var(--gold); }
+
+/* Price: number inputs, not a slider - FPL prices move in small steps and
+   a slider makes landing on an exact value ("only 5.0") fiddly. Typing is
+   precise. Presets below just fill the boxes for the ranges people ask
+   for most; typing your own Min/Max always works too. */
+.price-row { display: flex; align-items: center; gap: 8px; }
+.price-field { flex: 1; position: relative; }
+.price-field::before {
+  content: "£"; position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  color: var(--muted); font-size: 12px; pointer-events: none;
+}
+.price-field input[type="number"] {
+  width: 100%; background: var(--panel-2); border: 1px solid var(--line); color: var(--chalk);
+  border-radius: 7px; padding: 7px 8px 7px 20px; font-size: 12.5px; font-family: "JetBrains Mono", monospace;
+}
+.price-row .dash { color: var(--muted-2); font-size: 11px; }
+.price-presets { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.price-presets button {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: 20px;
+  padding: 3px 9px; font-size: 10.5px; font-family: "JetBrains Mono", monospace;
+}
+.price-presets button:hover, .price-presets button.active { background: var(--raise); color: var(--gold); border-color: var(--gold-deep); }
 
 /* Active filters stay visible as removable chips even with Filters closed -
    a badge alone ("2 active") gives no way to tell what they are without

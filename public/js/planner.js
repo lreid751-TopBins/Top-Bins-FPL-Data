@@ -52,6 +52,8 @@ export const PL = {
   browseMinPoints: 0,   // browse list filter: minimum total points
   browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
   browseTeam: "",        // browse list filter: team id, "" = all teams
+  browseMinPrice: 0,     // browse list filter: minimum price, 0 = no floor
+  browseMaxPrice: null,  // browse list filter: maximum price, null = no ceiling
   browseQuery: "",        // live search text; non-empty searches all positions, overriding browsePos
   browseFiltersOpen: false, // whether the Team/Min points/Min DEFCON-90 disclosure is expanded
   searchCollapsed: false, // whether the search/analysis column is slid out of view

@@ -302,7 +302,7 @@ function pitchView(complete, toggle) {
 }
 
 // Depth (top %) per position line on the formation pitch, goal-to-goal.
-const FORMATION_Y = { GKP: 9, DEF: 30, MID: 58, FWD: 86 };
+const FORMATION_Y = { GKP: 6, DEF: 33, MID: 61, FWD: 90 };
 // Evenly spreads N players across a line's width (left %). A lone player
 // (e.g. the GK) centres; anything else fans out with a fixed side margin so
 // markers never sit flush against the pitch edge.
@@ -466,6 +466,20 @@ const NATIVE_TH_COLS = [
   { k: "defcon90", l: "DC/90" },
 ];
 const MORE_SORT_COLS = BROWSE_SORT_COLS.filter((c) => !BROWSE_NATIVE_COLS.has(c.k));
+// One-tap shortcuts for the price bands people actually hunt - typing your
+// own Min/Max always works too, these just fill the boxes.
+const PRICE_PRESETS = [
+  { l: "Enablers <5", min: 3.5, max: 4.9 },
+  { l: "Mid 5-8", min: 5, max: 7.9 },
+  { l: "Premium 8+", min: 8, max: 15 },
+];
+function priceChipLabel() {
+  const min = PL.browseMinPrice > 0 ? PL.browseMinPrice : null;
+  const max = PL.browseMaxPrice;
+  if (min != null && max != null) return min === max ? `Price: £${f1(min)}` : `Price: £${f1(min)}–£${f1(max)}`;
+  if (min != null) return `Price: £${f1(min)}+`;
+  return `Price: up to £${f1(max)}`;
+}
 
 // The value a browse row is sorted/displayed by. Two of these (projected,
 // fixtureEase) aren't plain fields on the player object - they depend on the
@@ -498,6 +512,8 @@ function browseCandidates() {
         ? p.name.toLowerCase().includes(query) || p.fullName.toLowerCase().includes(query)
         : p.pos === PL.browsePos) &&
       (!PL.browseTeam || String(p.teamId) === String(PL.browseTeam)) &&
+      (!PL.browseMinPrice || p.price >= PL.browseMinPrice) &&
+      (PL.browseMaxPrice == null || p.price <= PL.browseMaxPrice) &&
       p.total_points >= PL.browseMinPoints &&
       p.defcon90 >= PL.browseMinDefcon90
   );
@@ -524,6 +540,7 @@ function addRow() {
 
   const chips = [];
   if (PL.browseTeam) chips.push({ k: "team", l: `Team: ${esc(S.teams[PL.browseTeam]?.short || "?")}` });
+  if (PL.browseMinPrice > 0 || PL.browseMaxPrice != null) chips.push({ k: "price", l: priceChipLabel() });
   if (PL.browseMinPoints > 0) chips.push({ k: "pts", l: `Min pts: ${PL.browseMinPoints}` });
   if (PL.browseMinDefcon90 > 0) chips.push({ k: "dc", l: `Min DC/90: ${f1(PL.browseMinDefcon90)}` });
 
@@ -558,6 +575,19 @@ function addRow() {
               .map((t) => `<option value="${t.id}" ${String(t.id) === String(PL.browseTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
               .join("")}
           </select>
+        </div>
+        <div class="a-field">
+          <label for="plMinPrice">Price</label>
+          <div class="price-row">
+            <span class="price-field"><input type="number" id="plMinPrice" step="0.5" min="3.5" max="15" placeholder="Min" value="${PL.browseMinPrice > 0 ? PL.browseMinPrice : ""}" aria-label="Minimum price"></span>
+            <span class="dash">–</span>
+            <span class="price-field"><input type="number" id="plMaxPrice" step="0.5" min="3.5" max="15" placeholder="Max" value="${PL.browseMaxPrice != null ? PL.browseMaxPrice : ""}" aria-label="Maximum price"></span>
+          </div>
+          <div class="price-presets">
+            ${PRICE_PRESETS.map(
+              (p) => `<button type="button" data-priceset="${p.min},${p.max}" class="${PL.browseMinPrice === p.min && PL.browseMaxPrice === p.max ? "active" : ""}">${esc(p.l)}</button>`
+            ).join("")}
+          </div>
         </div>
         <div class="a-field">
           <div class="a-slide-row"><label style="margin:0">Min points</label><span class="v mono" id="plMinPointsV">${PL.browseMinPoints}</span></div>
@@ -972,6 +1002,27 @@ function wire(root, rerender) {
     PL.browseTeam = e.target.value;
     rerender();
   });
+  // onchange (fires on blur/Enter), not oninput - a rerender per keystroke
+  // would rebuild the input out from under you mid-type, same reason the
+  // search box has to work around it with focus restoration. A number
+  // field doesn't need that: applying the filter once you're done typing
+  // reads as normal, not delayed.
+  bind("#plMinPrice", "onchange", (e) => {
+    PL.browseMinPrice = +e.target.value || 0;
+    rerender();
+  });
+  bind("#plMaxPrice", "onchange", (e) => {
+    PL.browseMaxPrice = e.target.value === "" ? null : +e.target.value;
+    rerender();
+  });
+  $$("[data-priceset]", root).forEach((b) => {
+    b.onclick = () => {
+      const [min, max] = b.dataset.priceset.split(",").map(Number);
+      PL.browseMinPrice = min;
+      PL.browseMaxPrice = max;
+      rerender();
+    };
+  });
   bind("#plMinPoints", "oninput", (e) => {
     PL.browseMinPoints = +e.target.value;
     $("#plMinPointsV", root).textContent = PL.browseMinPoints;
@@ -990,6 +1041,7 @@ function wire(root, rerender) {
     b.onclick = () => {
       const key = b.dataset.chipClear;
       if (key === "team") PL.browseTeam = "";
+      if (key === "price") { PL.browseMinPrice = 0; PL.browseMaxPrice = null; }
       if (key === "pts") PL.browseMinPoints = 0;
       if (key === "dc") PL.browseMinDefcon90 = 0;
       rerender();

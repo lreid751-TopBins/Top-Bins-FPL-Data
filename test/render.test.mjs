@@ -122,7 +122,7 @@ const origError = console.error;
 console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
-const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength } = await import("../public/js/store.js");
+const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength, f1 } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub } = await import("../public/js/views/hub.js");
@@ -1826,8 +1826,8 @@ check("the squad-name/note/New-squad row sits below the player table, not above 
 check("building-phase chips are compact enough that all 4 position rows fit without scrolling", () => {
   // jsdom doesn't apply external stylesheets or lay out flex children by
   // real pixel widths, so this is a check on the raw CSS text - confirms
-  // the chip/jersey sizing actually is the compact footprint (grown once
-  // from an original 40px jersey after the "Your team"/Cards-Table header
+  // the chip/jersey sizing actually is the compact footprint (grown twice
+  // now, most recently to 72px, after the "Your team"/Cards-Table header
   // row was removed and its height handed to the jerseys instead), not
   // just the comment above it. Actual on-screen fit was verified live in
   // the browser (all 4 rows visible without scrolling on a normal window).
@@ -1835,11 +1835,11 @@ check("building-phase chips are compact enough that all 4 position rows fit with
   if (!css.includes(".build-strip { display: flex; gap: 10px;")) {
     throw new Error("build-strip should use a 10px gap, tight enough for a 5-wide row to fit");
   }
-  if (!css.includes("width: 80px; display: flex; flex-direction: column;")) {
-    throw new Error(".chip-slot should be a small ~80px-wide chip, not a full-size card");
+  if (!css.includes("width: 100px; display: flex; flex-direction: column;")) {
+    throw new Error(".chip-slot should be a compact ~100px-wide chip, not a full-size card");
   }
-  if (!css.includes("width: 56px; height: 56px; border-radius: var(--r);")) {
-    throw new Error(".chip-jersey should be a compact 56px jersey, not the old 50x36 card jersey");
+  if (!css.includes("width: 72px; height: 72px; border-radius: var(--r);")) {
+    throw new Error(".chip-jersey should be a compact 72px jersey, not the old 50x36 card jersey");
   }
   return "build-strip gap and chip-slot/chip-jersey sizing confirmed compact";
 });
@@ -1929,7 +1929,7 @@ check("building-phase and lineup chips share the same base marker component", ()
   if (!lineupMarker.querySelector(".chip-name")) throw new Error("lineup marker should use the shared .chip-name");
 
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".chip-slot.marker .chip-jersey { width: 60px; height: 60px; }")) {
+  if (!css.includes(".chip-slot.marker .chip-jersey { width: 76px; height: 76px; }")) {
     throw new Error("expected the marker's jersey-size override to still exist");
   }
 
@@ -2398,6 +2398,55 @@ check("active browse filters show as removable chips even with Filters collapsed
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
   return "chips reflected both active filters and cleared independently";
+});
+
+check("browse list filters to an exact price via Min/Max £, with presets and a chip", () => {
+  const savedDraft = PL.draft;
+  newDraft();
+  PL.browsePos = "MID";
+  renderPlanner(panel("panel-planner"));
+
+  // "Only £X players" - the exact scenario this was built for: same value
+  // in both boxes. Picks a real price from the mock roster rather than
+  // hardcoding one, so this doesn't depend on the mock data's random seed
+  // happening to land a MID on any particular figure.
+  const targetPrice = S.players.find((p) => p.pos === "MID")?.price;
+  if (targetPrice == null) throw new Error("test fixture needs at least one MID to be meaningful");
+  const atTarget = S.players.filter((p) => p.pos === "MID" && p.price === targetPrice);
+
+  const minInput = panel("panel-planner").querySelector("#plMinPrice");
+  const maxInput = panel("panel-planner").querySelector("#plMaxPrice");
+  minInput.value = String(targetPrice);
+  minInput.dispatchEvent(new window.Event("change"));
+  maxInput.value = String(targetPrice);
+  maxInput.dispatchEvent(new window.Event("change"));
+
+  const rows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
+  if (rows.length !== atTarget.length) throw new Error(`expected ${atTarget.length} MIDs at exactly £${f1(targetPrice)}, got ${rows.length}`);
+  const priceCol = browseColIdx("£");
+  const prices = rows.map((r) => r.querySelector(`td:nth-child(${priceCol})`).textContent.trim());
+  if (!prices.every((p) => p === `£${f1(targetPrice)}`)) throw new Error("a player at a different price leaked into the exact-price filter");
+
+  const chip = [...panel("panel-planner").querySelectorAll(".chips .chip")].find((c) => c.textContent.includes("Price"));
+  if (!chip) throw new Error("no price chip rendered for an active price filter");
+  if (!chip.textContent.includes(`£${f1(targetPrice)}`)) throw new Error(`price chip should read £${f1(targetPrice)}, got "${chip.textContent}"`);
+
+  // A preset fills both boxes and marks itself active.
+  const preset = panel("panel-planner").querySelector('[data-priceset="8,15"]');
+  preset.click();
+  if (PL.browseMinPrice !== 8 || PL.browseMaxPrice !== 15) throw new Error("preset didn't set Min/Max price");
+  const activePreset = panel("panel-planner").querySelector('[data-priceset="8,15"].active');
+  if (!activePreset) throw new Error("the matching preset should show as active once its range is applied");
+
+  // Clearing the chip resets both bounds, not just one.
+  const chip2 = [...panel("panel-planner").querySelectorAll(".chips .chip")].find((c) => c.textContent.includes("Price"));
+  chip2.querySelector("button").click();
+  if (PL.browseMinPrice !== 0 || PL.browseMaxPrice !== null) throw new Error("clearing the price chip should reset both Min and Max");
+
+  PL.browsePos = null;
+  PL.draft = savedDraft;
+  renderPlanner(panel("panel-planner"));
+  return `${atTarget.length} players at exactly £${f1(targetPrice)}, preset and chip-clear both verified`;
 });
 
 check("squad table view shows the same 15 with a remove action", () => {
