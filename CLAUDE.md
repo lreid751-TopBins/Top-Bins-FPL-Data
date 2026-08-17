@@ -180,6 +180,18 @@ We built the branching feature in three parts, engine-first:
   The squad view steps back through gameweeks and treats any failure as "not this
   GW", showing a graceful "squad not available yet" message rather than hanging.
   This is correct behaviour between seasons, not a bug.
+- **FPL zeroes out split attack/defence ratings pre-season.** The bootstrap
+  endpoint's `strength_attack_home/away` and `strength_defence_home/away` come
+  back as `0` for every team before FPL calibrates them for the new season
+  (`strength_overall_home/away` is populated the whole time). `store.js`'s
+  `buildCurrentStrength()` blends those split ratings for the Fixture Ticker's
+  Attack/Defence modes — with no fallback, every team's blended rating
+  collapsed to 0 and every fixture banded to difficulty 1, so the toggle
+  looked broken (identical cells regardless of opponent) while Official mode
+  (which reads FPL's own `fx.fdr`, unaffected) looked fine. Fixed with a
+  `staticVal()` fallback to the overall rating when the split one is `0`.
+  Regression test in `render.test.mjs` zeroes the split fields and asserts
+  Attack/Defence still differentiate teams.
 - **FPL API cannot be read/written for pre-deadline drafts.** No endpoint exposes
   a manager's draft squad before the deadline, and there's no write API. This is
   *why* the Planner is by-hand — it's the whole point, not a limitation to fix.

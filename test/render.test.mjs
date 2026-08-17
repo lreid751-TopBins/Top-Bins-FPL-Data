@@ -122,7 +122,7 @@ const origError = console.error;
 console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
-const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback } = await import("../public/js/store.js");
+const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub } = await import("../public/js/views/hub.js");
@@ -519,6 +519,41 @@ check("fixture ticker gameweek range picker supports a past range", () => {
   S.ui.fdrFrom = null;
   S.ui.fdrTo = null;
   return "GW1-4 rendered cleanly";
+});
+
+check("Attack/Defence ticker modes stay differentiated even when FPL hasn't split attack/defence ratings yet", () => {
+  // Regression: pre-season (and sometimes early-season) the live FPL API
+  // ships strength_attack_home/away and strength_defence_home/away as 0 for
+  // every team while strength_overall_home/away is still populated. Before
+  // the fallback in buildCurrentStrength(), that zeroed every team's
+  // blended attack/defence rating to 0, so every fixture banded to
+  // difficulty 1 and the Attack/Defence toggle looked "broken" - every cell
+  // rendered identically regardless of opponent.
+  const saved = S.teamList.map((t) => ({
+    id: t.id,
+    sah: t.strength_attack_home, saa: t.strength_attack_away,
+    sdh: t.strength_defence_home, sda: t.strength_defence_away,
+  }));
+  S.teamList.forEach((t) => {
+    t.strength_attack_home = 0; t.strength_attack_away = 0;
+    t.strength_defence_home = 0; t.strength_defence_away = 0;
+  });
+  buildCurrentStrength();
+  const attackAvgs = S.teamList.map((t) => runDifficulty(t.id, 6, "attack", 1));
+  const defenceAvgs = S.teamList.map((t) => runDifficulty(t.id, 6, "defence", 1));
+  const uniqAttack = new Set(attackAvgs.map((v) => v.toFixed(2))).size;
+  const uniqDefence = new Set(defenceAvgs.map((v) => v.toFixed(2))).size;
+
+  saved.forEach((s) => {
+    const t = S.teamList.find((tt) => tt.id === s.id);
+    t.strength_attack_home = s.sah; t.strength_attack_away = s.saa;
+    t.strength_defence_home = s.sdh; t.strength_defence_away = s.sda;
+  });
+  buildCurrentStrength();
+
+  if (uniqAttack <= 1) throw new Error("attack difficulty collapsed to a single band when split ratings were zeroed");
+  if (uniqDefence <= 1) throw new Error("defence difficulty collapsed to a single band when split ratings were zeroed");
+  return `${uniqAttack} unique attack bands, ${uniqDefence} unique defence bands with split ratings zeroed`;
 });
 
 check("player finder renders", () => {

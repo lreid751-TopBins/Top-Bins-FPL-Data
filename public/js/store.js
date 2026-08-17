@@ -535,10 +535,16 @@ export function buildCurrentStrength() {
     };
   });
 
-  const pctStaticAtkHome = percentileOf(S.teamList.map((t) => n(t.strength_attack_home)));
-  const pctStaticAtkAway = percentileOf(S.teamList.map((t) => n(t.strength_attack_away)));
-  const pctStaticDefHome = percentileOf(S.teamList.map((t) => n(t.strength_defence_home)));
-  const pctStaticDefAway = percentileOf(S.teamList.map((t) => n(t.strength_defence_away)));
+  // Early in a season FPL sometimes ships the split attack/defence ratings
+  // as 0 before it has calibrated them, while the overall home/away rating
+  // is populated from day one - fall back to that so Attack/Defence don't
+  // collapse every team to the same band before the split ratings arrive.
+  const staticVal = (t, split, overall) => n(t[split]) || n(t[overall]);
+
+  const pctStaticAtkHome = percentileOf(S.teamList.map((t) => staticVal(t, "strength_attack_home", "strength_overall_home")));
+  const pctStaticAtkAway = percentileOf(S.teamList.map((t) => staticVal(t, "strength_attack_away", "strength_overall_away")));
+  const pctStaticDefHome = percentileOf(S.teamList.map((t) => staticVal(t, "strength_defence_home", "strength_overall_home")));
+  const pctStaticDefAway = percentileOf(S.teamList.map((t) => staticVal(t, "strength_defence_away", "strength_overall_away")));
   const pctRecentGF = percentileOf(teamStats.map((s) => s.recentGF));
   const pctRecentGA = percentileOf(teamStats.map((s) => s.recentGA));
   const pctXgFor = percentileOf(teamStats.map((s) => s.xgFor));
@@ -556,10 +562,10 @@ export function buildCurrentStrength() {
     const blendDefence = (staticPct) =>
       staticW * staticPct + formW * (1 - pctRecentGA(s.recentGA)) + xgW * (1 - pctXgAgainst(s.xgAgainst));
 
-    const aHome = blendAttack(pctStaticAtkHome(n(s.t.strength_attack_home)));
-    const aAway = blendAttack(pctStaticAtkAway(n(s.t.strength_attack_away)));
-    const dHome = blendDefence(pctStaticDefHome(n(s.t.strength_defence_home)));
-    const dAway = blendDefence(pctStaticDefAway(n(s.t.strength_defence_away)));
+    const aHome = blendAttack(pctStaticAtkHome(staticVal(s.t, "strength_attack_home", "strength_overall_home")));
+    const aAway = blendAttack(pctStaticAtkAway(staticVal(s.t, "strength_attack_away", "strength_overall_away")));
+    const dHome = blendDefence(pctStaticDefHome(staticVal(s.t, "strength_defence_home", "strength_overall_home")));
+    const dAway = blendDefence(pctStaticDefAway(staticVal(s.t, "strength_defence_away", "strength_overall_away")));
 
     s.t.currentAttackHome = aHome;
     s.t.currentAttackAway = aAway;
