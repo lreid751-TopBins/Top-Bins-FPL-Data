@@ -1287,7 +1287,15 @@ textarea::placeholder { color: var(--muted-2); }
    view isn't under the same "fits without scrolling" budget the building
    rows are, so there's room to spend here. */
 .formation-pitch { position: relative; height: 560px; }
-.chip-slot.marker { position: absolute; transform: translate(-50%, -50%); cursor: pointer; }
+.chip-slot.marker { cursor: pointer; }
+/* Pitch markers only, not bench - bench markers share the .marker class
+   (for the same jersey/hover/selected styling below, and cursor:pointer
+   above) but flow normally in .bench-chip-row's flex row instead of being
+   positioned by lineX/FORMATION_Y, so absolute positioning must NOT apply
+   to them: without an explicit left/top of their own, every bench chip
+   would collapse onto the same default (0,0) point and stack directly on
+   top of each other. */
+.chip-slot.marker:not(.bench-chip) { position: absolute; transform: translate(-50%, -50%); }
 .chip-slot.marker .chip-jersey { width: 76px; height: 76px; }
 .chip-slot.marker[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-slot.marker:hover .chip-jersey { border-color: var(--gold); }

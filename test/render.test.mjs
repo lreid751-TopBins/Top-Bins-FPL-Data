@@ -1894,6 +1894,35 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   return `${filledSlots.length} chips in one pitch, captain/vice controls and gw-nav both present`;
 });
 
+check("bench markers don't collapse onto the same spot as pitch markers", () => {
+  // Regression: bench chips share the .marker class with pitch chips (for
+  // the same jersey/hover/selected styling), but the base .chip-slot.marker
+  // rule also carried position:absolute - which applied to bench chips too,
+  // even though they get no inline left/top (only pitch chips do, from
+  // lineX/FORMATION_Y). Every bench chip collapsed onto the same default
+  // (0,0) point and rendered stacked directly on top of each other. jsdom
+  // doesn't compute real layout, so this checks the two things that
+  // actually prevent it: the CSS scopes absolute positioning away from
+  // .bench-chip, and only pitch markers - never bench ones - carry an
+  // inline left/top style at all.
+  renderPlanner(panel("panel-planner"));
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  if (!css.includes(".chip-slot.marker:not(.bench-chip) { position: absolute;")) {
+    throw new Error("bench chips must be excluded from the pitch markers' position:absolute rule");
+  }
+
+  const benchChips = [...panel("panel-planner").querySelectorAll(".bench-chip-row .chip-slot")];
+  if (benchChips.length !== 4) throw new Error(`expected 4 bench chips, got ${benchChips.length}`);
+  const withInlinePosition = benchChips.filter((c) => /left:|top:/.test(c.getAttribute("style") || ""));
+  if (withInlinePosition.length) throw new Error("bench chips shouldn't carry an inline left/top - they flow in .bench-chip-row, not positioned by formation coordinates");
+
+  const pitchMarkers = [...panel("panel-planner").querySelectorAll(".formation-pitch .chip-slot.marker")];
+  const missingInlinePosition = pitchMarkers.filter((c) => !/left:.*top:/.test(c.getAttribute("style") || ""));
+  if (missingInlinePosition.length) throw new Error("every pitch marker should carry its own left/top from lineX/FORMATION_Y");
+
+  return `${benchChips.length} bench chips flow normally, ${pitchMarkers.length} pitch markers positioned individually`;
+});
+
 check("captain/vice controls sit in the marker's corners, not a separate row below it", () => {
   renderPlanner(panel("panel-planner"));
   if (panel("panel-planner").querySelector(".slot-cap")) {
