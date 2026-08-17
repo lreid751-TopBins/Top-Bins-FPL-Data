@@ -258,6 +258,17 @@ function pitchView(complete) {
   if (PL.lineupGw == null) PL.lineupGw = S.nextGw || 1;
   const gw = Math.min(TOTAL_GWS, Math.max(1, PL.lineupGw));
 
+  // A complete squad has an actual formation, unlike the building phase
+  // (which is just filling a fixed 2/5/5/3 quota) - so the XI gets a real
+  // pitch diagram, one marker per player at that formation's coordinates,
+  // rather than the row-per-position layout. lineX spreads N players evenly
+  // across a line; FORMATION_Y is a fixed depth per position (goal-to-goal),
+  // same visual grammar as any football broadcast graphic.
+  const markers = POSITION_ORDER.flatMap((posKey) => {
+    const line = byPos[posKey];
+    return line.map((p, i) => lineupSlot(p, true, gw, `left:${lineX(line.length, i)}%;top:${FORMATION_Y[posKey]}%`));
+  }).join("");
+
   return `
     <div class="lineup-head">
       <span class="hint mono">${formationLabel()}</span>
@@ -274,17 +285,24 @@ function pitchView(complete) {
         : `<p class="totals-need">Formation isn't legal — click a bench player, then a starter, to swap them.</p>`
     }
     ${PL.lineupError ? `<p class="neg">${esc(PL.lineupError)}</p>` : ""}
-    ${pitchWrap(`
-      <div class="pos-rows">
-        ${POSITION_ORDER.map((posKey) => `<div class="slot-strip">${byPos[posKey].map((p) => lineupSlot(p, true, gw)).join("")}</div>`).join("")}
-      </div>
-      <div class="pos-row lineup-bench">
-        <div class="pos-label"><span class="hint">Bench</span></div>
-        <div class="slot-strip">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
-      </div>
-    `)}
+    ${pitchWrap(`<div class="formation-pitch">${markers}</div>`)}
+    <div class="pos-row lineup-bench">
+      <div class="pos-label"><span class="hint">Bench</span></div>
+      <div class="bench-chip-row">${bench.map((p) => lineupSlot(p, false, gw)).join("")}</div>
+    </div>
     <p class="hint">Click a player, then click one from the other side to swap them. Captain and vice can only be a starter.</p>
   `;
+}
+
+// Depth (top %) per position line on the formation pitch, goal-to-goal.
+const FORMATION_Y = { GKP: 9, DEF: 30, MID: 58, FWD: 86 };
+// Evenly spreads N players across a line's width (left %). A lone player
+// (e.g. the GK) centres; anything else fans out with a fixed side margin so
+// markers never sit flush against the pitch edge.
+function lineX(n, i) {
+  if (n <= 1) return 50;
+  const margin = 12;
+  return margin + ((100 - margin * 2) / (n - 1)) * i;
 }
 
 function buildingRows() {
@@ -292,7 +310,10 @@ function buildingRows() {
   POSITION_ORDER.forEach((k) => (byPos[k] = []));
   draftPlayers().forEach((p) => byPos[p.pos].push(p));
 
-  return `<div class="pos-rows">
+  // Compact chip rows, not full cards - the building phase isn't a formation
+  // yet (just filling the 2/5/5/3 quota), so it stays row-based, but sized
+  // so all four rows fit without scrolling the moment you land on this tab.
+  return `<div class="build-rows">
     ${POSITION_ORDER.map((posKey) => {
       const want = SQUAD_RULES.positions[posKey];
       const slots = [];
@@ -300,7 +321,10 @@ function buildingRows() {
         const p = byPos[posKey][i];
         slots.push(p ? filledSlot(p) : emptySlot(posKey));
       }
-      return `<div class="slot-strip">${slots.join("")}</div>`;
+      return `<div class="build-strip-wrap">
+        <div class="build-pos-lab">${posKey}</div>
+        <div class="build-strip">${slots.join("")}</div>
+      </div>`;
     }).join("")}
   </div>`;
 }
@@ -342,58 +366,50 @@ function squadTableRow(p) {
 }
 
 function filledSlot(p) {
-  const jersey = `<div class="slot-jersey">${jerseyIcon(p)}</div>`;
   const justAdded = PL.justAddedId === p.id ? " just-added" : "";
-  return `<div class="slot filled${justAdded}">
-    <div class="slot-top">
-      <span></span>
-      <button class="slot-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
-    </div>
-    ${jersey}
-    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
-    <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
-    <div class="slot-stats">
-      <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
-      <span title="Expected minutes next GW">${p.xMin}'</span>
-    </div>
-    <div class="slot-fx">${fixtureChips(p.teamId, 5)}</div>
+  return `<div class="chip-slot filled${justAdded}">
+    <button class="chip-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
+    <div class="chip-jersey">${jerseyIcon(p)}</div>
+    <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="chip-price">£${f1(p.price)}</div>
   </div>`;
 }
 
 function emptySlot(posKey) {
-  return `<div class="slot empty" data-addpos="${posKey}" tabindex="0" role="button" aria-label="Add a ${posKey}">
-    <div class="slot-plus">+</div>
-    <div class="slot-meta">${posKey}</div>
+  return `<div class="chip-slot chip-empty" data-addpos="${posKey}" tabindex="0" role="button" aria-label="Add a ${posKey}">
+    <div class="chip-jersey chip-jersey-empty">+</div>
+    <div class="chip-name muted">${posKey}</div>
   </div>`;
 }
 
-function lineupSlot(p, starting, gw) {
+function lineupSlot(p, starting, gw, style) {
   const isC = PL.draft.captain === p.id;
   const isV = PL.draft.vice === p.id;
   const selected = PL.lineupSelect === p.id;
-  const jersey = `<div class="slot-jersey">${jerseyIcon(p)}</div>`;
-  // C/V used to be a separate button row below the fixture chip - moved up
-  // into the corners of .slot-top instead, doubling as both the control and
-  // the "who's captain" indicator (no more separate read-only badge), so a
-  // starting card no longer needs its own extra row of height. Bench
-  // players can't captain, so their corners stay empty rather than showing
-  // dead buttons.
-  const capControls = starting
-    ? `<button class="cap-corner c ${isC ? "on" : ""}" data-cap="${p.id}" aria-label="${isC ? "Captain — click to unset" : "Set as captain"}">C</button>
-       <button class="cap-corner v ${isV ? "on" : ""}" data-vice="${p.id}" aria-label="${isV ? "Vice-captain — click to unset" : "Set as vice-captain"}">V</button>`
-    : `<span></span><span></span>`;
+  // C/V sit as small corner badges on the marker, same control-doubles-as-
+  // indicator idea the card version used (gold when on). Bench players
+  // can't captain, so their corners are simply omitted rather than shown
+  // disabled.
+  const cvBadges = starting
+    ? `<div class="cv-badges">
+        <button class="badge-cv c ${isC ? "on" : ""}" data-cap="${p.id}" aria-label="${isC ? "Captain — click to unset" : "Set as captain"}">C</button>
+        <button class="badge-cv v ${isV ? "on" : ""}" data-vice="${p.id}" aria-label="${isV ? "Vice-captain — click to unset" : "Set as vice-captain"}">V</button>
+      </div>`
+    : "";
   const justAdded = PL.justAddedId === p.id ? " just-added" : "";
-  return `<div class="slot filled${justAdded} ${starting ? "" : "bench"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
-    tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap">
-    <div class="slot-top">${capControls}</div>
-    ${jersey}
-    <div class="slot-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
-    <div class="slot-meta">${esc(p.short)} · £${f1(p.price)}</div>
-    <div class="slot-stats">
-      <span title="Expected goal involvements">xGI ${f2(p.xgi)}</span>
-      <span title="Expected minutes next GW">${p.xMin}'</span>
-    </div>
-    <div class="slot-fx slot-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>
+  // Starters keep the current-gameweek opponent chip (gameweek-navigable,
+  // per FORMATION_Y's step-through-the-season feature) - bench and the
+  // building-phase chips don't, there just isn't room on a 40px chip and
+  // the bench isn't playing this gameweek anyway.
+  const fxChip = starting ? `<div class="chip-fx chip-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>` : "";
+  return `<div class="chip-slot filled marker${justAdded} ${starting ? "" : "bench-chip"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
+    tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap"
+    ${style ? `style="${style}"` : ""}>
+    ${cvBadges}
+    <div class="chip-jersey">${jerseyIcon(p)}</div>
+    <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
+    <div class="chip-price">£${f1(p.price)}</div>
+    ${fxChip}
   </div>`;
 }
 

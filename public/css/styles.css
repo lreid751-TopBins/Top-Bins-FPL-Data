@@ -1191,100 +1191,135 @@ textarea::placeholder { color: var(--muted-2); }
 .rate-bar .btn { flex: none; }
 .rate-bar .hint { margin: 0; flex: 1 1 220px; }
 
-/* Position rows + slots */
-.pos-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+/* Bench row (still a labelled position-row grid, same as before) */
 .pos-row { display: grid; grid-template-columns: 56px 1fr; gap: 8px; align-items: start; }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
-/* Each position is its own line, always - DEF/MID/FWD must never wrap onto
-   a second row, since a wrapped row silently blends into whichever
-   position sits below it. flex-shrink lets cards narrow under real
-   pressure; overflow-x is the last-resort safety net if even the smallest
-   cards still don't fit, so a row scrolls sideways rather than ever
-   wraps. min-width:0 lets this shrink below its grid track's content size. */
-/* Sized so a full 5-wide DEF/MID row fits without the overflow-x fallback
-   kicking in at typical panel widths - smaller than the cards' previous
-   130px so all 15 players read at a glance instead of needing to scroll a
-   row sideways to see the last one or two. */
-.slot-strip { display: flex; gap: 10px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
-.slot {
-  width: 108px; flex: 0 1 108px; min-width: 82px; min-height: 148px;
-  border-radius: 10px; border: 1px solid var(--line);
-  background: var(--panel); padding: 8px; position: relative; display: flex;
-  flex-direction: column; align-items: center; text-align: center;
+
+/* ---------------- Chip markers ----------------
+   Small jersey + name + price, replacing the old full-size cards - used two
+   ways: stacked in labelled rows while the squad is still being built (see
+   .build-*), and absolutely positioned on a real pitch diagram once the
+   squad is complete and has an actual formation (see .formation-pitch). One
+   marker component, two layouts, so a jersey looks the same whichever state
+   you're in. */
+.chip-slot {
+  width: 62px; display: flex; flex-direction: column; align-items: center; text-align: center;
+  position: relative;
 }
-/* One-shot pop-in for the card that just landed on the pitch - a full
-   rerender recreates every card's DOM node on every render, so this can't
-   just be "animate on insert"; the render marks the ONE player who was
-   actually just added (PL.justAddedId, cleared immediately after use) so
-   only that card plays it, not all 15 replaying it on every unrelated
-   render. */
-@keyframes slotPopIn {
-  from { opacity: 0; transform: scale(0.92) translateY(4px); }
+.chip-jersey {
+  width: 40px; height: 40px; border-radius: var(--r); background: var(--raise);
+  border: 1.5px solid var(--gold-deep); display: flex; align-items: center; justify-content: center;
+  overflow: hidden; box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5); transition: border-color 0.12s;
+}
+.chip-jersey svg { width: 100%; height: 100%; }
+.chip-jersey-empty {
+  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 16px;
+}
+.chip-slot.chip-empty:hover .chip-jersey-empty, .chip-slot.chip-empty:focus-visible .chip-jersey-empty {
+  border-color: var(--gold); color: var(--gold);
+}
+.chip-slot.chip-empty[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
+.chip-name {
+  font-size: 9.5px; font-weight: 700; line-height: 1.15; margin-top: 4px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+  cursor: pointer; border-radius: 3px;
+}
+.chip-name:hover { color: var(--gold); text-decoration: underline; }
+.chip-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.chip-name.muted { color: var(--muted-2); cursor: default; }
+.chip-name.muted:hover { color: var(--muted-2); text-decoration: none; }
+.chip-price { font-size: 8px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
+.chip-fx { margin-top: 3px; }
+/* Current-gameweek opponent chip on a starting marker runs a little wider
+   than the shared .fxc default (24px) for legibility at this size - same
+   idea the old card's current-opponent override used, just resized down to
+   fit a marker instead of a full card. */
+.chip-fx-current .fxc { width: 32px; }
+.chip-x {
+  position: absolute; top: -6px; right: 4px; background: var(--panel-2); border: 1px solid var(--line);
+  color: var(--muted); width: 16px; height: 16px; border-radius: 50%; font-size: 11px; line-height: 1;
+  padding: 0; display: flex; align-items: center; justify-content: center;
+}
+.chip-x:hover { color: var(--neg); border-color: var(--neg); }
+
+/* One-shot pop-in for the chip that just landed - same PL.justAddedId
+   one-shot-flag pattern as before, just applied to .chip-slot now. */
+@keyframes chipPopIn {
+  from { opacity: 0; transform: scale(0.9) translateY(3px); }
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
-.slot.just-added { animation: slotPopIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.chip-slot.just-added { animation: chipPopIn 0.32s cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) {
-  .slot.just-added { animation: none; }
+  .chip-slot.just-added { animation: none; }
 }
-.slot.empty {
-  border-style: dashed; cursor: pointer; justify-content: center; color: var(--muted-2);
+
+/* Building phase: labelled compact rows, sized so all four (GKP/DEF/MID/FWD)
+   fit on screen together without scrolling - the whole point of this
+   redesign. Not a formation yet (just the fixed 2/5/5/3 quota), so it stays
+   row-based rather than pitch-positioned. */
+.build-rows { display: flex; flex-direction: column; gap: 10px; }
+.build-pos-lab {
+  font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-2);
+  text-align: center; margin-bottom: 4px;
 }
-.slot.empty:hover { border-color: var(--gold-deep); color: var(--gold); }
-/* These slots are divs, not buttons, so they don't pick up the global
-   button:focus-visible rule - reachable via tabindex, but still need their
-   own visible ring. */
-.slot[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.slot-plus { font-size: 24px; line-height: 1; }
-.slot-top { display: flex; justify-content: space-between; width: 100%; align-items: center; height: 15px; }
-.slot-x { background: transparent; border: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 0; }
-.slot-x:hover { color: var(--neg); }
-/* Captain/vice control, doubling as its own indicator (gold when on) - sits
-   in .slot-top's two corners instead of a separate button row below the
-   card, which used to add a whole extra row of height to every starting
-   card. Same colours the old read-only badge used: solid gold for captain,
-   an outlined gold-on-raise for vice, so the meaning carries over. */
-.cap-corner {
-  background: transparent; border: 1px solid var(--line); color: var(--muted);
-  border-radius: 6px; font-size: 9px; font-weight: 700; padding: 1px 6px;
-  font-family: inherit; cursor: pointer;
+/* Never wraps, same reasoning as the old card rows: a row that wrapped onto
+   a second line used to visually blend into whichever position sat below
+   it. Scrolls sideways instead if a row somehow doesn't fit (shouldn't
+   happen at this chip size, but the safety net costs nothing). */
+.build-strip { display: flex; gap: 8px; flex-wrap: nowrap; justify-content: center; min-width: 0; overflow-x: auto; }
+
+/* Complete lineup: a real pitch diagram - each starter sits at its actual
+   formation coordinate (see lineX/FORMATION_Y in planner.js) instead of a
+   row per position, so an XI of any shape (4-3-3, 3-5-2...) fits the same
+   fixed, compact box. Height is fixed rather than aspect-ratio so it stays
+   predictable across the column's flexible width. */
+.formation-pitch { position: relative; height: 360px; }
+.chip-slot.marker { position: absolute; transform: translate(-50%, -50%); cursor: pointer; }
+.chip-slot.marker .chip-jersey { width: 44px; height: 44px; }
+.chip-slot.marker[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
+.chip-slot.marker:hover .chip-jersey { border-color: var(--gold); }
+.chip-slot.marker.selected .chip-jersey { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+/* Bench demotes the same-size marker via opacity, same convention the old
+   card-based bench used, rather than shrinking it - a smaller-but-still-
+   legible jersey reads better than a second, fiddlier size to maintain. */
+.bench-chip-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.chip-slot.bench-chip { opacity: 0.65; }
+.chip-slot.bench-chip:hover, .chip-slot.bench-chip.selected { opacity: 1; }
+
+/* Captain/vice sit as small corner badges on the marker itself - same
+   control-doubles-as-indicator idea the old card corners used (gold when
+   on), just round badges instead of pill buttons since there's less room
+   on a 44px chip than a full card's top row. */
+.cv-badges { position: absolute; top: -6px; left: -6px; right: -6px; display: flex; justify-content: space-between; z-index: 1; }
+.badge-cv {
+  width: 15px; height: 15px; border-radius: 50%; font-size: 8.5px; font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--muted); padding: 0;
 }
-.cap-corner.c.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
-.cap-corner.v.on { background: var(--raise); color: var(--gold); border-color: var(--line); }
-.slot-jersey { width: 50px; height: 36px; margin: 3px 0; }
-.slot-name { font-size: 11.5px; font-weight: 600; line-height: 1.1; margin-top: 3px;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
-  cursor: pointer; border-radius: 4px; }
-.slot-name:hover { color: var(--gold); text-decoration: underline; }
-.slot-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+.badge-cv.c.on { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+.badge-cv.v.on { background: var(--raise); color: var(--gold); border-color: var(--gold-deep); }
 
 /* A quiet always-visible cue that a name opens the player profile drawer -
    the cursor/hover states already say "clickable" but only once you're
    already hovering, so this gives an at-a-glance signal everywhere a name
    is wired to data-playerid (squad cards, table rows, browse rows). */
 .pd-hint { font-size: 9.5px; color: var(--muted); vertical-align: 1px; }
-.slot-name:hover .pd-hint, .nm:hover .pd-hint, .cell-name:hover .pd-hint { color: var(--gold); }
+.chip-name:hover .pd-hint, .nm:hover .pd-hint, .cell-name:hover .pd-hint { color: var(--gold); }
 
 /* Name cell in a plain table (squad table view, Planner browse list) - same
-   clickable affordance as .slot-name/.nm but for text sitting in a <td>
+   clickable affordance as .chip-name/.nm but for text sitting in a <td>
    rather than filling a whole card. */
 .cell-name { cursor: pointer; border-radius: 4px; }
 .cell-name:hover { color: var(--gold); text-decoration: underline; }
 .cell-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.slot-meta { font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 2px; }
-.slot-stats { display: flex; gap: 6px; font-size: 9px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 4px; }
-.slot-fx { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; margin-top: 6px; }
-/* The completed lineup shows one chip - this gameweek's actual opponent -
-   instead of the next-5 row the building phase shows, so it can afford to
-   run twice as wide as the shared .fxc default, making the team you're
-   actually up against easier to read at a glance. */
-.slot-fx-current .fxc { width: 48px; }
+.slot-x { background: transparent; border: none; color: var(--muted); font-size: 14px; line-height: 1; padding: 0; }
+.slot-x:hover { color: var(--neg); }
 
-/* Squad/lineup cards on narrow screens: the position label moves above the
-   strip instead of eating a fixed column beside it. */
+/* Bench row on narrow screens: the position label moves above the strip
+   instead of eating a fixed column beside it. */
 @media (max-width: 720px) {
   .pos-row { grid-template-columns: 1fr; }
   .pos-label { flex-direction: row; align-items: center; gap: 8px; padding-top: 0; }
-  .slot-strip { justify-content: flex-start; }
 }
 
 /* Add row: search + browse-by-position, at the top of the search column.
@@ -1456,15 +1491,12 @@ textarea::placeholder { color: var(--muted-2); }
    .slot width fix necessary earlier would otherwise repeat itself here. */
 @media (max-width: 720px) {
   .gw-nav-btn { width: 34px; height: 34px; font-size: 13px; }
-  .cap-corner { padding: 6px 8px; font-size: 11px; }
+  .badge-cv { width: 19px; height: 19px; font-size: 10px; }
+  .chip-x { width: 20px; height: 20px; font-size: 13px; }
   .slot-x { padding: 6px; font-size: 18px; }
   .chip .x { padding: 8px; font-size: 19px; }
   .squad-tab .st-x, .squad-tab .st-branch { padding: 8px 6px; }
 }
-.slot[data-lineup] { cursor: pointer; }
-.slot[data-lineup]:hover { border-color: var(--gold-deep); }
-.slot.bench { opacity: 0.65; }
-.slot.selected { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); opacity: 1; }
 
 /* ---------------- Full-season fixture reference (Planner) ---------------- */
 .season-ticker { margin-top: 16px; padding: 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); }

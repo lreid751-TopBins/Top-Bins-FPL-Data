@@ -1598,22 +1598,22 @@ check("lineup and empty-slot cards are keyboard-reachable, not just clickable", 
   // matter how visible a :focus-visible ring might be.
   renderPlanner(panel("panel-planner"));
 
-  const lineupSlot = panel("panel-planner").querySelector(".slot[data-lineup]");
-  if (!lineupSlot) throw new Error("no lineup slot found - is the squad complete in this test run?");
-  if (lineupSlot.getAttribute("tabindex") !== "0") throw new Error("lineup slot isn't in the tab order");
-  if (lineupSlot.getAttribute("role") !== "button") throw new Error("lineup slot has no button role for screen readers");
+  const lineupSlot = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
+  if (!lineupSlot) throw new Error("no lineup marker found - is the squad complete in this test run?");
+  if (lineupSlot.getAttribute("tabindex") !== "0") throw new Error("lineup marker isn't in the tab order");
+  if (lineupSlot.getAttribute("role") !== "button") throw new Error("lineup marker has no button role for screen readers");
 
   const id = +lineupSlot.dataset.lineup;
   lineupSlot.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-  if (PL.lineupSelect !== id) throw new Error("Enter key didn't select the lineup slot the way a click does");
+  if (PL.lineupSelect !== id) throw new Error("Enter key didn't select the lineup marker the way a click does");
   lineupSlot.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true })); // deselect, tidy up
 
-  const emptySlot = panel("panel-planner").querySelector(".slot.empty[data-addpos]");
+  const emptySlot = panel("panel-planner").querySelector(".chip-slot.chip-empty[data-addpos]");
   if (emptySlot) {
-    if (emptySlot.getAttribute("tabindex") !== "0") throw new Error("empty slot isn't in the tab order");
-    if (emptySlot.getAttribute("role") !== "button") throw new Error("empty slot has no button role for screen readers");
+    if (emptySlot.getAttribute("tabindex") !== "0") throw new Error("empty chip isn't in the tab order");
+    if (emptySlot.getAttribute("role") !== "button") throw new Error("empty chip has no button role for screen readers");
   }
-  return "lineup slot and empty slot both reachable and Enter-activatable";
+  return "lineup marker and empty chip both reachable and Enter-activatable";
 });
 
 check("squad projection runs on the starting XI, not the full 15", () => {
@@ -1622,15 +1622,14 @@ check("squad projection runs on the starting XI, not the full 15", () => {
   return `${t.projRows.length} players projected`;
 });
 
-check("planner slots show xMin, not undefined", () => {
-  // The regression that started this: slots must render a real xMin figure.
+check("planner chip slots render cleanly, no undefined/NaN", () => {
   renderPlanner(panel("panel-planner"));
   const html = panel("panel-planner").innerHTML;
-  if (html.includes("undefined")) throw new Error("a slot rendered undefined (xMin missing)");
+  if (html.includes("undefined")) throw new Error("a chip slot rendered undefined");
   if (html.includes("NaN")) throw new Error("NaN in planner");
-  const slots = panel("panel-planner").querySelectorAll(".slot.filled");
-  if (!slots.length) throw new Error("no filled slots");
-  return `${slots.length} slots, no undefined values`;
+  const slots = panel("panel-planner").querySelectorAll(".chip-slot.filled");
+  if (!slots.length) throw new Error("no filled chip slots");
+  return `${slots.length} chip slots, no undefined values`;
 });
 
 check("planner fixture chips show the opponent, not just a colour", () => {
@@ -1651,11 +1650,12 @@ check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
     throw new Error(`expected GW${S.nextGw}, navigator shows ${label.textContent}`);
   }
 
-  // Regression: each lineup slot used to show a fixed 5-gameweek strip
+  // Regression: each lineup marker used to show a fixed 5-gameweek strip
   // regardless of which gameweek was selected. It should now show exactly
-  // one chip, for the gameweek the navigator is on.
-  const lineupChips = panel("panel-planner").querySelectorAll(".slot[data-lineup] .slot-fx .fxc");
-  if (lineupChips.length !== 15) throw new Error(`expected 1 chip per lineup slot (15), got ${lineupChips.length}`);
+  // one chip, for the gameweek the navigator is on. Only starters get one -
+  // that's 11, not all 15 (bench doesn't play this gameweek).
+  const lineupChips = panel("panel-planner").querySelectorAll(".chip-slot.marker[data-lineup] .chip-fx .fxc");
+  if (lineupChips.length !== STARTING_XI_SIZE) throw new Error(`expected 1 chip per starter (${STARTING_XI_SIZE}), got ${lineupChips.length}`);
 
   const before = [...lineupChips].map((c) => c.textContent);
   const next = panel("panel-planner").querySelector('[data-gwnav="1"]');
@@ -1665,7 +1665,7 @@ check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
   if (label2.textContent !== `GW${S.nextGw + 1}`) {
     throw new Error(`expected GW${S.nextGw + 1} after clicking next, got ${label2.textContent}`);
   }
-  const after = [...panel("panel-planner").querySelectorAll(".slot[data-lineup] .slot-fx .fxc")].map((c) => c.textContent);
+  const after = [...panel("panel-planner").querySelectorAll(".chip-slot.marker[data-lineup] .chip-fx .fxc")].map((c) => c.textContent);
   if (JSON.stringify(before) === JSON.stringify(after)) {
     throw new Error("fixture chips didn't change after moving to the next gameweek");
   }
@@ -1678,17 +1678,17 @@ check("Starting XI has a gameweek navigator defaulting to the next GW", () => {
 
 check("the Starting XI's current-opponent chip is wider than the browse-list fixture chips", () => {
   // jsdom doesn't apply external stylesheets, so this is a check on the raw
-  // CSS text - the current-gameweek chip on a lineup slot gets its own
+  // CSS text - the current-gameweek chip on a lineup marker gets its own
   // wider .fxc override, while the browse/table "Next 5" chips keep the
   // shared default size.
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".slot-fx-current .fxc { width: 48px; }")) {
-    throw new Error("lineup slot's current-opponent chip should override .fxc to a wider, more legible width");
+  if (!css.includes(".chip-fx-current .fxc { width: 32px; }")) {
+    throw new Error("lineup marker's current-opponent chip should override .fxc to a wider, more legible width");
   }
   renderPlanner(panel("panel-planner"));
-  const currentChip = panel("panel-planner").querySelector(".slot[data-lineup] .slot-fx-current");
-  if (!currentChip) throw new Error("lineup slots should mark their fixture chip with slot-fx-current");
-  return "current-opponent chip carries the wider .slot-fx-current class and CSS override";
+  const currentChip = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup] .chip-fx-current");
+  if (!currentChip) throw new Error("lineup markers should mark their fixture chip with chip-fx-current");
+  return "current-opponent chip carries the wider .chip-fx-current class and CSS override";
 });
 
 check("Planner shows a compact full-season fixture ticker below the team", () => {
@@ -1819,19 +1819,23 @@ check("the squad-name/note/New-squad row sits below the player table, not above 
   return "player table now renders before the squad-name/note/New-squad row";
 });
 
-check("squad cards are sized to fit a full 5-wide row without scrolling at typical widths", () => {
+check("building-phase chips are compact enough that all 4 position rows fit without scrolling", () => {
   // jsdom doesn't apply external stylesheets or lay out flex children by
   // real pixel widths, so this is a check on the raw CSS text - confirms
-  // the card width/gap were actually brought down, not just the comment
-  // above them.
+  // the chip/jersey sizing actually is the small compact footprint, not
+  // just the comment above it. Actual on-screen fit was verified live in
+  // the browser (all 4 rows visible without scrolling on a normal window).
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".slot-strip { display: flex; gap: 10px;")) {
-    throw new Error("slot-strip gap should be 10px, tighter than before, to help a 5-wide row fit");
+  if (!css.includes(".build-strip { display: flex; gap: 8px;")) {
+    throw new Error("build-strip should use an 8px gap, tight enough for a 5-wide row to fit");
   }
-  if (!css.includes("width: 108px; flex: 0 1 108px; min-width: 82px;")) {
-    throw new Error(".slot should be sized down from its old 130px/96px so more cards fit per row");
+  if (!css.includes("width: 62px; display: flex; flex-direction: column;")) {
+    throw new Error(".chip-slot should be a small ~62px-wide chip, not a full-size card");
   }
-  return "slot-strip gap and .slot width brought down to fit more cards per row";
+  if (!css.includes("width: 40px; height: 40px; border-radius: var(--r);")) {
+    throw new Error(".chip-jersey should be a compact 40px jersey, not the old 50x36 card jersey");
+  }
+  return "build-strip gap and chip-slot/chip-jersey sizing confirmed compact";
 });
 
 check("add-player row sits above the squad, with a full browse-by-position list", () => {
@@ -1839,7 +1843,7 @@ check("add-player row sits above the squad, with a full browse-by-position list"
   renderPlanner(panel("panel-planner"));
   const html = panel("panel-planner").innerHTML;
   const addRowAt = html.indexOf('id="addRow"');
-  const squadAt = html.indexOf('class="pos-rows"');
+  const squadAt = html.indexOf('class="squad-section-head"');
   if (addRowAt === -1 || squadAt === -1 || addRowAt > squadAt) {
     throw new Error("add-player row should render above the squad list");
   }
@@ -1870,28 +1874,28 @@ check("add-player row sits above the squad, with a full browse-by-position list"
 check("squad and Starting XI are one pitch, not two stacked sections", () => {
   // Regression: this used to be a full squad list (15 cards) followed by a
   // completely separate "Starting XI" pitch (another 11+4 cards) below it -
-  // once the squad is complete there should be exactly one set of 15 cards
-  // total, with captain/vice controls right there, not a duplicate list.
+  // once the squad is complete there should be exactly one formation
+  // diagram, with captain/vice controls right there, not a duplicate list.
   renderPlanner(panel("panel-planner"));
-  const posRowBlocks = panel("panel-planner").querySelectorAll(".pos-rows");
-  if (posRowBlocks.length !== 1) throw new Error(`expected exactly one .pos-rows block, got ${posRowBlocks.length}`);
-  const filledSlots = panel("panel-planner").querySelectorAll(".slot.filled");
-  if (filledSlots.length !== 15) throw new Error(`expected 15 filled slots total (11 starting + 4 bench), got ${filledSlots.length}`);
+  const pitchBlocks = panel("panel-planner").querySelectorAll(".formation-pitch");
+  if (pitchBlocks.length !== 1) throw new Error(`expected exactly one .formation-pitch block, got ${pitchBlocks.length}`);
+  const filledSlots = panel("panel-planner").querySelectorAll(".chip-slot.filled");
+  if (filledSlots.length !== 15) throw new Error(`expected 15 filled chips total (11 starting + 4 bench), got ${filledSlots.length}`);
   const capButtons = panel("panel-planner").querySelectorAll("[data-cap], [data-vice]");
   if (!capButtons.length) throw new Error("no captain/vice controls rendered on the merged pitch");
   const gwNav = panel("panel-planner").querySelector(".gw-nav");
   if (!gwNav) throw new Error("no gameweek navigator on the merged pitch");
-  return `${filledSlots.length} cards in one pitch, captain/vice controls and gw-nav both present`;
+  return `${filledSlots.length} chips in one pitch, captain/vice controls and gw-nav both present`;
 });
 
-check("captain/vice controls sit in the card's corners, not a separate row below it", () => {
+check("captain/vice controls sit in the marker's corners, not a separate row below it", () => {
   renderPlanner(panel("panel-planner"));
   if (panel("panel-planner").querySelector(".slot-cap")) {
     throw new Error("the old separate captain/vice button row should be gone");
   }
-  const startingCard = panel("panel-planner").querySelector(".slot[data-lineup]:not(.bench)");
-  const corners = startingCard.querySelectorAll(".slot-top .cap-corner");
-  if (corners.length !== 2) throw new Error(`expected a C and a V control in .slot-top, got ${corners.length}`);
+  const startingCard = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]:not(.bench-chip)");
+  const corners = startingCard.querySelectorAll(".cv-badges .badge-cv");
+  if (corners.length !== 2) throw new Error(`expected a C and a V control in .cv-badges, got ${corners.length}`);
   if (!corners[0].classList.contains("c") || !corners[1].classList.contains("v")) {
     throw new Error("expected captain control on the left, vice on the right");
   }
@@ -1904,25 +1908,26 @@ check("captain/vice controls sit in the card's corners, not a separate row below
   return "C/V controls confirmed in the top corners, and still functional";
 });
 
-check("a complete lineup's cards are the same size as building-phase cards", () => {
-  // Removing the separate cap-button row was meant to close the gap between
-  // the building-phase card size and the completed-lineup card size - this
-  // checks the CSS actually enforces one shared floor for both, not just
-  // that they happen to match by coincidence in one particular squad.
-  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  const slotRuleMatch = css.match(/\.slot\s*\{[^}]*min-height:\s*(\d+)px/);
-  if (!slotRuleMatch) throw new Error("couldn't find .slot's min-height rule");
-  const minHeight = +slotRuleMatch[1];
-
+check("building-phase and lineup chips share the same base marker component", () => {
+  // Both states render through the same .chip-slot/.chip-jersey/.chip-name
+  // component (see filledSlot/lineupSlot in planner.js) - a lineup marker
+  // gets a slightly larger jersey via a scoped .chip-slot.marker override
+  // (more room on an open pitch than a packed building row), but the shape,
+  // corner-badge layout and name/price treatment are the same component,
+  // not two different card designs that happen to look similar.
   renderPlanner(panel("panel-planner"));
-  const lineupCard = panel("panel-planner").querySelector(".slot[data-lineup]");
-  if (!lineupCard) throw new Error("no lineup card rendered to compare against");
-  // jsdom doesn't compute real layout heights, so this confirms the same
-  // .slot class (and therefore the same min-height) is what sizes it -
-  // actual pixel parity (148px for both) was verified live in the browser.
-  if (!lineupCard.classList.contains("slot")) throw new Error("lineup card should share the .slot class building cards use");
+  const lineupMarker = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
+  if (!lineupMarker) throw new Error("no lineup marker rendered to compare against");
+  if (!lineupMarker.classList.contains("chip-slot")) throw new Error("lineup marker should share the base .chip-slot class");
+  if (!lineupMarker.querySelector(".chip-jersey")) throw new Error("lineup marker should use the shared .chip-jersey");
+  if (!lineupMarker.querySelector(".chip-name")) throw new Error("lineup marker should use the shared .chip-name");
 
-  return `.slot min-height (${minHeight}px) is the single shared floor for both building and lineup cards`;
+  const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+  if (!css.includes(".chip-slot.marker .chip-jersey { width: 44px; height: 44px; }")) {
+    throw new Error("expected the marker's jersey-size override to still exist");
+  }
+
+  return "lineup marker and building chip share .chip-slot/.chip-jersey/.chip-name, sized via a scoped override";
 });
 
 check("clicking a player's name on the Planner pitch opens their profile, not a lineup swap", () => {
@@ -1930,7 +1935,7 @@ check("clicking a player's name on the Planner pitch opens their profile, not a 
   // a swap-select. Clicking the name specifically must stop short of that -
   // otherwise "view this player's profile" would also silently arm a swap.
   renderPlanner(panel("panel-planner"));
-  const nameEl = panel("panel-planner").querySelector(".slot.filled .slot-name[data-playerid]");
+  const nameEl = panel("panel-planner").querySelector(".chip-slot.filled .chip-name[data-playerid]");
   if (!nameEl) throw new Error("no clickable player name found on the Planner pitch");
   const id = +nameEl.dataset.playerid;
 
@@ -1954,7 +1959,7 @@ check("clicking a player's name while still building the squad also opens the pr
   addPlayer(p);
   renderPlanner(panel("panel-planner"));
 
-  const nameEl = panel("panel-planner").querySelector(`.slot.filled .slot-name[data-playerid="${p.id}"]`);
+  const nameEl = panel("panel-planner").querySelector(`.chip-slot.filled .chip-name[data-playerid="${p.id}"]`);
   if (!nameEl) throw new Error("no clickable name for the just-added player in building mode");
   nameEl.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
   if (PD.openId !== p.id) throw new Error("clicking a name mid-build should still open the profile drawer");
@@ -2174,17 +2179,15 @@ check("adding a player plays a one-shot 'just added' animation on its new slot, 
   renderPlanner(panel("panel-planner"));
 
   const row = panel("panel-planner").querySelector(".browse-row[data-browserow]");
-  const id = +row.dataset.browserow;
   row.dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true }));
 
-  const slot = panel("panel-planner").querySelector(`[data-lineup="${id}"], .slot.filled`);
-  const justAdded = panel("panel-planner").querySelector(".slot.just-added");
-  if (!justAdded) throw new Error("newly added slot should carry .just-added for its one-shot animation");
+  const justAdded = panel("panel-planner").querySelector(".chip-slot.just-added");
+  if (!justAdded) throw new Error("newly added chip should carry .just-added for its one-shot animation");
   if (PL.justAddedId !== null) throw new Error("PL.justAddedId should be cleared right after the render that used it");
 
   // A later render (unrelated to this add) should not keep replaying the animation.
   renderPlanner(panel("panel-planner"));
-  if (panel("panel-planner").querySelector(".slot.just-added"))
+  if (panel("panel-planner").querySelector(".chip-slot.just-added"))
     throw new Error(".just-added should not persist across renders once cleared");
 
   PL.draft = savedDraft;
