@@ -404,6 +404,33 @@ check("hub captaincy shortlist ranks by attacking returns, not total points", ()
   return `top pick ${best.p.name} at ${firstVal}pts (attack), ${nav.length} nav links`;
 });
 
+check("Hub shows a latest-video banner linking out to YouTube", () => {
+  renderHub(panel("panel-hub"));
+  const link = panel("panel-hub").querySelector("a.latest-video");
+  if (!link) throw new Error("no latest-video banner rendered even though S.latestVideo is set");
+  if (link.getAttribute("href") !== S.latestVideo.url) throw new Error("banner should link to the video's real URL");
+  if (link.getAttribute("target") !== "_blank") throw new Error("should open in a new tab, not navigate away from the app");
+  if (!link.querySelector(".latest-video-title")?.textContent.includes(S.latestVideo.title)) {
+    throw new Error("banner should show the video's title");
+  }
+  if (link.querySelector(".latest-video-thumb")?.getAttribute("src") !== S.latestVideo.thumbnail) {
+    throw new Error("banner should show the video's thumbnail");
+  }
+  return `banner links to "${S.latestVideo.title}"`;
+});
+
+check("Hub omits the video banner entirely when there's no video to show", () => {
+  const saved = S.latestVideo;
+  S.latestVideo = null;
+  renderHub(panel("panel-hub"));
+  if (panel("panel-hub").querySelector("a.latest-video")) {
+    throw new Error("should render nothing rather than a broken/empty banner when the feed didn't load");
+  }
+  S.latestVideo = saved;
+  renderHub(panel("panel-hub"));
+  return "no video, no banner, no broken state";
+});
+
 check("captaincy shortlist shows a riser/faller trend from today's net transfers", () => {
   renderHub(panel("panel-hub"));
   const box = [...panel("panel-hub").querySelectorAll(".chart-box")].find((b) =>

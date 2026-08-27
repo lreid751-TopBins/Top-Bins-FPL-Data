@@ -188,6 +188,13 @@ const MOCK = {
     })),
   },
   "/api/prices?days=14": priceMoves,
+  "/api/latest-video": {
+    videoId: "dQw4w9WgXcQ",
+    title: "FPL GW13: Kneejerks, Captains and the Players You Need To Target",
+    url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    thumbnail: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg",
+    publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+  },
   "/api/entry/1234567": {
     id: 1234567, name: "Top Bins XI", player_first_name: "Paul", player_last_name: "T",
     summary_overall_points: 712, summary_overall_rank: 184532, summary_event_points: 58,

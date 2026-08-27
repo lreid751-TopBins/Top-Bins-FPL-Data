@@ -16,6 +16,7 @@ export const S = {
   form: { gws: [], points: {}, minutes: {} },
   priceMoves: {},
   priceDataAvailable: false,
+  latestVideo: null, // { videoId, title, url, thumbnail, publishedAt } or null if unavailable
   currentGw: 0,
   nextGw: 0,
   nextDeadline: null,
@@ -142,6 +143,14 @@ export async function load({ onProgress = () => {} } = {}) {
     S.priceMoves = {};
   }
   attachPrices();
+
+  // Purely decorative (the Hub's "latest video" banner) - a failure here
+  // shouldn't hold up the rest of the app or even show an error.
+  try {
+    S.latestVideo = await api.latestVideo();
+  } catch {
+    S.latestVideo = null;
+  }
 
   S.ready = true;
   return S;

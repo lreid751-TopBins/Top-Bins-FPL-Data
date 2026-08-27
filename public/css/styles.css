@@ -770,6 +770,31 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 
 /* ---------------- Hub ---------------- */
+/* Cross-promotion, not a data widget - same gold-tinted highlight treatment
+   as .rate-bar so it reads as "worth a look" without competing with the
+   grid's own cards. */
+.latest-video {
+  display: flex; align-items: center; gap: 14px;
+  border: 1px solid var(--gold-deep); border-radius: var(--r);
+  background: linear-gradient(180deg, rgba(var(--gold-rgb), 0.08), transparent);
+  padding: 10px; margin-bottom: 16px; text-decoration: none; color: inherit;
+}
+.latest-video:hover { border-color: var(--gold); }
+.latest-video-thumb { width: 96px; height: 54px; object-fit: cover; border-radius: 4px; flex: none; background: var(--panel-2); }
+.latest-video-body { min-width: 0; flex: 1; }
+.latest-video-eyebrow {
+  font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold);
+  margin-bottom: 3px;
+}
+.latest-video-title {
+  font-size: 13.5px; font-weight: 600; color: var(--chalk); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.latest-video-play {
+  flex: none; width: 30px; height: 30px; border-radius: 50%; background: var(--gold); color: var(--ink);
+  display: flex; align-items: center; justify-content: center; font-size: 11px; padding-left: 2px;
+}
+
 .hub-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
 .hub-w { margin-bottom: 0; }
 .hub-w-wide { grid-column: 1 / -1; }

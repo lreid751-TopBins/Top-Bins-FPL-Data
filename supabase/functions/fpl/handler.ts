@@ -98,6 +98,8 @@ export interface Deps {
   postToDiscord: (message: string) => Promise<void>;
   /** Post one message to the #price-changes Discord channel. A no-op if no webhook is configured. */
   postPriceChangesToDiscord: (message: string) => Promise<void>;
+  /** Raw XML of the channel's public upload feed (no API key needed). */
+  youtubeFeedGet: () => Promise<string>;
   /** Shared secret guarding the snapshot endpoint. */
   snapshotKey: string;
   /** Allowed browser origins, or ["*"]. */
@@ -202,6 +204,74 @@ export async function cached(deps: Deps, key: string, ttl: number, path: string)
 
   inflight.set(key, task);
   return task;
+}
+
+/* ---------------------------------------------------------------
+   Latest YouTube upload
+   The channel's public Atom feed (youtube.com/feeds/videos.xml) needs no
+   API key, unlike the Data API - matches "prefer minimal dependencies".
+   Not routed through cached() above, since that's wired specifically to
+   deps.fplGet/JSON; this is a different upstream returning XML, so it gets
+   its own small cache using the same memory/cacheGet/cacheSet deps. */
+const YOUTUBE_KEY = "latest-video";
+const YOUTUBE_TTL = 30 * 60_000; // new uploads are rare; no need to poll harder than this
+
+const HTML_ENTITIES: Record<string, string> = {
+  "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&apos;": "'",
+};
+function decodeEntities(s: string): string {
+  return s.replace(/&(?:amp|lt|gt|quot|#39|apos);/g, (m) => HTML_ENTITIES[m] ?? m);
+}
+
+interface LatestVideo {
+  videoId: string;
+  title: string;
+  url: string;
+  thumbnail: string;
+  publishedAt: string;
+}
+
+function parseLatestVideo(xml: string): LatestVideo | null {
+  const entry = xml.match(/<entry>([\s\S]*?)<\/entry>/)?.[1];
+  if (!entry) return null;
+  const videoId = entry.match(/<yt:videoId>([^<]+)<\/yt:videoId>/)?.[1];
+  const title = entry.match(/<title>([^<]*)<\/title>/)?.[1];
+  const publishedAt = entry.match(/<published>([^<]+)<\/published>/)?.[1];
+  if (!videoId || !title || !publishedAt) return null;
+  return {
+    videoId,
+    title: decodeEntities(title),
+    url: `https://www.youtube.com/watch?v=${videoId}`,
+    thumbnail: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+    publishedAt,
+  };
+}
+
+export async function latestVideo(deps: Deps): Promise<LatestVideo | null> {
+  const now = deps.now();
+
+  const local = memory.get(YOUTUBE_KEY);
+  if (local && now - local.fetchedAt < YOUTUBE_TTL) return local.payload as LatestVideo | null;
+
+  const shared = await deps.cacheGet(YOUTUBE_KEY).catch(() => null);
+  if (shared && now - shared.fetchedAt < YOUTUBE_TTL) {
+    memory.set(YOUTUBE_KEY, shared);
+    return shared.payload as LatestVideo | null;
+  }
+
+  try {
+    const xml = await deps.youtubeFeedGet();
+    const payload = parseLatestVideo(xml);
+    memory.set(YOUTUBE_KEY, { payload, fetchedAt: now });
+    await deps.cacheSet(YOUTUBE_KEY, payload).catch(() => {});
+    return payload;
+  } catch (err) {
+    // A stale link beats no link at all if YouTube wobbles.
+    if (shared) return shared.payload as LatestVideo | null;
+    if (local) return local.payload as LatestVideo | null;
+    console.error("youtube feed fetch failed:", err);
+    return null;
+  }
 }
 
 /* ---------------------------------------------------------------
@@ -756,6 +826,9 @@ export function createHandler(deps: Deps) {
           const days = Math.min(Math.max(Number(url.searchParams.get("days")) || 14, 1), 90);
           return json(await deps.priceMoves(days), 200, cors, 600);
         }
+
+        case "latest-video":
+          return json(await latestVideo(deps), 200, cors, 1200);
 
         default:
           return json({ error: "not_found" }, 404, cors);

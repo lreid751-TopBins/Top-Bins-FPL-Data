@@ -19,6 +19,27 @@ function assertEquals(actual: unknown, expected: unknown, msg = "") {
   if (a !== e) throw new Error(`${msg}\n  expected: ${e}\n  actual:   ${a}`);
 }
 
+const YOUTUBE_FEED = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns="http://www.w3.org/2005/Atom">
+ <title>Top Bins with Twins</title>
+ <entry>
+  <id>yt:video:CItzWelZTiM</id>
+  <yt:videoId>CItzWelZTiM</yt:videoId>
+  <title>FPL GW2: Kneejerks, Captains &amp; the Players You Need To Target</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=CItzWelZTiM"/>
+  <published>2026-08-26T02:19:35+00:00</published>
+  <updated>2026-08-26T02:19:35+00:00</updated>
+ </entry>
+ <entry>
+  <id>yt:video:older123</id>
+  <yt:videoId>older123</yt:videoId>
+  <title>An older video</title>
+  <link rel="alternate" href="https://www.youtube.com/watch?v=older123"/>
+  <published>2026-08-19T02:19:35+00:00</published>
+  <updated>2026-08-19T02:19:35+00:00</updated>
+ </entry>
+</feed>`;
+
 const BOOTSTRAP = {
   events: [
     { id: 11, is_current: false, finished: true },
@@ -104,6 +125,9 @@ function harness(overrides: Partial<Deps> = {}): Harness {
     },
     async priceMoves(days) {
       return { "1": { change: days, latest: 145 } };
+    },
+    async youtubeFeedGet() {
+      return YOUTUBE_FEED;
     },
     async snapshotPrices(rows) {
       prices.push(...rows);
@@ -313,6 +337,26 @@ Deno.test("prices endpoint passes the window through", async () => {
   const h = harness();
   const res = await createHandler(h.deps)(GET("/prices?days=7"));
   assertEquals(await res.json(), { "1": { change: 7, latest: 145 } });
+});
+
+Deno.test("latest-video returns the newest upload from the channel feed", async () => {
+  const h = harness();
+  const res = await createHandler(h.deps)(GET("/latest-video"));
+  assertEquals(res.status, 200);
+  const body = await res.json() as { videoId: string; title: string; url: string; thumbnail: string; publishedAt: string };
+  assertEquals(body.videoId, "CItzWelZTiM", "should be the first entry, not the older one");
+  assertEquals(body.title, "FPL GW2: Kneejerks, Captains & the Players You Need To Target", "HTML entities should be decoded");
+  assertEquals(body.url, "https://www.youtube.com/watch?v=CItzWelZTiM");
+  assertEquals(body.thumbnail, "https://i.ytimg.com/vi/CItzWelZTiM/hqdefault.jpg");
+});
+
+Deno.test("latest-video returns null rather than erroring when the feed can't be reached", async () => {
+  const h = harness({
+    async youtubeFeedGet() { throw new Error("YouTube feed returned 503"); },
+  });
+  const res = await createHandler(h.deps)(GET("/latest-video"));
+  assertEquals(res.status, 200, "a broken feed shouldn't surface as a site error");
+  assertEquals(await res.json(), null);
 });
 
 Deno.test("snapshot requires the shared secret", async () => {

@@ -73,6 +73,7 @@ export const api = {
   history: (id) => get(`${BASE}/entry/${id}/history`, { ttl: 120_000 }),
   element: (id) => get(`${BASE}/element/${id}`, { ttl: 300_000 }),
   prices: (days = 14) => get(`${BASE}/prices?days=${days}`, { ttl: 600_000 }),
+  latestVideo: () => get(`${BASE}/latest-video`, { ttl: 600_000 }),
 
   points: (from, to, elements = []) => {
     const q = new URLSearchParams({ from, to });

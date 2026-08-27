@@ -32,6 +32,10 @@ import {
 } from "./handler.ts";
 
 const FPL = "https://fantasy.premierleague.com/api";
+// Top Bins with Twins's real channel ID - public info (resolves the same as
+// youtube.com/@TopBinsWithTwins), not a secret, so it's fine hardcoded here
+// rather than another env var to manage.
+const YOUTUBE_CHANNEL_ID = "UCsa1L8pKHY-OphumUxXxgDg";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const REST = `${SUPABASE_URL}/rest/v1`;
@@ -55,6 +59,14 @@ const deps: Deps = {
     });
     if (!res.ok) throw new Error(`FPL API returned ${res.status} for ${path}`);
     return await res.json();
+  },
+
+  async youtubeFeedGet() {
+    const res = await fetch(
+      `https://www.youtube.com/feeds/videos.xml?channel_id=${YOUTUBE_CHANNEL_ID}`
+    );
+    if (!res.ok) throw new Error(`YouTube feed returned ${res.status}`);
+    return await res.text();
   },
 
   async cacheGet(key) {

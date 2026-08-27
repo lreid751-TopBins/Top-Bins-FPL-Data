@@ -14,6 +14,24 @@ function goTo(tab) {
   $$(".tab").forEach((t) => t.dataset.tab === tab && t.click());
 }
 
+/* ---------------- Latest video ----------------
+   Purely decorative cross-promotion, not app data - if the feed didn't load
+   (or hasn't loaded yet), this just doesn't render rather than showing an
+   empty or broken state. See store.js's load() for where S.latestVideo is
+   fetched (the channel's public upload feed, no API key). */
+function latestVideoBanner() {
+  const v = S.latestVideo;
+  if (!v) return "";
+  return `<a class="latest-video" href="${esc(v.url)}" target="_blank" rel="noopener noreferrer">
+    <img class="latest-video-thumb" src="${esc(v.thumbnail)}" alt="" loading="lazy">
+    <div class="latest-video-body">
+      <div class="latest-video-eyebrow">Latest video</div>
+      <div class="latest-video-title">${esc(v.title)}</div>
+    </div>
+    <span class="latest-video-play" aria-hidden="true">▶</span>
+  </a>`;
+}
+
 export function renderHub(root) {
   root.innerHTML = `
     <div class="eyebrow">This gameweek</div>
@@ -21,6 +39,8 @@ export function renderHub(root) {
       <h2>Hub</h2>
       <div class="hint">GW${gw()} · everything worth knowing before you touch the other tabs.</div>
     </div>
+
+    ${latestVideoBanner()}
 
     <div class="hub-grid">
       ${leagueTableWidget()}
