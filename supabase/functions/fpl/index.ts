@@ -12,6 +12,12 @@
  *                             posted (a separate webhook, since it's a
  *                             different channel than DISCORD_WEBHOOK_URL).
  *                             Unset = the snapshot still runs, just no post.
+ *
+ * This file's first real deploy (the one that added the announcement above)
+ * failed at the CI step that resolves the Supabase CLI, before it ever
+ * reached "Deploy function" - see CLAUDE.md's gotchas for why a green push
+ * still needs its actual Actions run checked, not just assumed. This
+ * comment is the redeploy that finally shipped it.
  */
 
 import {

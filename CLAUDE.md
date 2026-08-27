@@ -213,6 +213,17 @@ We built the branching feature in three parts, engine-first:
 - **One git command per line.** Mashing `git push git status` onto one line
   errors. Marina works on macOS; pushes use a Personal Access Token with `repo`
   AND `workflow` scope (the latter is required to push `.github/workflows/`).
+- **A green push doesn't mean a live deploy — check the actual workflow run.**
+  The commit that added the Discord price-changes digest sat correctly on
+  `main` for over a week doing nothing, because `Deploy Supabase` #14 failed
+  12 seconds in: `supabase/setup-cli@v1` couldn't resolve the latest CLI
+  release (GitHub API rate limit), before the workflow ever reached "Deploy
+  function." Nothing was wrong with the code or the secret — the edge
+  function in production was still whatever the last *successful* run had
+  deployed. `functions list`'s reported version number isn't proof either;
+  check the actual run status on GitHub (Actions tab → Deploy Supabase).
+  Fix is just re-running the deploy (push again, or re-trigger the same
+  commit) — this is transient CI flakiness, not a real failure to debug.
 
 ## Style / working norms
 
