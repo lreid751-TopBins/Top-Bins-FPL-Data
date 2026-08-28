@@ -20,6 +20,17 @@ jobs:
         run: |
           test -n "$PROJECT_REF" || { echo "::error::Set the SUPABASE_PROJECT_REF repository variable"; exit 1; }
           test -n "$SNAPSHOT_KEY" || { echo "::error::Set the SNAPSHOT_KEY secret"; exit 1; }
-          curl -fsS --retry 3 --retry-delay 20 -X POST \
+          response=$(curl -fsS --retry 3 --retry-delay 20 -X POST \
             "https://${PROJECT_REF}.supabase.co/functions/v1/fpl/snapshot" \
-            -H "x-snapshot-key: ${SNAPSHOT_KEY}"
+            -H "x-snapshot-key: ${SNAPSHOT_KEY}")
+          echo "$response"
+          # The endpoint always returns 200 once prices are stored, even if
+          # the #price-changes Discord post failed - that's deliberate (a
+          # Discord hiccup shouldn't block recording the prices themselves),
+          # but it means curl's own success check can't catch it. Check the
+          # response body directly so a swallowed announcement failure still
+          # shows up as a red run here instead of a misleadingly green one.
+          if [ "$(echo "$response" | jq -r '.announced')" = "false" ]; then
+            echo "::error::Prices were recorded, but the #price-changes Discord announcement failed - check the edge function logs."
+            exit 1
+          fi

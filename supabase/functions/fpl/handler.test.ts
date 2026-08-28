@@ -402,6 +402,8 @@ Deno.test("snapshot posts a risers/fallers digest to the #price-changes Discord 
   );
   assertEquals(res.status, 200);
   assertEquals(h.priceDiscordMessages.length, 1, "one digest should be posted");
+  const body = await res.json() as { announced: boolean };
+  assertEquals(body.announced, true, "a successful post should report announced: true");
   const msg = h.priceDiscordMessages[0];
   assert(msg.includes("Salah"), "the digest should name the riser");
   assert(msg.includes("£14.5m"), "the digest should show the riser's new price");
@@ -418,6 +420,8 @@ Deno.test("snapshot posts nothing to #price-changes when no prices moved", async
   );
   assertEquals(res.status, 200);
   assertEquals(h.priceDiscordMessages.length, 0, "nothing moved, so nothing should be posted");
+  const body = await res.json() as { announced: boolean };
+  assertEquals(body.announced, true, "nothing to announce isn't a failure - announced should still be true");
 });
 
 Deno.test("snapshot still succeeds if the #price-changes announcement fails", async () => {
@@ -427,8 +431,9 @@ Deno.test("snapshot still succeeds if the #price-changes announcement fails", as
     GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "s3cret" } })
   );
   assertEquals(res.status, 200, "the snapshot itself must not fail just because the announcement did");
-  const body = await res.json() as { ok: boolean; stored: number };
+  const body = await res.json() as { ok: boolean; stored: number; announced: boolean };
   assertEquals(body.stored, 2, "prices should still be recorded");
+  assertEquals(body.announced, false, "a real announcement failure must be visible in the response, not just swallowed");
 });
 
 Deno.test("answers CORS preflight and honours an origin allowlist", async () => {

@@ -224,6 +224,22 @@ We built the branching feature in three parts, engine-first:
   check the actual run status on GitHub (Actions tab → Deploy Supabase).
   Fix is just re-running the deploy (push again, or re-trigger the same
   commit) — this is transient CI flakiness, not a real failure to debug.
+- **`schedule:` cron triggers can be silently skipped, not just delayed.**
+  The night of Aug 26→27 the price-changes digest never posted; there was no
+  failed run to find — the `Snapshot prices` workflow simply has no run at
+  all between the Aug 25 11:26pm one and the next one at Aug 27 8:50am (over
+  10 hours later than its 02:20 UTC schedule). That's GitHub's own queue
+  under load, not our code — nothing to fix there, just don't assume a gap
+  in run history means nothing was supposed to happen. Separately, that late
+  run's own data proved the digest logic itself was fine (real movers
+  existed that day, `price_moves()` found them correctly for that date) but
+  the run still showed green with no announcement — `handleSnapshot`
+  swallowed a failed Discord post into a 200 either way, so a real failure
+  and "nothing moved" looked identical from the workflow's own log. Fixed by
+  having `/snapshot` report `announced: true/false` in its response and
+  having `snapshot-prices.yml` fail the job when it's false, so a swallowed
+  announcement failure shows up as a red run instead of a misleadingly green
+  one — same lesson as the deploy-CI gotcha above, applied here too.
 
 ## Style / working norms
 

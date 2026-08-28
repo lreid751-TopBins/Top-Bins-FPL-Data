@@ -1016,13 +1016,20 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
   // Best-effort, same pattern as Team Rater's announcement: the snapshot
   // itself (the thing every other feature depends on) must succeed and
   // respond regardless of whether Discord is reachable or even configured.
+  // But a silently-swallowed failure here is exactly how the announcement
+  // went missing for a real night without anyone finding out until asked -
+  // `announced` surfaces it in the response so the GitHub Action that
+  // triggers this can fail loudly (see snapshot-prices.yml) instead of
+  // reporting a green run that didn't actually announce anything.
+  let announced = true;
   try {
     await announcePriceChanges(deps, elements);
   } catch (err) {
+    announced = false;
     console.error("price-change announcement failed:", err);
   }
 
-  return json({ ok: true, stored }, 200, cors);
+  return json({ ok: true, stored, announced }, 200, cors);
 }
 
 /** Diffs today's snapshot against yesterday's (via the same price_moves the
