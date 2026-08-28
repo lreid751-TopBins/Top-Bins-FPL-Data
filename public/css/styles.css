@@ -1690,6 +1690,17 @@ textarea::placeholder { color: var(--muted-2); }
 .tr-bar-fill { height: 100%; background: var(--gold); border-radius: 4px; transition: width 0.4s ease; }
 @media (prefers-reduced-motion: reduce) { .tr-bar-fill { transition: none; } }
 .tr-stats-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
+.tr-actions { display: flex; gap: 8px; margin-top: 8px; }
+.tr-actions .btn { flex: 1; }
+.tr-share { position: relative; flex: 1; }
+.tr-share .btn { width: 100%; }
+.tr-share-menu {
+  position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 5;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden;
+}
+.tr-share-menu button { display: block; width: 100%; text-align: left; background: transparent; border: none; color: var(--chalk); font-size: 12px; padding: 9px 12px; }
+.tr-share-menu button:hover { background: var(--raise); }
+.tr-share-menu button + button { border-top: 1px solid var(--line-soft); }
 
 @media (max-width: 480px) {
   .player-detail { width: 100vw; }

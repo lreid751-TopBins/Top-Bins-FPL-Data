@@ -14,6 +14,7 @@
 import { f1 } from "./store.js";
 import { $, esc } from "./ui.js";
 import { api } from "./api.js";
+import { renderShareCanvas, copyShareImage, downloadShareImage, copyShareText } from "./shareCard.js";
 
 const NICKNAME_KEY = "tb:raterNickname";
 
@@ -25,6 +26,8 @@ export const RT = {
   submitting: false,
   error: "",
   result: null,     // { pct, submittedTotal, ceilingTotal, window } once scored
+  shareOpen: false,
+  shareStatus: "",  // brief feedback after a share action, e.g. "Copied!"
 };
 
 const ERROR_COPY = {
@@ -54,6 +57,8 @@ export function openRater(picks, captain, span = 5) {
   RT.error = "";
   RT.result = null;
   RT.submitting = false;
+  RT.shareOpen = false;
+  RT.shareStatus = "";
   render();
 
   const panel = panelEl();
@@ -140,7 +145,20 @@ function resultView() {
       <span>${f1(r.ceilingTotal)} pt ceiling</span>
     </div>
     <p class="pd-cap" style="margin-top:14px">Announced in the Top Bins Discord as <b>${esc(RT.nickname)}</b>.</p>
-    <button class="btn ghost" id="trAgain" style="margin-top:8px">Rate another squad</button>
+    <div class="tr-actions">
+      <button class="btn ghost" id="trAgain">Rate another squad</button>
+      <div class="tr-share">
+        <button class="btn ghost" id="trShareToggle" aria-haspopup="true" aria-expanded="${RT.shareOpen}">Share ▾</button>
+        ${RT.shareOpen ? `
+          <div class="tr-share-menu">
+            <button id="trShareImage">🖼️ Copy image</button>
+            <button id="trShareDownload">⬇️ Download image</button>
+            <button id="trShareText">📋 Copy as text</button>
+          </div>
+        ` : ""}
+      </div>
+    </div>
+    ${RT.shareStatus ? `<p class="pd-cap" style="margin-top:8px">${esc(RT.shareStatus)}</p>` : ""}
   `;
 }
 
@@ -171,14 +189,69 @@ function render() {
       render();
     };
   }
+
+  const shareToggle = $("#trShareToggle", panel);
+  if (shareToggle) {
+    shareToggle.onclick = () => {
+      RT.shareOpen = !RT.shareOpen;
+      render();
+    };
+  }
+  const shareImage = $("#trShareImage", panel);
+  if (shareImage) shareImage.onclick = () => runShareAction(copyImageAction, "Copied!");
+  const shareDownload = $("#trShareDownload", panel);
+  if (shareDownload) shareDownload.onclick = () => runShareAction(downloadImageAction, "Downloaded!");
+  const shareText = $("#trShareText", panel);
+  if (shareText) shareText.onclick = () => runShareAction(copyTextAction, "Copied!");
+}
+
+async function copyImageAction() {
+  const canvas = await renderShareCanvas(RT.result, RT.nickname.trim() || "Anonymous", RT.picks, RT.captain);
+  await copyShareImage(canvas);
+}
+async function downloadImageAction() {
+  const canvas = await renderShareCanvas(RT.result, RT.nickname.trim() || "Anonymous", RT.picks, RT.captain);
+  await downloadShareImage(canvas);
+}
+async function copyTextAction() {
+  await copyShareText(RT.result, RT.nickname.trim() || "Anonymous", RT.picks, RT.captain);
+}
+
+let shareStatusTimer = null;
+async function runShareAction(action, successMessage) {
+  RT.shareOpen = false;
+  try {
+    await action();
+    RT.shareStatus = successMessage;
+  } catch (err) {
+    RT.shareStatus = err.message || "Couldn't do that - try again.";
+  }
+  render();
+  window.clearTimeout(shareStatusTimer);
+  shareStatusTimer = window.setTimeout(() => {
+    RT.shareStatus = "";
+    render();
+  }, 2500);
 }
 
 if (typeof document !== "undefined") {
+  // Capture phase, not bubble: a click on e.g. #trSubmit or #trShareToggle
+  // can trigger a synchronous render() in its own handler, which replaces
+  // #teamRater's innerHTML and detaches the very node that was clicked -
+  // by the time a bubble-phase listener on document saw the event,
+  // e.target.closest() would run on that now-parentless node and always
+  // report "outside", closing whatever had just been opened. Capture runs
+  // before any handler on the target itself, so e.target is still attached
+  // and the containment check is meaningful.
   document.addEventListener("click", (e) => {
     if (panelEl()?.hidden !== false) return;
+    if (RT.shareOpen && !e.target.closest(".tr-share")) {
+      RT.shareOpen = false;
+      render();
+    }
     if (e.target.closest("#teamRater") || e.target.closest("[data-open-rater]")) return;
     closeRater();
-  });
+  }, true);
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && panelEl()?.hidden === false) closeRater();
   });

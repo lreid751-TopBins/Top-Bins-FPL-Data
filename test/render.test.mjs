@@ -142,6 +142,13 @@ const {
 const { PD, openPlayerDetail, closePlayerDetail } = await import("../public/js/playerDetail.js");
 const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
 const { optimalSquad, scoreSquad, validateSquad } = await import("../public/js/teamRating.js");
+const { buildStartingXIRows, shareCardText } = await import("../public/js/shareCard.js");
+
+// jsdom has no <canvas> 2D context and no built-in Clipboard API, so the
+// canvas-drawing and image-copy paths aren't exercised here (verified live
+// in-browser instead) - but copy-as-text only needs navigator.clipboard.
+if (typeof navigator === "undefined") global.navigator = {};
+navigator.clipboard = { writeText: async () => {}, write: async () => {} };
 
 const results = [];
 const check = (name, fn) => {
@@ -1130,6 +1137,38 @@ check("Rate my team on My Team opens the rater with the loaded squad", () => {
   return "drawer opened and stayed open, with 15 picks and a captain queued";
 });
 
+check("share card reconstructs a legal starting XI, grouped by position", () => {
+  const rows = buildStartingXIRows(RT.picks, RT.captain);
+  const counts = POSITION_ORDER.map((pos) => rows[pos].length);
+  const total = counts.reduce((a, b) => a + b, 0);
+  if (total !== 11) throw new Error(`expected 11 starters across all rows, got ${total} (${counts.join("/")})`);
+  if (counts[0] !== 1) throw new Error(`expected exactly 1 starting GKP, got ${counts[0]}`);
+  // A submitted captain isn't guaranteed to land in the auto-picked XI
+  // (they may have captained someone who's actually bench-worthy this
+  // window) - the card just skips the captain badge in that case, so at
+  // most one row can be marked, never more.
+  const captains = POSITION_ORDER.flatMap((pos) => rows[pos]).filter((p) => p.isCaptain);
+  if (captains.length > 1) throw new Error(`expected at most one captain marked, got ${captains.length}`);
+  return `${POSITION_ORDER.map((pos, i) => `${pos} ${counts[i]}`).join(", ")}, captain ${captains[0]?.name ?? "not in starting XI"}`;
+});
+
+check("share card marks the captain when they do land in the starting XI", () => {
+  const optimal = optimalSquad(RT.span || 5);
+  const rows = buildStartingXIRows(optimal.picks, optimal.captain);
+  const captains = POSITION_ORDER.flatMap((pos) => rows[pos]).filter((p) => p.isCaptain);
+  if (captains.length !== 1) throw new Error(`optimalSquad's captain should start and be marked - got ${captains.length} marked`);
+  return `captain ${captains[0].name} marked on the card`;
+});
+
+check("share card text includes the score, emoji bar, and names - no undefined leaking in", () => {
+  const text = shareCardText({ pct: 83.4, submittedTotal: 142.6, ceilingTotal: 170.9, window: 5 }, "Marina", RT.picks, RT.captain);
+  if (text.includes("undefined") || text.includes("NaN")) throw new Error(`bad value leaked into share text: ${text}`);
+  if (!text.includes("83.4%")) throw new Error("expected the percentage in the share text");
+  if (!/[\u{1F7E9}\u{1F7E8}\u{1F7E5}]{10}/u.test(text)) throw new Error("expected a 10-square emoji bar");
+  if (!text.includes("fpl.topbinswithtwins.com")) throw new Error("expected the site URL");
+  return "share text well-formed";
+});
+
 await (async () => {
   const nickname = document.getElementById("trNickname");
   nickname.value = "Regression Tester";
@@ -1151,6 +1190,40 @@ await (async () => {
       throw new Error("submitting should save the nickname for the next visit");
     }
     return "nickname persisted";
+  });
+})();
+
+check("Share dropdown lists the three share actions and toggles open/closed", () => {
+  const drawer = document.getElementById("teamRater");
+  const toggle = drawer.querySelector("#trShareToggle");
+  if (!toggle) throw new Error("no Share button on the result view");
+
+  toggle.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (!RT.shareOpen) throw new Error("clicking Share should open the dropdown");
+  const menu = drawer.querySelector(".tr-share-menu");
+  if (!menu) throw new Error("dropdown menu didn't render");
+  const labels = [...menu.querySelectorAll("button")].map((b) => b.textContent);
+  if (!labels.some((l) => l.includes("Copy image"))) throw new Error("missing Copy image action");
+  if (!labels.some((l) => l.includes("Download image"))) throw new Error("missing Download image action");
+  if (!labels.some((l) => l.includes("Copy as text"))) throw new Error("missing Copy as text action");
+
+  toggle.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (RT.shareOpen) throw new Error("clicking Share again should close the dropdown");
+  if (document.getElementById("teamRater").querySelector(".tr-share-menu")) {
+    throw new Error("dropdown markup should be gone once closed");
+  }
+  return "dropdown opens with all three actions, closes on toggle";
+});
+
+await (async () => {
+  const drawer = document.getElementById("teamRater");
+  drawer.querySelector("#trShareToggle").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  await drawer.querySelector("#trShareText").onclick();
+
+  check("Copy as text closes the dropdown and confirms the copy", () => {
+    if (RT.shareOpen) throw new Error("the dropdown should close after choosing an action");
+    if (!drawer.innerHTML.includes("Copied!")) throw new Error("expected a 'Copied!' confirmation after copying");
+    return "copy-as-text action ran and confirmed";
   });
 })();
 
@@ -1204,6 +1277,42 @@ check("a click outside the rater dismisses it", () => {
   }
   return "outside click closes the rater";
 });
+
+await (async () => {
+  // Regression: a real click (not the test harness's `.onclick()` shortcut
+  // used above) dispatches through the document, and #trSubmit's own
+  // handler calls render() synchronously before its first await - which
+  // replaces #teamRater's innerHTML and detaches the very button that was
+  // clicked. The old bubble-phase outside-click listener then saw a
+  // parentless e.target and treated it as "outside", closing the drawer
+  // it had just been asked to submit. Capture-phase fixes this by
+  // evaluating e.target before that render can run.
+  const openBtn = panel("panel-squad").querySelector("#mgrRate");
+  openBtn.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  const drawer = document.getElementById("teamRater");
+
+  const nickname = document.getElementById("trNickname");
+  nickname.value = "Real Click Tester";
+  nickname.dispatchEvent(new window.Event("input", { bubbles: true }));
+  document.getElementById("trSubmit").dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+
+  check("a real click on Rate my team doesn't close the drawer on itself", () => {
+    if (!drawer.classList.contains("show")) {
+      throw new Error("clicking Submit for real closed the drawer instead of scoring it");
+    }
+    return "drawer stayed open through the click's own synchronous render";
+  });
+
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  check("...and the result still renders once scoring finishes", () => {
+    if (!RT.result) throw new Error("expected a result after the real click finished scoring");
+    if (!drawer.innerHTML.includes("Your score")) throw new Error("result view didn't render");
+    return `scored ${RT.result.pct.toFixed(1)}%`;
+  });
+
+  closeRater();
+})();
 
 check("hub shows crests, rank and mini-leagues once a manager is connected", () => {
   renderHub(panel("panel-hub"));
