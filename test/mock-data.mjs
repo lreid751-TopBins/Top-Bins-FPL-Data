@@ -235,9 +235,39 @@ export function pointsFor(element, gw) {
   return h % 17;
 }
 
+// Same deterministic-hash approach as pointsFor, different salts per stat so
+// they don't all move in lockstep - lets the report card's actual-vs-xG
+// comparison show real over/underperformance locally instead of every row
+// reading 0, which is all the real endpoint's shape can't demonstrate on
+// its own without live data.
+const statHash = (element, gw, salt) => (element * salt + gw * 104729) % 97;
+
+export function xgFor(element, gw) {
+  return +((statHash(element, gw, 7919) % 90) / 100).toFixed(2); // 0.00-0.89
+}
+export function xaFor(element, gw) {
+  return +((statHash(element, gw, 6151) % 60) / 100).toFixed(2); // 0.00-0.59
+}
+export function goalsFor(element, gw) {
+  const h = statHash(element, gw, 4111) % 100;
+  return h < 6 ? 2 : h < 22 ? 1 : 0;
+}
+export function assistsFor(element, gw) {
+  const h = statHash(element, gw, 3559) % 100;
+  return h < 4 ? 2 : h < 18 ? 1 : 0;
+}
+export function xgcFor(element, gw) {
+  return +((statHash(element, gw, 2003) % 250) / 100).toFixed(2); // 0.00-2.49
+}
+
 export function pointsPayload(from, to, elements) {
   const points = {};
   const minutes = {};
+  const goals = {};
+  const assists = {};
+  const xg = {};
+  const xa = {};
+  const xgc = {};
   const ids = elements && elements.length
     ? elements
     : elements.length === 0
@@ -247,6 +277,11 @@ export function pointsPayload(from, to, elements) {
     for (let gw = from; gw <= Math.min(to, CURRENT_GW); gw++) {
       (points[id] ??= {})[gw] = pointsFor(id, gw);
       (minutes[id] ??= {})[gw] = 90;
+      (goals[id] ??= {})[gw] = goalsFor(id, gw);
+      (assists[id] ??= {})[gw] = assistsFor(id, gw);
+      (xg[id] ??= {})[gw] = xgFor(id, gw);
+      (xa[id] ??= {})[gw] = xaFor(id, gw);
+      (xgc[id] ??= {})[gw] = xgcFor(id, gw);
     }
   }
   return {
@@ -256,6 +291,11 @@ export function pointsPayload(from, to, elements) {
     finished: Array.from({ length: CURRENT_GW - 1 }, (_, i) => i + 1),
     points,
     minutes,
+    goals,
+    assists,
+    xg,
+    xa,
+    xgc,
   };
 }
 

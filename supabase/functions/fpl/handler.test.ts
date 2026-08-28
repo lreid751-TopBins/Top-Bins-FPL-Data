@@ -800,6 +800,23 @@ Deno.test("points endpoint returns a gameweek map for named players", async () =
   assertEquals(body.points["1"], { "10": 10, "11": 11, "12": 12 });
 });
 
+Deno.test("points endpoint also returns actual and expected goals/assists per gameweek, for the report card", async () => {
+  const h = harness();
+  const res = await createHandler(h.deps)(GET("/points?from=10&to=12&elements=1"));
+  const body = await res.json() as {
+    goals: Record<string, Record<string, number>>;
+    assists: Record<string, Record<string, number>>;
+    xg: Record<string, Record<string, number>>;
+    xa: Record<string, Record<string, number>>;
+    xgc: Record<string, Record<string, number>>;
+  };
+  assertEquals(body.goals["1"], { "10": 0, "11": 0, "12": 0 }, "mock data doesn't set goals_scored - should default to 0, not undefined");
+  assertEquals(body.assists["1"], { "10": 0, "11": 0, "12": 0 });
+  assertEquals(body.xg["1"], { "10": 0.5, "11": 0.5, "12": 0.5 });
+  assertEquals(body.xa["1"], { "10": 0.2, "11": 0.2, "12": 0.2 });
+  assertEquals(body.xgc["1"], { "10": 1.1, "11": 1.1, "12": 1.1 });
+});
+
 Deno.test("points endpoint never looks past the current gameweek", async () => {
   const h = harness();
   await createHandler(h.deps)(GET("/points?from=11&to=20&elements=1"));

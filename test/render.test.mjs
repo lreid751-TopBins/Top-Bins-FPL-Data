@@ -143,6 +143,7 @@ const { PD, openPlayerDetail, closePlayerDetail } = await import("../public/js/p
 const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
 const { optimalSquad, scoreSquad, validateSquad } = await import("../public/js/teamRating.js");
 const { buildStartingXIRows, shareCardText } = await import("../public/js/shareCard.js");
+const { RC, gwList, playerReportRow, teamReportSummary } = await import("../public/js/reportCard.js");
 
 // jsdom has no <canvas> 2D context and no built-in Clipboard API, so the
 // canvas-drawing and image-copy paths aren't exercised here (verified live
@@ -167,6 +168,76 @@ check("bootstrap parsed", () => {
   if (!S.players.length) throw new Error("no players built");
   if (S.players.some((p) => p.pos === "MNG")) throw new Error("manager element leaked through");
   return `${S.players.length} players, GW${S.currentGw} current / GW${S.nextGw} next`;
+});
+
+check("gwList expands a window spec into the right gameweek numbers", () => {
+  const last3 = gwList("3", 10);
+  if (JSON.stringify(last3) !== JSON.stringify([8, 9, 10])) throw new Error(`expected [8,9,10], got ${JSON.stringify(last3)}`);
+  const season = gwList("season", 4);
+  if (JSON.stringify(season) !== JSON.stringify([1, 2, 3, 4])) throw new Error(`expected [1,2,3,4], got ${JSON.stringify(season)}`);
+  const clamped = gwList("5", 2); // fewer GWs played so far than the window asks for
+  if (JSON.stringify(clamped) !== JSON.stringify([1, 2])) throw new Error(`expected clamped to [1,2], got ${JSON.stringify(clamped)}`);
+  return "3-GW, season, and clamped-short windows all expand correctly";
+});
+
+check("report card: deserved points come from xG/xA/xGC, not a copy of actual points", () => {
+  const data = {
+    points: { 99: { 1: 10, 2: 2 } },
+    minutes: { 99: { 1: 90, 2: 90 } },
+    goals: { 99: { 1: 2, 2: 0 } },
+    assists: { 99: { 1: 0, 2: 0 } },
+    xg: { 99: { 1: 0.5, 2: 0.5 } },
+    xa: { 99: { 1: 0, 2: 0 } },
+    xgc: { 99: { 1: 2, 2: 2 } },
+  };
+  const row = playerReportRow({ id: 99, name: "Test Striker", pos: "FWD" }, data, [1, 2]);
+  if (row.g !== 2) throw new Error(`expected 2 actual goals, got ${row.g}`);
+  if (row.xg !== 1) throw new Error(`expected xg 1.0 (0.5+0.5), got ${row.xg}`);
+  if (row.actual !== 12) throw new Error(`expected 12 actual points (10+2), got ${row.actual}`);
+  // FWD: goal points 4/xG, no clean-sheet credit for forwards, appearance 2pts x 2 GWs.
+  if (row.deserved !== 8) throw new Error(`expected 8 deserved points (4 attack + 4 appearance), got ${row.deserved}`);
+  if (row.delta !== 4) throw new Error(`expected delta +4 (12 actual - 8 deserved), got ${row.delta}`);
+  return `actual ${row.actual}, deserved ${row.deserved}, delta +${row.delta} - clinical finishing shows up as a positive delta`;
+});
+
+check("report card: a low xGC credits defenders toward a deserved clean sheet, not just goals/assists", () => {
+  const data = {
+    points: { 55: { 1: 6 } }, minutes: { 55: { 1: 90 } },
+    goals: { 55: { 1: 0 } }, assists: { 55: { 1: 0 } },
+    xg: { 55: { 1: 0 } }, xa: { 55: { 1: 0 } }, xgc: { 55: { 1: 0.3 } }, // very likely a clean sheet
+  };
+  const row = playerReportRow({ id: 55, name: "Test Defender", pos: "DEF" }, data, [1]);
+  const expectedDeserved = Math.round((2 + Math.exp(-0.3) * 4) * 10) / 10; // appearance + Poisson CS credit
+  if (row.deserved !== expectedDeserved) {
+    throw new Error(`expected deserved ${expectedDeserved} (appearance + xGC-based clean-sheet credit), got ${row.deserved}`);
+  }
+  return `xGC 0.3 credited ${(row.deserved - 2).toFixed(1)} deserved clean-sheet points, despite no actual goals/assists`;
+});
+
+check("report card: an unplayed gameweek deserves 0, not a free appearance point", () => {
+  const data = {
+    points: { 1: { 1: 0 } }, minutes: { 1: { 1: 0 } }, goals: { 1: { 1: 0 } }, assists: { 1: { 1: 0 } },
+    xg: { 1: { 1: 0 } }, xa: { 1: { 1: 0 } }, xgc: { 1: { 1: 0 } },
+  };
+  const row = playerReportRow({ id: 1, name: "Benched", pos: "MID" }, data, [1]);
+  if (row.deserved !== 0) throw new Error(`expected 0 deserved for an unplayed gameweek, got ${row.deserved}`);
+  return "unplayed gameweek scores 0 deserved";
+});
+
+check("report card: team summary sums actual/deserved across the squad, matching each row", () => {
+  const data = {
+    points: { 1: { 1: 5 }, 2: { 1: 3 } }, minutes: { 1: { 1: 90 }, 2: { 1: 90 } },
+    goals: { 1: { 1: 1 }, 2: { 1: 0 } }, assists: { 1: { 1: 0 }, 2: { 1: 0 } },
+    xg: { 1: { 1: 0.3 }, 2: { 1: 0.1 } }, xa: { 1: { 1: 0 }, 2: { 1: 0 } },
+    xgc: { 1: { 1: 1 }, 2: { 1: 1 } },
+  };
+  const players = [{ id: 1, name: "A", pos: "MID" }, { id: 2, name: "B", pos: "MID" }];
+  const summary = teamReportSummary(players, data, [1]);
+  const rowActualSum = players.reduce((sum, p) => sum + playerReportRow(p, data, [1]).actual, 0);
+  if (summary.actual !== rowActualSum) {
+    throw new Error(`team actual (${summary.actual}) should equal the sum of each row's actual (${rowActualSum})`);
+  }
+  return `team actual ${summary.actual}, deserved ${summary.deserved}`;
 });
 
 check("per-90 rates are shrunk toward the position baseline, not raw total/minutes", () => {
@@ -859,6 +930,96 @@ check("My Team pitch shows a faint crest watermark for the picked club theme, no
   }
   return "crest watermark shows only when a club theme is active, and reuses the standard crest CDN";
 });
+
+await (async () => {
+  // The report card's fetch is fire-and-forget from renderSquad() (not
+  // awaited), and calling renderSquad() again while it's still in flight
+  // used to recurse into itself infinitely (loadReportCard's own rerender()
+  // called back into loadReportCard before the first `await` ever ran) -
+  // hanging the whole test suite, and the real My Team tab along with it.
+  // Rendering several times in a row here is exactly that scenario; if the
+  // guard regresses, this hangs instead of failing cleanly.
+  renderSquad(panel("panel-squad"));
+  renderSquad(panel("panel-squad"));
+  renderSquad(panel("panel-squad"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderSquad(panel("panel-squad"));
+
+  check("My Team shows a report card with actual vs. deserved points", () => {
+    const html = panel("panel-squad").innerHTML;
+    if (!html.includes("Report Card")) throw new Error("no Report Card section rendered once data loaded");
+    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the report card");
+    const table = panel("panel-squad").querySelector(".rc-box table");
+    if (!table) throw new Error("no report card table rendered");
+    const rows = table.querySelectorAll("tbody tr");
+    if (rows.length !== 15) throw new Error(`expected 15 player rows, got ${rows.length}`);
+    return `report card rendered, ${rows.length} rows`;
+  });
+
+  check("report card table has sortable G/xG/A/xA/xGI/Pts Δ columns, same convention as other tables", () => {
+    const keys = [...panel("panel-squad").querySelectorAll(".rc-box thead th[data-k]")].map((th) => th.dataset.k);
+    for (const want of ["g", "xg", "a", "xa", "xgi", "delta"]) {
+      if (!keys.includes(want)) throw new Error(`missing sortable column: ${want} (got: ${keys.join(", ")})`);
+    }
+    return `sortable columns: ${keys.join(", ")}`;
+  });
+
+  check("report card sorts by clicking a column header, and flips on a second click", () => {
+    const table = panel("panel-squad");
+    const xgHeader = table.querySelector('.rc-box thead th[data-k="xg"]');
+    xgHeader.click();
+    const firstRowXg = () => +table.querySelector(".rc-box tbody tr td:nth-child(3)").textContent;
+    const descFirst = firstRowXg();
+    const afterFirstClick = [...table.querySelectorAll(".rc-box tbody tr td:nth-child(3)")].map((td) => +td.textContent);
+    const isDesc = afterFirstClick.every((v, i) => i === 0 || afterFirstClick[i - 1] >= v);
+    if (!isDesc) throw new Error(`expected descending xG on first click, got: ${afterFirstClick.join(", ")}`);
+
+    table.querySelector('.rc-box thead th[data-k="xg"]').click();
+    const afterSecondClick = [...table.querySelectorAll(".rc-box tbody tr td:nth-child(3)")].map((td) => +td.textContent);
+    const isAsc = afterSecondClick.every((v, i) => i === 0 || afterSecondClick[i - 1] <= v);
+    if (!isAsc) throw new Error(`expected ascending xG on the re-click, got: ${afterSecondClick.join(", ")}`);
+
+    return `sorted descending (top ${descFirst}), then flipped ascending on re-click`;
+  });
+
+  check("report card's global window select changes the headline and unoverridden rows", () => {
+    const before = panel("panel-squad").querySelector(".rc-stat.rc-delta .val").textContent;
+    const select = panel("panel-squad").querySelector("#rcWindow");
+    const otherOption = [...select.options].find((o) => o.value !== select.value);
+    select.value = otherOption.value;
+    select.dispatchEvent(new window.Event("change", { bubbles: true }));
+
+    if (RC.globalWindow !== otherOption.value) throw new Error("RC.globalWindow didn't update from the select");
+    const after = panel("panel-squad").querySelector(".rc-stat.rc-delta .val").textContent;
+    // Different windows cover different gameweeks, so the delta figure
+    // should (almost certainly) differ - not asserting an exact value since
+    // that's already covered by the pure playerReportRow/teamReportSummary
+    // unit checks below.
+    return `window changed ${select.value === otherOption.value ? "ok" : "FAILED"}, delta ${before} -> ${after}`;
+  });
+
+  check("a player's window chip overrides just that row, independent of the global window", () => {
+    const row = panel("panel-squad").querySelector(".rc-box tbody tr");
+    const pid = +row.querySelector(".rc-row-win").dataset.pid;
+    const globalBefore = RC.globalWindow;
+
+    row.querySelector(".rc-row-win").click();
+    if (!RC.playerWindows[pid]) throw new Error("clicking a row's window chip should set a per-player override");
+    if (RC.globalWindow !== globalBefore) throw new Error("a per-player override must not touch the global window");
+
+    const dot = panel("panel-squad").querySelector(`.rc-row-win[data-pid="${pid}"]`).closest("tr").querySelector(".rc-custom-dot");
+    if (!dot) throw new Error("expected a custom-window marker next to the overridden player's name");
+
+    // Cycling back to whatever matches the global window should clear the override, not just set it to a value that happens to match.
+    while (RC.playerWindows[pid]) {
+      panel("panel-squad").querySelector(`.rc-row-win[data-pid="${pid}"]`).click();
+    }
+    if (panel("panel-squad").querySelector(`.rc-row-win[data-pid="${pid}"]`).closest("tr").querySelector(".rc-custom-dot")) {
+      throw new Error("cycling back to the global window's value should clear the override, not leave it marked custom");
+    }
+    return "per-player override applied, marked, and clearable independently of the global window";
+  });
+})();
 
 check("captain multiplier applied", () => {
   const cap = squadPicks.find((p) => p.is_captain);

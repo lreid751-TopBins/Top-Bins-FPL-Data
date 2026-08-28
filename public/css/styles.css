@@ -507,6 +507,38 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   pointer-events: none; opacity: 0.14;
 }
 .pitch-crest-watermark .team-crest { width: 200px; height: 200px; }
+
+/* ---------------- My Team report card ---------------- */
+.rc-cap { font-size: 11.5px; color: var(--muted-2); margin: 2px 0 0; line-height: 1.5; max-width: 46ch; }
+.rc-box { padding: 18px; }
+.rc-headline { display: flex; align-items: flex-end; gap: 22px; flex-wrap: wrap; }
+.rc-stat { display: flex; flex-direction: column; gap: 2px; }
+.rc-stat .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.rc-stat .val { font-family: "Anton", sans-serif; font-size: 34px; line-height: 1; color: var(--chalk); }
+.rc-stat .val.gold { color: var(--gold); }
+.rc-stat .val.pos { color: var(--pos); }
+.rc-stat .val.neg { color: var(--neg); }
+.rc-stat .val small { font-size: 14px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-left: 2px; }
+.rc-delta { margin-left: auto; text-align: right; }
+.rc-narrative {
+  margin: 14px 0 0; padding-top: 14px; border-top: 1px solid var(--line-soft);
+  font-size: 13px; line-height: 1.55; color: var(--chalk);
+}
+.rc-narrative b { color: var(--gold-2); font-weight: 700; }
+.rc-narrative .cap { display: block; margin-top: 6px; font-size: 11px; color: var(--muted-2); line-height: 1.5; }
+.rc-pname { display: flex; align-items: center; gap: 8px; }
+.rc-pos {
+  width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 8px; font-weight: 700; font-family: "JetBrains Mono", monospace; color: var(--stand); flex: none;
+}
+.rc-pname .custom-dot, .rc-custom-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--gold); display: inline-block; }
+.rc-row-win {
+  background: transparent; border: 1px solid var(--line); border-radius: 5px;
+  color: var(--muted); font-size: 10px; padding: 2px 5px; font-family: "JetBrains Mono", monospace; cursor: pointer;
+  margin-left: 4px;
+}
+.rc-row-win.custom { border-color: var(--gold-deep); color: var(--gold-2); }
+.rc-row-win:focus-visible { outline: 2px solid var(--gold); outline-offset: 1px; }
 .pitch-lines { position: absolute; inset: 0; pointer-events: none; }
 .pl-touch { position: absolute; inset: 12px; border: 1px solid rgba(234,243,236,.07); border-radius: 8px; }
 .pl-goal {

@@ -288,6 +288,8 @@ interface LiveLike {
     stats?: {
       total_points?: number;
       minutes?: number;
+      goals_scored?: number;
+      assists?: number;
       expected_goals?: number | string;
       expected_assists?: number | string;
       expected_goals_conceded?: number | string;
@@ -512,6 +514,15 @@ async function buildPoints(deps: Deps, from: number, to: number, only: Set<numbe
 
   const points: Record<number, Record<number, number>> = {};
   const minutes: Record<number, Record<number, number>> = {};
+  // Actual and expected goals/assists per player per GW - added for the My
+  // Team report card (actual vs. deserved points). xg/xa/xgc mirror what
+  // buildTeamWindow already pulls from this identical /event/{gw}/live/
+  // payload, just kept per-player here instead of summed into a team.
+  const goals: Record<number, Record<number, number>> = {};
+  const assists: Record<number, Record<number, number>> = {};
+  const xg: Record<number, Record<number, number>> = {};
+  const xa: Record<number, Record<number, number>> = {};
+  const xgc: Record<number, Record<number, number>> = {};
 
   rounds.forEach((data, idx) => {
     const gw = gws[idx];
@@ -521,10 +532,18 @@ async function buildPoints(deps: Deps, from: number, to: number, only: Set<numbe
       if (only && !only.has(el.id)) continue;
       (points[el.id] ??= {})[gw] = el.stats?.total_points ?? 0;
       (minutes[el.id] ??= {})[gw] = el.stats?.minutes ?? 0;
+      (goals[el.id] ??= {})[gw] = el.stats?.goals_scored ?? 0;
+      (assists[el.id] ??= {})[gw] = el.stats?.assists ?? 0;
+      (xg[el.id] ??= {})[gw] = Number(el.stats?.expected_goals ?? 0);
+      (xa[el.id] ??= {})[gw] = Number(el.stats?.expected_assists ?? 0);
+      (xgc[el.id] ??= {})[gw] = Number(el.stats?.expected_goals_conceded ?? 0);
     }
   });
 
-  return { from, to, current: currentId, finished: [...finished], points, minutes };
+  return {
+    from, to, current: currentId, finished: [...finished],
+    points, minutes, goals, assists, xg, xa, xgc,
+  };
 }
 
 /**

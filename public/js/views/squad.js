@@ -1,13 +1,17 @@
 import { S, saveManagerId, runDifficulty, n, f1, f2, signed } from "../store.js";
 import { api } from "../api.js";
 import {
-  $, $$, esc, statCard, emptyState, fixtureStrip,
+  $, $$, esc, th, statCard, emptyState, fixtureStrip,
   availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash, profileHint, teamCrest,
 } from "../ui.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { openRater } from "../teamRater.js";
 import { jerseyIcon } from "../jersey.js";
+import { POS_COLOR } from "../charts.js";
+import {
+  RC, loadReportCard, gwList, playerReportRow, teamReportSummary, windowFor,
+} from "../reportCard.js";
 
 let liveById = {};
 let loadError = "";
@@ -184,6 +188,9 @@ export function renderSquad(root) {
   const starters = picks.filter((p) => p.position <= 11);
   const bench = picks.filter((p) => p.position > 11);
 
+  const squadPlayers = picks.map((pk) => S.playerById[pk.element]).filter(Boolean);
+  if (squadPlayers.length) loadReportCard(squadPlayers, rerender);
+
   const livePts = (pick) => {
     const stats = liveById[pick.element];
     const base = stats ? n(stats.total_points) : 0;
@@ -257,6 +264,8 @@ export function renderSquad(root) {
       Live points update while matches are on and include provisional bonus once a game finishes.
       Fixture bars run left to right over the next five gameweeks.
     </p>
+
+    ${reportCardSection(squadPlayers)}
   `;
 
   wire(root, rerender, picks);
@@ -315,6 +324,107 @@ const SWAP_SORT_COLS = [
   { k: "ppm", l: "Value (pts/£m)", dir: -1 },
   { k: "price", l: "Price", dir: -1 },
 ];
+
+const RC_COLS = [
+  { k: "name",  l: "Player" },
+  { k: "g",     l: "G" },
+  { k: "xg",    l: "xG" },
+  { k: "a",     l: "A" },
+  { k: "xa",    l: "xA" },
+  { k: "xgi",   l: "xGI" },
+  { k: "delta", l: "Pts Δ" },
+];
+const RC_TEXT_COLS = new Set(["name"]);
+
+function rcWindowLabel(spec) {
+  return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
+}
+
+function reportCardSection(squadPlayers) {
+  if (!squadPlayers.length) return "";
+  if (!RC.data) {
+    return RC.loading
+      ? `<div class="section-head"><h2>Report Card</h2></div><p class="hint">Loading season stats…</p>`
+      : "";
+  }
+
+  const globalGws = gwList(RC.globalWindow);
+  const summary = teamReportSummary(squadPlayers, RC.data, globalGws);
+  const positive = summary.delta >= 0;
+
+  const rows = squadPlayers
+    .map((p) => playerReportRow(p, RC.data, gwList(windowFor(p.id))))
+    .sort((a, b) =>
+      RC_TEXT_COLS.has(RC.sortKey)
+        ? String(a[RC.sortKey]).localeCompare(String(b[RC.sortKey])) * -RC.sortDir
+        : (n(a[RC.sortKey]) - n(b[RC.sortKey])) * RC.sortDir
+    );
+
+  const narrative = positive
+    ? `Your squad has scored <b>${f1(summary.delta)} more points</b> than its underlying numbers suggest over ${rcWindowLabel(RC.globalWindow).toLowerCase()} — you've been running hot.`
+    : `Your squad has scored <b>${f1(Math.abs(summary.delta))} fewer points</b> than its underlying numbers suggest over ${rcWindowLabel(RC.globalWindow).toLowerCase()} — worth checking who's due a turnaround.`;
+
+  return `
+    <div class="section-head">
+      <div>
+        <h2>Report Card</h2>
+        <p class="rc-cap">Actual points vs. what your squad's underlying xG/xA/xGC deserved.</p>
+      </div>
+      <select id="rcWindow" class="proj-window" aria-label="Report card window">
+        ${["3", "5", "8", "season"].map((w) => `<option value="${w}" ${RC.globalWindow === w ? "selected" : ""}>${rcWindowLabel(w)}</option>`).join("")}
+      </select>
+    </div>
+
+    <div class="chart-box rc-box">
+      <div class="rc-headline">
+        <div class="rc-stat"><span class="lbl">Actual</span><span class="val">${summary.actual}<small>pts</small></span></div>
+        <div class="rc-stat"><span class="lbl">Deserved</span><span class="val gold">${f1(summary.deserved)}<small>pts</small></span></div>
+        <div class="rc-stat rc-delta"><span class="lbl">Delta</span><span class="val ${positive ? "pos" : "neg"}">${positive ? "+" : ""}${f1(summary.delta)}</span></div>
+      </div>
+      <p class="rc-narrative">
+        ${narrative}
+        <span class="cap">"Deserved" only models attacking and defensive returns from xG/xA/xGC — bonus points, saves and cards aren't estimated, same as the projections.</span>
+      </p>
+    </div>
+
+    <div class="chart-box rc-box">
+      <div class="twrap">
+        <table>
+          <thead><tr>${RC_COLS.map((c) => th(c, RC.sortKey, RC.sortDir)).join("")}</tr></thead>
+          <tbody>
+            ${rows.map((r) => {
+              const win = windowFor(r.id);
+              const isCustom = !!RC.playerWindows[r.id];
+              const gCls = r.g > r.xg ? "pos" : r.g < r.xg ? "neg" : "";
+              const aCls = r.a > r.xa ? "pos" : r.a < r.xa ? "neg" : "";
+              const dCls = r.delta > 0 ? "pos" : r.delta < 0 ? "neg" : "";
+              return `
+                <tr>
+                  <td>
+                    <div class="rc-pname">
+                      <span class="rc-pos" style="background:${POS_COLOR[r.pos] || "#999"}">${esc(r.pos[0])}</span>
+                      <span class="nm">${esc(r.name)}</span>
+                      ${isCustom ? '<span class="rc-custom-dot" title="Custom window"></span>' : ""}
+                    </div>
+                  </td>
+                  <td class="${gCls}">${r.g}</td>
+                  <td>${f1(r.xg)}</td>
+                  <td class="${aCls}">${r.a}</td>
+                  <td>${f1(r.xa)}</td>
+                  <td>${f1(r.xgi)}</td>
+                  <td class="${dCls}">${r.delta > 0 ? "+" : ""}${f1(r.delta)}
+                    <button class="rc-row-win ${isCustom ? "custom" : ""}" data-pid="${r.id}" title="Click to change this player's window">${win === "season" ? "Szn" : win}</button>
+                  </td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:10px">Click a column to sort. Click a player's window chip to check them over a different range than the rest of the squad.</p>
+    </div>
+  `;
+}
 
 function scratchpad(picks) {
   const out = S.ui.swapOut ? S.playerById[S.ui.swapOut] : null;
@@ -496,6 +606,36 @@ function wire(root, rerender, picks) {
       };
       document.querySelector('[data-tab="journal"]')?.click();
     };
+
+  const rcWindow = $("#rcWindow", root);
+  if (rcWindow)
+    rcWindow.onchange = () => {
+      RC.globalWindow = rcWindow.value;
+      rerender();
+    };
+
+  $$("thead th[data-k]", root).forEach((el) => {
+    if (!el.closest(".chart-box.rc-box")) return; // don't hijack other tables' headers
+    el.onclick = () => {
+      const key = el.dataset.k;
+      RC.sortDir = RC.sortKey === key ? -RC.sortDir : RC_TEXT_COLS.has(key) ? 1 : -1;
+      RC.sortKey = key;
+      rerender();
+    };
+  });
+
+  $$(".rc-row-win", root).forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      const pid = +btn.dataset.pid;
+      const windows = ["3", "5", "8", "season"];
+      const current = windowFor(pid);
+      const next = windows[(windows.indexOf(current) + 1) % windows.length];
+      if (next === RC.globalWindow) delete RC.playerWindows[pid];
+      else RC.playerWindows[pid] = next;
+      rerender();
+    };
+  });
 }
 
 /* ---------------- Formatting ---------------- */
