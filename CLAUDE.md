@@ -240,6 +240,15 @@ We built the branching feature in three parts, engine-first:
   having `snapshot-prices.yml` fail the job when it's false, so a swallowed
   announcement failure shows up as a red run instead of a misleadingly green
   one — same lesson as the deploy-CI gotcha above, applied here too.
+- **FPL's price-change time isn't fixed — it moved earlier this season.**
+  The workflow was built assuming ~01:30 UTC (scheduled 02:20 UTC after it),
+  but on 27 Aug 2026 Ødegaard's rise was confirmed live around 7pm Eastern
+  (~23:00 UTC in EDT) — hours before the old schedule even ran. Moved to
+  00:35 UTC, timed to clear 7pm Eastern on either side of the DST switch
+  (EDT or EST) with a margin, not the old assumed time. If digests start
+  looking late or missing real moves again, check what time FPL actually
+  applied the change that day (live `bootstrap-static` vs the last snapshot)
+  before assuming it's the same bug as either gotcha above.
 
 ## Style / working norms
 

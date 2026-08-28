@@ -1,12 +1,16 @@
 name: Snapshot prices
 
-# FPL applies price changes at about 01:30 UTC. This runs afterwards and
-# records every player's price for the day, which is the history the API
+# FPL moved price changes earlier this season - confirmed live on 27 Aug
+# 2026, when Ødegaard rose around 7pm Eastern (~23:00 UTC in EDT) but our
+# old 02:20 UTC run was still hours off from it. 00:35 UTC clears 7pm EDT
+# (23:00 UTC) by 1h35 and 7pm EST (00:00 UTC, once clocks fall back) by 35
+# min, so it stays safely after the change either side of the DST switch.
+# Records every player's price for the day, which is the history the API
 # itself never gives you.
 
 on:
   schedule:
-    - cron: "20 2 * * *"
+    - cron: "35 0 * * *"
   workflow_dispatch:
 
 jobs:
