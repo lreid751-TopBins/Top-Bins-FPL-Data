@@ -25,6 +25,10 @@
  * reached "Deploy function" - see CLAUDE.md's gotchas for why a green push
  * still needs its actual Actions run checked, not just assumed. This
  * comment is the redeploy that finally shipped it.
+ *
+ * Same failure again on the report card deploy (Deploy Supabase #19,
+ * 13s, same CLI-resolution step) - purely transient, not a code issue.
+ * This comment is that redeploy.
  */
 
 import {
