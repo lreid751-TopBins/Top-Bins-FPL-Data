@@ -1,0 +1,37 @@
+name: Deadline reminder
+
+# Checks how far away the next FPL deadline is and posts a heads-up once at
+# 24h out and once at 2h out. Deadlines land on different days and times
+# each gameweek, so this can't be a once-daily cron like snapshot-prices -
+# instead it runs hourly and asks the endpoint "is either reminder due yet?"
+# every time. The endpoint itself tracks which gameweek+reminder it's
+# already sent, so an hourly check doesn't repost the same reminder.
+
+on:
+  schedule:
+    - cron: "15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the next deadline
+        env:
+          PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SNAPSHOT_KEY: ${{ secrets.SNAPSHOT_KEY }}
+        run: |
+          test -n "$PROJECT_REF" || { echo "::error::Set the SUPABASE_PROJECT_REF repository variable"; exit 1; }
+          test -n "$SNAPSHOT_KEY" || { echo "::error::Set the SNAPSHOT_KEY secret"; exit 1; }
+          response=$(curl -fsS --retry 3 --retry-delay 20 -X POST \
+            "https://${PROJECT_REF}.supabase.co/functions/v1/fpl/deadline-reminder" \
+            -H "x-snapshot-key: ${SNAPSHOT_KEY}")
+          echo "$response"
+          # Same pattern as snapshot-prices.yml: a Discord hiccup shouldn't
+          # be swallowed into a quietly-green run - fail loudly so it's
+          # actually noticed instead of a reminder just not going out.
+          failed=$(echo "$response" | jq -r '.failed | length')
+          if [ "$failed" != "0" ]; then
+            echo "::error::A deadline reminder failed to post - check the edge function logs."
+            exit 1
+          fi

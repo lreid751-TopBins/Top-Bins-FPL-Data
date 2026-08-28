@@ -98,9 +98,11 @@ export interface Deps {
   postToDiscord: (message: string) => Promise<void>;
   /** Post one message to the #price-changes Discord channel. A no-op if no webhook is configured. */
   postPriceChangesToDiscord: (message: string) => Promise<void>;
+  /** Post one message to the deadline-reminders Discord channel. A no-op if no webhook is configured. */
+  postDeadlineReminderToDiscord: (message: string) => Promise<void>;
   /** Raw XML of the channel's public upload feed (no API key needed). */
   youtubeFeedGet: () => Promise<string>;
-  /** Shared secret guarding the snapshot endpoint. */
+  /** Shared secret guarding the scheduled automation endpoints (snapshot, deadline-reminder). */
   snapshotKey: string;
   /** Allowed browser origins, or ["*"]. */
   allowedOrigins: string[];
@@ -698,6 +700,10 @@ export function createHandler(deps: Deps) {
         return await handleSnapshot(req, deps, cors);
       }
 
+      if (req.method === "POST" && head === "deadline-reminder") {
+        return await handleDeadlineReminder(req, deps, cors);
+      }
+
       if (head === "journal") {
         return await handleJournal(req, deps, cors, rest[0]);
       }
@@ -1057,6 +1063,55 @@ async function announcePriceChanges(deps: Deps, elements: Array<{ id: number; we
   if (risers.length) parts.push(`📈 **Risers (${risers.length})**\n${fmt(risers)}`);
   if (fallers.length) parts.push(`📉 **Fallers (${fallers.length})**\n${fmt(fallers)}`);
   await deps.postPriceChangesToDiscord(parts.join("\n\n"));
+}
+
+const DEADLINE_REMINDER_KINDS = [
+  { kind: "24h", thresholdHours: 24, label: "24 hours", emoji: "⏰" },
+  { kind: "2h", thresholdHours: 2, label: "2 hours", emoji: "🚨" },
+] as const;
+
+/** Checked on a periodic schedule (see deadline-reminder.yml), not a fixed
+ * daily cron - FPL deadlines land on different days and times each
+ * gameweek, so this just asks "how long until the next one?" every run and
+ * fires whichever reminder just came into range. The cache flag per
+ * gameweek+kind is what keeps a hourly check from posting the same
+ * reminder twice, not the schedule itself. */
+async function handleDeadlineReminder(req: Request, deps: Deps, cors: Record<string, string>) {
+  const key = req.headers.get("x-snapshot-key") ?? "";
+  if (!deps.snapshotKey || !(await safeEqual(key, deps.snapshotKey))) {
+    return json({ error: "unauthorized" }, 401, cors);
+  }
+
+  const boot = (await cached(deps, "bootstrap", TTL.bootstrap, "/bootstrap-static/")) as {
+    events?: Array<{ id: number; deadline_time: string; is_next?: boolean }>;
+  };
+  const next = (boot.events ?? []).find((e) => e.is_next);
+  if (!next) return json({ ok: true, sent: [], failed: [] }, 200, cors);
+
+  const hoursLeft = (new Date(next.deadline_time).getTime() - deps.now()) / 3_600_000;
+
+  const sent: string[] = [];
+  const failed: string[] = [];
+  for (const { kind, thresholdHours, label, emoji } of DEADLINE_REMINDER_KINDS) {
+    if (hoursLeft <= 0 || hoursLeft > thresholdHours) continue;
+    const cacheKey = `deadline-reminder:${kind}:${next.id}`;
+    if (await deps.cacheGet(cacheKey)) continue; // already sent for this gameweek
+
+    try {
+      const unix = Math.floor(new Date(next.deadline_time).getTime() / 1000);
+      await deps.postDeadlineReminderToDiscord(
+        `${emoji} **GW${next.id} deadline in ${label}** — locks <t:${unix}:F> (<t:${unix}:R>). ` +
+          `Get your transfers in: fpl.topbinswithtwins.com`
+      );
+      await deps.cacheSet(cacheKey, { sent: true });
+      sent.push(kind);
+    } catch (err) {
+      failed.push(kind);
+      console.error(`deadline reminder (${kind}) failed:`, err);
+    }
+  }
+
+  return json({ ok: true, sent, failed }, 200, cors);
 }
 
 /** Exposed so tests can start from a clean slate. */

@@ -3,15 +3,22 @@
  *
  * Environment (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected
  * automatically; the rest you set with `supabase secrets set`):
- *   SNAPSHOT_KEY              shared secret for POST /snapshot
- *   ALLOWED_ORIGINS           comma-separated list, or * for any
- *   DISCORD_WEBHOOK_URL       where Team Rater submissions get announced.
- *                             Unset = scoring and storage still work, just
- *                             no announcement.
- *   DISCORD_PRICE_WEBHOOK_URL where the nightly risers/fallers digest gets
- *                             posted (a separate webhook, since it's a
- *                             different channel than DISCORD_WEBHOOK_URL).
- *                             Unset = the snapshot still runs, just no post.
+ *   SNAPSHOT_KEY                 shared secret for the scheduled automation
+ *                                 endpoints (POST /snapshot and
+ *                                 POST /deadline-reminder).
+ *   ALLOWED_ORIGINS               comma-separated list, or * for any
+ *   DISCORD_WEBHOOK_URL           where Team Rater submissions get announced.
+ *                                 Unset = scoring and storage still work,
+ *                                 just no announcement.
+ *   DISCORD_PRICE_WEBHOOK_URL     where the nightly risers/fallers digest
+ *                                 gets posted (a separate webhook, since
+ *                                 it's a different channel than
+ *                                 DISCORD_WEBHOOK_URL). Unset = the snapshot
+ *                                 still runs, just no post.
+ *   DISCORD_DEADLINE_WEBHOOK_URL  where the 24h/2h-before deadline reminders
+ *                                 get posted (its own channel again). Unset
+ *                                 = the deadline check still runs, just no
+ *                                 reminder goes out.
  *
  * This file's first real deploy (the one that added the announcement above)
  * failed at the CI step that resolves the Supabase CLI, before it ever
@@ -241,6 +248,17 @@ const deps: Deps = {
       body: JSON.stringify({ content: message }),
     });
     if (!res.ok) throw new Error(`discord price webhook failed (${res.status})`);
+  },
+
+  async postDeadlineReminderToDiscord(message: string) {
+    const url = Deno.env.get("DISCORD_DEADLINE_WEBHOOK_URL");
+    if (!url) return; // optional, same pattern as the other Discord posts
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: message }),
+    });
+    if (!res.ok) throw new Error(`discord deadline-reminder webhook failed (${res.status})`);
   },
 
   snapshotKey: Deno.env.get("SNAPSHOT_KEY") ?? "",

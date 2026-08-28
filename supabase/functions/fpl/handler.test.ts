@@ -40,10 +40,17 @@ const YOUTUBE_FEED = `<?xml version="1.0" encoding="UTF-8"?>
  </entry>
 </feed>`;
 
+// Harness's clock starts at 1_000_000ms - the next gameweek's deadline is
+// pinned 20 hours after that, and tests move the clock around it (rather
+// than editing this shared constant) to land inside or outside each
+// reminder's window.
+const NEXT_DEADLINE = new Date(1_000_000 + 20 * 3_600_000).toISOString();
+
 const BOOTSTRAP = {
   events: [
     { id: 11, is_current: false, finished: true },
     { id: 12, is_current: true, finished: false },
+    { id: 13, is_next: true, finished: false, deadline_time: NEXT_DEADLINE },
   ],
   elements: [
     { id: 1, now_cost: 145, web_name: "Salah", team: 1 },
@@ -61,6 +68,7 @@ interface Harness {
   ratings: RatingRow[];
   discordMessages: string[];
   priceDiscordMessages: string[];
+  deadlineDiscordMessages: string[];
   clock: { t: number };
   fail: { on: boolean };
 }
@@ -74,6 +82,7 @@ function harness(overrides: Partial<Deps> = {}): Harness {
   const ratings: RatingRow[] = [];
   const discordMessages: string[] = [];
   const priceDiscordMessages: string[] = [];
+  const deadlineDiscordMessages: string[] = [];
   let nextId = 0;
   let nextSquadId = 0;
   let nextRatingId = 0;
@@ -202,13 +211,19 @@ function harness(overrides: Partial<Deps> = {}): Harness {
     async postPriceChangesToDiscord(message: string) {
       priceDiscordMessages.push(message);
     },
+    async postDeadlineReminderToDiscord(message: string) {
+      deadlineDiscordMessages.push(message);
+    },
     snapshotKey: "s3cret",
     allowedOrigins: ["*"],
     now: () => clock.t,
     ...overrides,
   };
 
-  return { deps, calls, store, prices, journal, squads, ratings, discordMessages, priceDiscordMessages, clock, fail };
+  return {
+    deps, calls, store, prices, journal, squads, ratings,
+    discordMessages, priceDiscordMessages, deadlineDiscordMessages, clock, fail,
+  };
 }
 
 const GET = (path: string, init?: RequestInit) =>
@@ -434,6 +449,90 @@ Deno.test("snapshot still succeeds if the #price-changes announcement fails", as
   const body = await res.json() as { ok: boolean; stored: number; announced: boolean };
   assertEquals(body.stored, 2, "prices should still be recorded");
   assertEquals(body.announced, false, "a real announcement failure must be visible in the response, not just swallowed");
+});
+
+const DEADLINE_REQ = () => GET("/deadline-reminder", { method: "POST", headers: { "x-snapshot-key": "s3cret" } });
+
+Deno.test("deadline-reminder requires the shared secret", async () => {
+  const h = harness();
+  const noKey = await createHandler(h.deps)(GET("/deadline-reminder", { method: "POST" }));
+  assertEquals(noKey.status, 401);
+  const wrongKey = await createHandler(h.deps)(
+    GET("/deadline-reminder", { method: "POST", headers: { "x-snapshot-key": "nope" } })
+  );
+  assertEquals(wrongKey.status, 401);
+});
+
+Deno.test("deadline-reminder does nothing when the deadline is more than 24h away", async () => {
+  const h = harness();
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 25 * 3_600_000;
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  assertEquals(res.status, 200);
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, []);
+  assertEquals(h.deadlineDiscordMessages.length, 0);
+});
+
+Deno.test("deadline-reminder posts the 24h reminder once inside its window", async () => {
+  const h = harness();
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 20 * 3_600_000; // 20h out: inside 24h, outside 2h
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, ["24h"]);
+  assertEquals(h.deadlineDiscordMessages.length, 1);
+  const msg = h.deadlineDiscordMessages[0];
+  assert(msg.includes("GW13"), "should name the gameweek");
+  assert(msg.includes("24 hours"), "should say how far out this reminder is");
+  assert(msg.includes("fpl.topbinswithtwins.com"), "should link back to the site");
+});
+
+Deno.test("deadline-reminder doesn't resend the 24h reminder on a later check", async () => {
+  const h = harness();
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 20 * 3_600_000;
+  await createHandler(h.deps)(DEADLINE_REQ());
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 19 * 3_600_000; // still well inside 24h, still outside 2h
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, [], "already sent for this gameweek - a later check shouldn't repost it");
+  assertEquals(h.deadlineDiscordMessages.length, 1, "still only the one message from the first check");
+});
+
+Deno.test("deadline-reminder posts both reminders at once if a check lands inside both windows", async () => {
+  const h = harness();
+  // Simulates a delayed/missed earlier check, same as the cron-skip gotcha -
+  // by the time this one runs, both the 24h and 2h windows have opened.
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 1 * 3_600_000;
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, ["24h", "2h"]);
+  assertEquals(h.deadlineDiscordMessages.length, 2);
+});
+
+Deno.test("deadline-reminder does nothing once the deadline has passed", async () => {
+  const h = harness();
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() + 60_000;
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, []);
+  assertEquals(h.deadlineDiscordMessages.length, 0);
+});
+
+Deno.test("deadline-reminder reports a failed post without swallowing it, and leaves it retryable", async () => {
+  const h = harness();
+  h.deps.postDeadlineReminderToDiscord = async () => { throw new Error("discord is down"); };
+  h.clock.t = new Date(NEXT_DEADLINE).getTime() - 20 * 3_600_000;
+  const res = await createHandler(h.deps)(DEADLINE_REQ());
+  assertEquals(res.status, 200, "a Discord hiccup shouldn't fail the endpoint itself");
+  const body = await res.json() as { sent: string[]; failed: string[] };
+  assertEquals(body.sent, []);
+  assertEquals(body.failed, ["24h"], "a real failure must be visible, not just logged");
+
+  // Retryable: since it wasn't marked sent, a later successful check should
+  // still post it rather than treating the failed attempt as done.
+  h.deps.postDeadlineReminderToDiscord = async (message: string) => { h.deadlineDiscordMessages.push(message); };
+  const retry = await createHandler(h.deps)(DEADLINE_REQ());
+  const retryBody = await retry.json() as { sent: string[]; failed: string[] };
+  assertEquals(retryBody.sent, ["24h"], "a failed reminder should still go out on the next check");
 });
 
 Deno.test("answers CORS preflight and honours an origin allowlist", async () => {
