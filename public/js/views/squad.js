@@ -2,7 +2,7 @@ import { S, saveManagerId, runDifficulty, n, f1, f2, signed } from "../store.js"
 import { api } from "../api.js";
 import {
   $, $$, esc, statCard, emptyState, fixtureStrip,
-  availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash, profileHint,
+  availabilityFlag, playerSearchResults, dropdownHTML, sparkline, metricFlash, profileHint, teamCrest,
 } from "../ui.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
@@ -92,6 +92,18 @@ export async function loadManager(id, rerender) {
     loading = false;
     rerender();
   }
+}
+
+/* ---------------- Supported-club pitch watermark ---------------- */
+// Reuses the Hub's own club-colour theme choice (S.ui.theme) rather than a
+// second "which club do you support" setting - whatever club is already
+// picked there is the one the pitch shows behind the players. A large,
+// faint crest, not a full background image - the turf still reads as turf.
+function crestWatermark() {
+  if (!S.ui.theme) return "";
+  const team = S.teamList.find((t) => t.short === S.ui.theme);
+  if (!team) return "";
+  return `<div class="pitch-crest-watermark" aria-hidden="true">${teamCrest(team.id, 220)}</div>`;
 }
 
 /* =========================================================
@@ -216,6 +228,7 @@ export function renderSquad(root) {
 
     <div class="pitch-stand">
       <div class="squad-pitch">
+        ${crestWatermark()}
         <div class="pitch-lines" aria-hidden="true">
           <span class="pl-touch"></span>
           <span class="pl-goal"></span>

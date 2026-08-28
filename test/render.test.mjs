@@ -841,6 +841,25 @@ check("squad renders with live points", () => {
   return `${cards.length} cards, ${bench.length} benched`;
 });
 
+check("My Team pitch shows a faint crest watermark for the picked club theme, none for classic", () => {
+  renderHub(panel("panel-hub"));
+  panel("panel-hub").querySelector('[data-theme-pick="ARS"]').click();
+  renderSquad(panel("panel-squad"));
+
+  const watermark = panel("panel-squad").querySelector(".pitch-crest-watermark img");
+  if (!watermark) throw new Error("expected a crest watermark on the pitch once a club theme is picked");
+  if (!watermark.src.includes("resources.premierleague.com")) {
+    throw new Error(`expected the same badge CDN teamCrest() uses elsewhere, got: ${watermark.src}`);
+  }
+
+  panel("panel-hub").querySelector('[data-theme-pick=""]').click();
+  renderSquad(panel("panel-squad"));
+  if (panel("panel-squad").querySelector(".pitch-crest-watermark")) {
+    throw new Error("no theme picked (classic) should mean no crest watermark on the pitch");
+  }
+  return "crest watermark shows only when a club theme is active, and reuses the standard crest CDN";
+});
+
 check("captain multiplier applied", () => {
   const cap = squadPicks.find((p) => p.is_captain);
   const live = MOCK[`/api/live/${CURRENT_GW}`].elements.find((e) => e.id === cap.element);

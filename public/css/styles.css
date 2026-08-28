@@ -498,6 +498,15 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 /* Painted pitch markings, drawn faint and behind the cards — a real formation
    read without competing with the data. Bottom-anchored so they scale with
    however many rows a formation actually has. */
+/* Faint supported-club crest behind the formation - painted before
+   .pitch-lines in the DOM so both it and every player card sit on top;
+   the badge CDN only serves up to 70px, so this stays modest rather than
+   blowing it up to something visibly soft. */
+.pitch-crest-watermark {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; opacity: 0.14;
+}
+.pitch-crest-watermark .team-crest { width: 200px; height: 200px; }
 .pitch-lines { position: absolute; inset: 0; pointer-events: none; }
 .pl-touch { position: absolute; inset: 12px; border: 1px solid rgba(234,243,236,.07); border-radius: 8px; }
 .pl-goal {
