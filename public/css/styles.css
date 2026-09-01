@@ -909,7 +909,12 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 
 .hub-rank-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin: 4px 0 2px; }
 .hub-rank-big { font-family: "Anton", sans-serif; font-size: 34px; color: var(--gold); line-height: 1; }
-.hub-trend { flex: none; }
+/* .chart-box svg's width:100%/height:auto (for full-bleed charts elsewhere)
+   was also stretching this small sparkline to the row's full width - it'd
+   blow up well past its own card into whatever sits beside it. Needs to
+   out-specificity that rule, not just flex:none, since flex:none only
+   stops it growing/shrinking *from* its already-wrong 100% width. */
+.hub-rank-head svg.hub-trend { flex: none; width: 130px; height: 32px; }
 
 /* ---------------- Responsive ---------------- */
 @media (max-width: 720px) {

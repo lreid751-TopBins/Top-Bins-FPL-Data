@@ -1521,6 +1521,23 @@ check("hub shows crests, rank and mini-leagues once a manager is connected", () 
   const trend = panel("panel-hub").querySelector(".hub-trend polyline");
   if (!trend) throw new Error("no rank trend line rendered");
 
+  {
+    // Regression: .chart-box svg's width:100%/height:auto (for full-bleed
+    // charts elsewhere) also matched this small rank-trend sparkline, since
+    // it lives inside a .chart-box too - stretched it to the full row width
+    // and, via the viewBox aspect ratio, way past its intended 32px height,
+    // spilling out of the "Your season" card into whatever sat beside it.
+    // .hub-trend's own flex:none didn't help, since the SVG's *own* width
+    // was already wrong before flex ever got involved. jsdom doesn't compute
+    // real layout, so this checks the CSS source directly for an override
+    // specific enough to actually beat .chart-box svg (a class+element
+    // selector) - plain .hub-trend (a lone class) is not specific enough.
+    const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+    if (!/\.hub-rank-head\s+svg\.hub-trend\s*\{[^}]*width:\s*130px/.test(css)) {
+      throw new Error("rank-trend sparkline needs a CSS rule specific enough to override .chart-box svg's width:100%");
+    }
+  }
+
   const leagueNames = [...panel("panel-hub").querySelectorAll(".hub-rank-head ~ .hub-list .hub-name")].map((el) => el.textContent);
   if (!leagueNames.some((n) => n.includes("Top Bins Listeners"))) throw new Error("mini-league not listed");
 
