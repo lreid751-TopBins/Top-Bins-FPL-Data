@@ -122,7 +122,9 @@ const origError = console.error;
 console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 
 /* ---------------- Run ---------------- */
-const { S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength, f1 } = await import("../public/js/store.js");
+const {
+  S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength, f1, buildGameweeks,
+} = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub } = await import("../public/js/views/hub.js");
@@ -238,6 +240,31 @@ check("report card: team summary sums actual/deserved across the squad, matching
     throw new Error(`team actual (${summary.actual}) should equal the sum of each row's actual (${rowActualSum})`);
   }
   return `team actual ${summary.actual}, deserved ${summary.deserved}`;
+});
+
+check("next gameweek is computed from deadline_time, not just FPL's is_next flag", () => {
+  // Regression: between GW2's deadline passing and GW3's arriving, the
+  // Planner (and anything else reading S.nextGw) needs to show GW3 - the
+  // one you can still actually set a team for - regardless of whether
+  // FPL's own is_next flag has been flipped yet. Deliberately mark GW2
+  // (already past its deadline) as is_next here, to prove the fix doesn't
+  // just happen to agree with a correct flag - it overrides a wrong one.
+  const now = Date.now();
+  const events = [
+    { id: 1, deadline_time: new Date(now - 14 * 864e5).toISOString(), finished: true, is_current: false, is_next: false },
+    { id: 2, deadline_time: new Date(now - 7 * 864e5).toISOString(), finished: true, is_current: true, is_next: true },
+    { id: 3, deadline_time: new Date(now + 7 * 864e5).toISOString(), finished: false, is_current: false, is_next: false },
+    { id: 4, deadline_time: new Date(now + 14 * 864e5).toISOString(), finished: false, is_current: false, is_next: false },
+  ];
+  const saved = { currentGw: S.currentGw, nextGw: S.nextGw, nextDeadline: S.nextDeadline, events: S.events };
+  try {
+    buildGameweeks({ events });
+    if (S.nextGw !== 3) throw new Error(`expected GW3 (deadline still ahead) as next, got GW${S.nextGw} - a stale is_next flag shouldn't win`);
+    if (S.currentGw !== 2) throw new Error(`expected GW2 (is_current) to stay current, got GW${S.currentGw}`);
+    return `next correctly computed as GW${S.nextGw} despite is_next flagging GW2`;
+  } finally {
+    Object.assign(S, saved);
+  }
 });
 
 check("per-90 rates are shrunk toward the position baseline, not raw total/minutes", () => {

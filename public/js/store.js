@@ -198,8 +198,20 @@ export function buildTeams(boot) {
 
 export function buildGameweeks(boot) {
   const events = boot.events || [];
+  const now = Date.now();
+
+  // FPL's own is_next flag is usually reliable, but computing "next"
+  // straight from deadline_time is unambiguous and doesn't depend on
+  // whether FPL's backend has gotten around to flipping that flag yet -
+  // the gameweek you can still set a team for is simply whichever one's
+  // deadline hasn't passed. Between GW2's deadline and GW3's, that's
+  // GW3, full stop, regardless of what is_next happens to say right then.
+  const upcoming = events
+    .filter((e) => e.deadline_time && new Date(e.deadline_time).getTime() >= now)
+    .sort((a, b) => new Date(a.deadline_time) - new Date(b.deadline_time));
+  const next = upcoming[0] || events.find((e) => e.is_next);
+
   const current = events.find((e) => e.is_current);
-  const next = events.find((e) => e.is_next);
   const lastFinished = [...events].reverse().find((e) => e.finished);
 
   S.currentGw = current?.id || lastFinished?.id || 0;
