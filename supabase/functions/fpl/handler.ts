@@ -1046,9 +1046,25 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
   // `announced` surfaces it in the response so the GitHub Action that
   // triggers this can fail loudly (see snapshot-prices.yml) instead of
   // reporting a green run that didn't actually announce anything.
+  //
+  // This now runs every 6 hours (not once daily) so a dropped scheduled
+  // trigger gets caught within hours instead of needing a manual recovery
+  // - see CLAUDE.md's cron-skip gotcha, which this is the fix for. Running
+  // more often means it would re-find and re-post the SAME day's digest on
+  // every check without a guard, so once a real digest goes out for a given
+  // captured_on date, that's cached and later checks the same day skip
+  // straight past announcing again - a legitimate "nothing moved yet" check
+  // (e.g. one that runs before FPL applies that day's changes) does NOT set
+  // the flag, so a later check the same day still gets a real chance to
+  // announce once there's something to say.
+  const today = new Date(deps.now()).toISOString().slice(0, 10);
+  const announcedKey = `price-announced:${today}`;
   let announced = true;
   try {
-    await announcePriceChanges(deps, elements);
+    if (!(await deps.cacheGet(announcedKey))) {
+      const posted = await announcePriceChanges(deps, elements);
+      if (posted) await deps.cacheSet(announcedKey, { sent: true });
+    }
   } catch (err) {
     announced = false;
     console.error("price-change announcement failed:", err);
@@ -1059,8 +1075,12 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
 
 /** Diffs today's snapshot against yesterday's (via the same price_moves the
  * client's own "Price move" column reads) and posts a risers/fallers digest
- * to the #price-changes Discord channel. A no-op if nothing moved. */
-async function announcePriceChanges(deps: Deps, elements: Array<{ id: number; web_name: string }>) {
+ * to the #price-changes Discord channel. Returns whether it actually posted
+ * - false for a legitimate no-op (nothing moved yet), which callers use to
+ * decide whether it's safe to try again later the same day. */
+async function announcePriceChanges(
+  deps: Deps, elements: Array<{ id: number; web_name: string }>
+): Promise<boolean> {
   const moves = await deps.priceMoves(1);
   const nameById = new Map(elements.map((e) => [e.id, e.web_name]));
   const risers: Array<{ name: string; latest: number }> = [];
@@ -1070,7 +1090,7 @@ async function announcePriceChanges(deps: Deps, elements: Array<{ id: number; we
     if (!name) continue; // e.g. a player removed from the game entirely
     (change > 0 ? risers : fallers).push({ name, latest });
   }
-  if (!risers.length && !fallers.length) return;
+  if (!risers.length && !fallers.length) return false;
 
   risers.sort((a, b) => a.name.localeCompare(b.name));
   fallers.sort((a, b) => a.name.localeCompare(b.name));
@@ -1082,6 +1102,7 @@ async function announcePriceChanges(deps: Deps, elements: Array<{ id: number; we
   if (risers.length) parts.push(`📈 **Risers (${risers.length})**\n${fmt(risers)}`);
   if (fallers.length) parts.push(`📉 **Fallers (${fallers.length})**\n${fmt(fallers)}`);
   await deps.postPriceChangesToDiscord(parts.join("\n\n"));
+  return true;
 }
 
 const DEADLINE_REMINDER_KINDS = [

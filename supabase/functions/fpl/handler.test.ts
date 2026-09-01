@@ -451,6 +451,61 @@ Deno.test("snapshot still succeeds if the #price-changes announcement fails", as
   assertEquals(body.announced, false, "a real announcement failure must be visible in the response, not just swallowed");
 });
 
+const SNAPSHOT_REQ = () => GET("/snapshot", { method: "POST", headers: { "x-snapshot-key": "s3cret" } });
+
+Deno.test("a second snapshot check the same day doesn't repost the same digest", async () => {
+  const h = harness({
+    async priceMoves() {
+      return { "1": { change: 5, latest: 145 } };
+    },
+  });
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  await createHandler(h.deps)(SNAPSHOT_REQ()); // runs every 6h now, not once daily
+  assertEquals(h.priceDiscordMessages.length, 1, "the digest should only go out once per day, not once per check");
+});
+
+Deno.test("a no-op check (nothing moved yet) doesn't block a later check the same day from announcing", async () => {
+  const h = harness();
+  h.deps.priceMoves = async () => ({}); // e.g. a check that runs before FPL applies that day's changes
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 0, "nothing to announce yet");
+
+  h.deps.priceMoves = async () => ({ "1": { change: 5, latest: 145 } }); // prices have since moved
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 1, "a later check the same day should still be free to announce");
+});
+
+Deno.test("a failed announcement isn't marked done, so a later check the same day retries it", async () => {
+  const h = harness({
+    async priceMoves() {
+      return { "1": { change: 5, latest: 145 } };
+    },
+  });
+  h.deps.postPriceChangesToDiscord = async () => { throw new Error("discord is down"); };
+  const failed = await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals((await failed.json() as { announced: boolean }).announced, false);
+  assertEquals(h.priceDiscordMessages.length, 0);
+
+  h.deps.postPriceChangesToDiscord = async (message: string) => { h.priceDiscordMessages.push(message); };
+  const retried = await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals((await retried.json() as { announced: boolean }).announced, true);
+  assertEquals(h.priceDiscordMessages.length, 1, "the retry later the same day should still go out");
+});
+
+Deno.test("the next day's snapshot announces again even though today's already went out", async () => {
+  const h = harness({
+    async priceMoves() {
+      return { "1": { change: 5, latest: 145 } };
+    },
+  });
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 1);
+
+  h.clock.t += 24 * 3_600_000; // next day
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 2, "a new day should get its own digest, not be suppressed by yesterday's");
+});
+
 const DEADLINE_REQ = () => GET("/deadline-reminder", { method: "POST", headers: { "x-snapshot-key": "s3cret" } });
 
 Deno.test("deadline-reminder requires the shared secret", async () => {

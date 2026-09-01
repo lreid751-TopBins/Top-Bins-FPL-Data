@@ -7,10 +7,18 @@ name: Snapshot prices
 # min, so it stays safely after the change either side of the DST switch.
 # Records every player's price for the day, which is the history the API
 # itself never gives you.
+#
+# Runs every 6 hours, not just once at 00:35 - GitHub's own schedule
+# trigger has repeatedly gone missing or landed hours late (see CLAUDE.md's
+# cron-skip gotcha), which meant a dropped run silently cost a full day's
+# digest until someone noticed and it got recovered by hand. The endpoint
+# itself is idempotent per day (see handleSnapshot's announcedKey guard),
+# so extra checks the same day just confirm nothing needs doing rather than
+# re-posting the same digest.
 
 on:
   schedule:
-    - cron: "35 0 * * *"
+    - cron: "35 */6 * * *"
   workflow_dispatch:
 
 jobs:
