@@ -252,6 +252,23 @@ We built the branching feature in three parts, engine-first:
   looking late or missing real moves again, check what time FPL actually
   applied the change that day (live `bootstrap-static` vs the last snapshot)
   before assuming it's the same bug as either gotcha above.
+- **A failed `Deploy Supabase` run isn't always the CLI-resolution flake
+  above — check which step actually failed.** The report card deploy (28
+  Aug 2026) failed twice at a different step, "Link project", both times
+  in ~15-17s. First instinct was to assume the same transient CI issue and
+  just redeploy - wrong, and that redeploy failed identically, because the
+  real cause was different: `supabase link` was hitting `Unexpected error
+  retrieving remote project status: {"message":"Unauthorized"}` - the
+  `SUPABASE_ACCESS_TOKEN` GitHub secret itself had gone bad, not a CI hiccup.
+  Confirmed by reproducing `supabase link --project-ref ...` locally (which
+  worked fine, on a different token), proving Supabase's API itself was
+  healthy and isolating the problem to that one secret. Fix: Marina
+  generated a fresh token at supabase.com/dashboard/account/tokens and
+  updated the `SUPABASE_ACCESS_TOKEN` secret in the repo's GitHub settings,
+  then re-ran the failed job (no new commit needed). If `Deploy Supabase`
+  fails again, check the actual failing step before assuming it's either
+  this or the CLI-resolution flake — they look similar (short run, red X)
+  but need opposite fixes (wait-and-retry vs. rotate the token).
 
 ## Style / working norms
 
