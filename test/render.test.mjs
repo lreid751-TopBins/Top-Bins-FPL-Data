@@ -146,8 +146,6 @@ const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
 const { optimalSquad, scoreSquad, validateSquad } = await import("../public/js/teamRating.js");
 const { buildStartingXIRows, shareCardText } = await import("../public/js/shareCard.js");
 const { RC, gwList, playerReportRow, teamReportSummary } = await import("../public/js/reportCard.js");
-const { clubColor } = await import("../public/js/playerPhoto.js");
-
 // jsdom has no <canvas> 2D context and no built-in Clipboard API, so the
 // canvas-drawing and image-copy paths aren't exercised here (verified live
 // in-browser instead) - but copy-as-text only needs navigator.clipboard.
@@ -985,30 +983,35 @@ check("squad renders with live points", () => {
   return `${cards.length} cards, ${bench.length} benched`;
 });
 
-check("My Team card shows a real photo, club-colour rule, and a shaded points band", () => {
+check("My Team card shows the player's real kit and a shaded points band", () => {
   const card = panel("panel-squad").querySelector(".plr");
   const p = S.playerById[+card.querySelector(".nm").dataset.playerid];
 
   const img = card.querySelector(".ppc-photo img");
-  if (!img) throw new Error("no player photo rendered on the My Team card");
-  if (img.getAttribute("src") !== p.photo) throw new Error("photo src doesn't match the player's real FPL headshot URL");
-  if (!img.hasAttribute("onerror") || !img.getAttribute("onerror").includes("display='none'")) {
-    throw new Error("photo should hide itself on error, revealing the initials fallback underneath");
+  if (!img) throw new Error("no kit graphic rendered on the My Team card");
+  if (img.getAttribute("src") !== p.jersey) throw new Error("kit src doesn't match the player's real official kit URL");
+  if (img.hasAttribute("onerror")) {
+    throw new Error("kit graphic is keyed by team, not player, so it should need no fallback logic at all");
   }
-
-  const fallback = card.querySelector(".ppc-fallback");
-  if (!fallback) throw new Error("no initials fallback layer rendered under the photo");
-  if (!fallback.getAttribute("style").includes(clubColor(p))) throw new Error("fallback background doesn't match the player's real club colour");
-
-  const rule = card.querySelector(".ppc-rule");
-  if (!rule) throw new Error("no club-colour rule rendered");
-  if (!rule.getAttribute("style").includes(clubColor(p))) throw new Error("rule colour doesn't match the player's real club colour");
 
   const band = card.querySelector(".ppc-stat-band");
   if (!band || !band.querySelector("b") || band.querySelector("span").textContent !== "pts") {
     throw new Error("expected a shaded stat band showing points");
   }
-  return `photo/rule/points band all present for ${p.name}`;
+  return `kit/points band present for ${p.name}`;
+});
+
+check("goalkeepers get their real goalkeeper kit, not their outfield shirt", () => {
+  const gk = S.players.find((x) => x.pos === "GKP");
+  if (!gk) throw new Error("setup: no goalkeeper in the mock data");
+  if (!gk.jersey.includes(`_1-110.png`)) {
+    throw new Error(`expected a "_1" goalkeeper kit variant, got: ${gk.jersey}`);
+  }
+  const outfield = S.players.find((x) => x.pos !== "GKP" && x.teamId === gk.teamId);
+  if (outfield && outfield.jersey.includes("_1-110.png")) {
+    throw new Error("an outfield player should not get the goalkeeper kit variant");
+  }
+  return `${gk.name} (GKP) gets ${gk.jersey}`;
 });
 
 check("My Team pitch shows a faint crest watermark for the picked club theme, none for classic", () => {
@@ -2053,7 +2056,7 @@ check("planner chip slots render cleanly, no undefined/NaN", () => {
   return `${slots.length} chip slots, no undefined values`;
 });
 
-check("Planner build-phase chip shows photo + club rule + a shaded price band", () => {
+check("Planner build-phase chip shows the real kit + a shaded price band", () => {
   // Later tests rely on a squad progressively built up across this whole
   // file rather than each test being isolated, so this saves and restores
   // PL.draft around its own throwaway squad instead of calling newDraft()
@@ -2068,16 +2071,15 @@ check("Planner build-phase chip shows photo + club rule + a shaded price band", 
     const chip = panel("panel-planner").querySelector(".chip-slot.filled:not(.marker)");
     if (!chip) throw new Error("no filled build-phase chip rendered");
     const img = chip.querySelector(".ppc-photo img");
-    if (!img || img.getAttribute("src") !== p.photo) throw new Error("build-phase chip photo doesn't match the added player");
-    if (!chip.querySelector(".ppc-rule")) throw new Error("no club-colour rule on the build-phase chip");
+    if (!img || img.getAttribute("src") !== p.jersey) throw new Error("build-phase chip kit doesn't match the added player's real kit");
     const band = chip.querySelector(".ppc-stat-band b");
     if (!band || !band.textContent.includes("£")) throw new Error("expected the price band to show a £ price, not points");
 
     const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
     if (!css.includes(".chip-slot .ppc-photo {") || !css.includes("border: 1.5px solid var(--gold-deep)")) {
-      throw new Error("expected the build-phase photo to keep the gold-deep border the old jersey chip had");
+      throw new Error("expected the build-phase kit slot to keep its gold-deep border");
     }
-    return `build-phase chip shows ${p.name}'s photo, rule and £${f1(p.price)}`;
+    return `build-phase chip shows ${p.name}'s kit and £${f1(p.price)}`;
   } finally {
     PL.draft = savedDraft;
   }
@@ -2392,7 +2394,7 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   return `${filledSlots.length} chips in one pitch, captain/vice controls and gw-nav both present`;
 });
 
-check("lineup markers show photo + club rule + a shaded price band, at the marker size", () => {
+check("lineup markers show the real kit + a shaded price band, at the marker size", () => {
   renderPlanner(panel("panel-planner"));
   const marker = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
   if (!marker) throw new Error("no lineup marker rendered");
@@ -2400,11 +2402,10 @@ check("lineup markers show photo + club rule + a shaded price band, at the marke
   const p = S.playerById[id];
 
   const img = marker.querySelector(".ppc-photo img");
-  if (!img || img.getAttribute("src") !== p.photo) throw new Error("marker photo doesn't match the player in that slot");
-  if (!marker.querySelector(".ppc-rule")) throw new Error("no club-colour rule on the lineup marker");
+  if (!img || img.getAttribute("src") !== p.jersey) throw new Error("marker kit doesn't match the player in that slot");
   const band = marker.querySelector(".ppc-stat-band b");
   if (!band || !band.textContent.includes("£")) throw new Error("expected the marker's band to show price, same as the build-phase chip");
-  return `lineup marker shows ${p.name}'s photo, rule and price at the marker size`;
+  return `lineup marker shows ${p.name}'s kit and price at the marker size`;
 });
 
 check("bench markers don't collapse onto the same spot as pitch markers", () => {

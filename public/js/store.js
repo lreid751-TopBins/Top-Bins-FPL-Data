@@ -282,11 +282,16 @@ export function buildPlayers(boot) {
         gi90: per90(goals + assists),
         overperf: goals + assists - xgi,
         ppm: price > 0 ? n(e.total_points) / price : 0,
-        // Official kit image, keyed by team code. "-66" is the standard shirt size.
-        // Note: resources.premierleague.com 404s for this path — the FPL site itself
-        // serves shirts from fantasy.premierleague.com's static dist folder.
+        // The real, official FPL kit graphic - not a redrawn replica. Keyed by
+        // team code (not player), so it's always this player's current club
+        // and can never be missing the way a per-player headshot can be.
+        // Goalkeepers get their real goalkeeper kit ("_1"), same as picking
+        // your team on the official site. "-110" is a sharp size for the
+        // ~76-84px cards this renders into. Note: resources.premierleague.com
+        // 404s for this path — the FPL site itself serves shirts from
+        // fantasy.premierleague.com's static dist folder.
         jersey: S.teams[e.team]?.code
-          ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${S.teams[e.team].code}-66.png`
+          ? `https://fantasy.premierleague.com/dist/img/shirts/standard/shirt_${S.teams[e.team].code}${pos === "GKP" ? "_1" : ""}-110.png`
           : "",
         // Official headshot, keyed by the player's own code (not the team's) -
         // a different endpoint on the same CDN that badges already use

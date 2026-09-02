@@ -10,11 +10,20 @@ const TEAMS = [
 const SHORTS = ["ARS","AVL","BOU","BRE","BHA","BUR","CHE","CRY","EVE","FUL","LEE","LIV","MCI","MUN","NEW","NFO","SUN","TOT","WHU","WOL"];
 const CURRENT_GW = 12;
 
+// Real, currently-served FPL team codes, so shirt_${code}-110.png actually
+// resolves to a real kit graphic when previewing locally (test/render.test.mjs
+// runs against jsdom and never fetches these over the network either way).
+// This mock roster has 3 more clubs than the real league does right now, so
+// the last 3 codes (Burnley/West Ham/Wolves slots) borrow another real
+// club's code rather than going without a working shirt - confirmed live
+// against fantasy.premierleague.com's shirt CDN, not guessed.
+const REAL_CODES = [3, 7, 91, 94, 36, 9, 8, 31, 11, 54, 2, 14, 43, 1, 4, 17, 56, 6, 88, 40];
+
 const rnd = (seed => () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648)(42);
 const ri = (a, b) => Math.floor(a + rnd() * (b - a + 1));
 
 const teams = TEAMS.map((name, i) => ({
-  id: i + 1, name, short_name: SHORTS[i], code: 100 + i,
+  id: i + 1, name, short_name: SHORTS[i], code: REAL_CODES[i],
   strength_attack_home: ri(1000, 1400), strength_attack_away: ri(1000, 1400),
   strength_defence_home: ri(1000, 1400), strength_defence_away: ri(1000, 1400),
   strength_overall_home: ri(1000, 1400), strength_overall_away: ri(1000, 1400),

@@ -13,7 +13,7 @@ import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
 import { tickerRow } from "./fixtures.js";
-import { photoTile, clubRule, statBand } from "../playerPhoto.js";
+import { kitTile, statBand } from "../playerKit.js";
 import { openRater } from "../teamRater.js";
 
 const TOTAL_GWS = 38;
@@ -423,8 +423,7 @@ function filledSlot(p) {
   const justAdded = PL.justAddedId === p.id ? " just-added" : "";
   return `<div class="chip-slot filled${justAdded}">
     <button class="chip-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
-    ${photoTile(p)}
-    ${clubRule(p)}
+    ${kitTile(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
     ${cardFooter(p)}
   </div>`;
@@ -466,8 +465,7 @@ function lineupSlot(p, starting, gw, style) {
     tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap"
     ${style ? `style="${style}"` : ""}>
     ${cvBadges}
-    ${photoTile(p)}
-    ${clubRule(p)}
+    ${kitTile(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
     ${cardFooter(p)}
     ${fxChip}

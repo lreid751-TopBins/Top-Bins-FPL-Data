@@ -7,7 +7,7 @@ import {
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { openRater } from "../teamRater.js";
-import { photoTile, clubRule, statBand } from "../playerPhoto.js";
+import { kitTile, statBand } from "../playerKit.js";
 import { POS_COLOR } from "../charts.js";
 import {
   RC, loadReportCard, gwList, playerReportRow, teamReportSummary, windowFor,
@@ -291,8 +291,7 @@ function playerCard(pick, benched) {
 
   return `<div class="plr ${benched ? "benched" : ""} ${playing ? "playing" : ""}">
     ${tag}
-    ${photoTile(p)}
-    ${clubRule(p)}
+    ${kitTile(p)}
     <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     ${statBand(pts, "pts")}
   </div>`;
