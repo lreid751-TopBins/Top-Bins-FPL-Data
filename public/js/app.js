@@ -12,14 +12,30 @@ import { renderPlanner } from "./views/planner.js";
 import "./playerDetail.js";
 
 const PANELS = {
-  hub: { el: () => $("#panel-hub"), render: renderHub },
-  squad: { el: () => $("#panel-squad"), render: renderSquad },
-  scout: { el: () => $("#panel-scout"), render: renderScout },
-  fixtures: { el: () => $("#panel-fixtures"), render: renderFixtures },
-  teams: { el: () => $("#panel-teams"), render: renderTeams },
-  planner: { el: () => $("#panel-planner"), render: renderPlanner },
-  journal: { el: () => $("#panel-journal"), render: renderJournal },
+  hub: { el: () => $("#panel-hub"), render: renderHub, label: "Hub" },
+  squad: { el: () => $("#panel-squad"), render: renderSquad, label: "My Team" },
+  scout: { el: () => $("#panel-scout"), render: renderScout, label: "Player Finder" },
+  fixtures: { el: () => $("#panel-fixtures"), render: renderFixtures, label: "Fixture Ticker" },
+  teams: { el: () => $("#panel-teams"), render: renderTeams, label: "Teams" },
+  planner: { el: () => $("#panel-planner"), render: renderPlanner, label: "Planner" },
+  journal: { el: () => $("#panel-journal"), render: renderJournal, label: "Journal" },
 };
+
+// GoatCounter's script is loaded with no_onload (see index.html) since this
+// is a single-page app - tabs are JS state, not real URL changes, so its
+// own automatic pageview would only ever fire once and never say which tab
+// someone's actually on. This fires a virtual pageview per tab instead,
+// which is the whole point of tracking a tabbed app at all. Guarded so a
+// blocked/not-yet-loaded script (ad blockers, slow network) never breaks
+// tab switching itself - analytics failing silently beats analytics
+// breaking the app.
+function trackTab(tab) {
+  try {
+    window.goatcounter?.count({ path: tab, title: PANELS[tab]?.label || tab, event: false });
+  } catch {
+    // best-effort only
+  }
+}
 
 function setStatus(state, text) {
   $("#statusTxt").textContent = text;
@@ -64,6 +80,7 @@ function wireTabs() {
       $$(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       renderActive();
       playPanelEnter(PANELS[t.dataset.tab].el());
+      trackTab(t.dataset.tab);
     };
   });
 }
@@ -94,6 +111,7 @@ async function boot() {
 
   wireTabs();
   renderActive();
+  trackTab(S.ui.tab);
 
   // Auto-load a previously saved manager ID - the Hub (now the default tab)
   // needs S.entry/S.history for its rank widget just as much as My Team does.

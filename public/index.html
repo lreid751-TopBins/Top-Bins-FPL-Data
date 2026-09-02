@@ -95,5 +95,14 @@
 <!-- Written by the Pages workflow. Absent locally, which falls back to /api. -->
 <script src="./env.js"></script>
 <script type="module" src="./js/app.js"></script>
+
+<!-- Privacy-friendly analytics (GoatCounter): no cookies, no personal data.
+     no_onload skips its own automatic pageview - this is a single-page app
+     where tabs are JS state, not real URL changes, so app.js fires a
+     virtual pageview per tab instead (see trackTab in app.js), which is
+     what actually tells us which tabs get used. -->
+<script data-goatcounter="https://topbinswithtwins.goatcounter.com/count"
+        data-goatcounter-settings='{"no_onload": true}'
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
