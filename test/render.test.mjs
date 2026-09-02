@@ -2087,9 +2087,23 @@ check("Planner's card view-mode filter switches every card's footer, and stays o
   const savedMode = PL.cardMode;
   try {
     renderPlanner(panel("panel-planner"));
-    const filterBtns = panel("panel-planner").querySelectorAll(".side-filter [data-cardmode]");
+
+    // Regression: this filter used to be a real flex column beside the
+    // pitch, stealing width from it - with a full 5-wide formation row
+    // already needing every pixel, that squeezed player markers into
+    // overlapping each other. It must live inside .pitch-toggle (absolutely
+    // positioned in the pitch's corner, same spot the Cards/Table toggle
+    // uses) so it costs the pitch no layout width at all.
+    const pitchStand = panel("panel-planner").querySelector(".pitch-stand");
+    if (pitchStand.children.length !== 1 || !pitchStand.querySelector(":scope > .squad-pitch")) {
+      throw new Error(".pitch-stand should contain only .squad-pitch - the filter must not be a layout sibling");
+    }
+    const filter = panel("panel-planner").querySelector(".pitch-toggle > .card-mode-filter");
+    if (!filter) throw new Error("expected the card-mode filter stacked inside .pitch-toggle, not consuming pitch width");
+
+    const filterBtns = filter.querySelectorAll("[data-cardmode]");
     if (filterBtns.length !== 3) throw new Error(`expected 3 view-mode buttons, got ${filterBtns.length}`);
-    if (panel("panel-squad").querySelector(".side-filter")) {
+    if (panel("panel-squad").querySelector(".card-mode-filter")) {
       throw new Error("the card view-mode filter should be Planner-only, not on My Team");
     }
 
@@ -2102,14 +2116,14 @@ check("Planner's card view-mode filter switches every card's footer, and stays o
       throw new Error("fixtures mode should replace the price band, not sit alongside it");
     }
 
-    panel("panel-planner").querySelectorAll(".side-filter [data-cardmode]")[2].click(); // "Expected stats"
+    panel("panel-planner").querySelectorAll(".card-mode-filter [data-cardmode]")[2].click(); // "Expected stats"
     if (PL.cardMode !== "xgi") throw new Error("clicking Expected stats should switch PL.cardMode to xgi");
     renderPlanner(panel("panel-planner"));
     const statBand = panel("panel-planner").querySelector(".chip-slot.filled .ppc-stat-band");
     if (!statBand || statBand.querySelector("span").textContent !== "xGI/90") {
       throw new Error("expected stats mode should show an xGI/90 band");
     }
-    return "3 modes present, Planner-only, and each swaps the card footer";
+    return "3 modes present, Planner-only, tucked in the pitch corner, and each swaps the card footer";
   } finally {
     PL.cardMode = savedMode;
     renderPlanner(panel("panel-planner"));

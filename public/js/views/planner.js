@@ -249,26 +249,33 @@ const PITCH_LINES = `<div class="pitch-lines" aria-hidden="true">
 
 function pitchWrap(inner, toggle) {
   return `<div class="pitch-stand"><div class="squad-pitch">
-    ${toggle ? `<div class="pitch-toggle">${toggle}</div>` : ""}
+    <div class="pitch-toggle">
+      ${toggle || ""}
+      ${cardModeFilter()}
+    </div>
     ${PITCH_LINES}${inner}
-  </div>${cardModeFilter()}</div>`;
+  </div></div>`;
 }
 
 /* ---------------- Card view-mode filter (Planner only) ----------------
-   Switches what every card's footer shows, without touching the pitch or
-   the cards' layout underneath. Sits beside the pitch rather than crowding
-   the cards themselves. My Team's own card is deliberately simpler - just
-   photo, club colour, name and points, no mode switch - since it's showing
-   one real, already-decided squad rather than something being planned. */
+   Switches what every card's footer shows. Stacked in the pitch's own
+   corner (same absolutely-positioned spot as the Cards/Table toggle)
+   rather than as a real layout column - a real column was stealing width
+   from the pitch itself, and with a full 5-wide formation row already
+   needing every inch of it, that meant overlapping player cards. Sitting
+   in the corner costs the pitch nothing. My Team's own card is
+   deliberately simpler - just photo, club colour, name and points, no
+   mode switch - since it's showing one real, already-decided squad rather
+   than something being planned. */
 const CARD_MODES = [
-  { k: "points", l: "Expected points" },
-  { k: "fixtures", l: "Upcoming fixtures" },
-  { k: "xgi", l: "Expected stats" },
+  { k: "points", l: "Pts", full: "Expected points" },
+  { k: "fixtures", l: "Fx", full: "Upcoming fixtures" },
+  { k: "xgi", l: "xGI", full: "Expected stats" },
 ];
 function cardModeFilter() {
-  return `<div class="side-filter" role="group" aria-label="What each card shows">
+  return `<div class="seg seg-sm card-mode-filter" role="group" aria-label="What each card shows">
     ${CARD_MODES.map(
-      (m) => `<button data-cardmode="${m.k}" aria-pressed="${PL.cardMode === m.k}">${m.l}</button>`
+      (m) => `<button data-cardmode="${m.k}" aria-pressed="${PL.cardMode === m.k}" title="${m.full}">${m.l}</button>`
     ).join("")}
   </div>`;
 }

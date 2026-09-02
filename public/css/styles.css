@@ -485,10 +485,8 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
    that contrast is what makes the turf below read as an actual pitch. */
 .pitch-stand {
   background: var(--stand); border-radius: 16px; padding: 18px 12px; margin-bottom: 16px;
-  display: flex; gap: 10px; align-items: stretch;
 }
 .squad-pitch {
-  flex: 1 1 auto; min-width: 0;
   position: relative; overflow: hidden;
   background:
     repeating-linear-gradient(180deg, rgba(255,255,255,.025) 0 40px, transparent 40px 80px),
@@ -1175,20 +1173,6 @@ textarea::placeholder { color: var(--muted-2); }
    ticker already use so the colours mean the same thing everywhere. */
 .ppc-fx-band { display: flex; align-items: center; justify-content: center; gap: 2px; margin-top: 4px; }
 
-/* Planner-only card view-mode filter (Expected points / Upcoming fixtures /
-   Expected stats) - sits beside the pitch, not on top of the cards, so
-   switching modes never reflows the formation underneath. */
-.side-filter { display: flex; flex-direction: column; gap: 6px; flex: none; width: 78px; padding-top: 4px; }
-.side-filter button {
-  border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(255, 255, 255, 0.03);
-  color: var(--muted); font-family: inherit; font-size: 9.5px; font-weight: 600; line-height: 1.25;
-  padding: 9px 5px; cursor: pointer; text-align: center;
-  transition: border-color 0.12s, color 0.12s, background-color 0.12s;
-}
-.side-filter button:hover { color: var(--chalk); border-color: var(--line); }
-.side-filter button[aria-pressed="true"] {
-  background: rgba(198, 166, 100, 0.14); border-color: var(--gold-deep); color: var(--gold);
-}
 .sp-flag {
   display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
   font-weight: 700; letter-spacing: 0.02em; padding: 1px 4px; margin-left: 5px;
@@ -1326,8 +1310,16 @@ textarea::placeholder { color: var(--muted-2); }
    stay reachable from both views (you need a way back to Cards once you've
    switched to Table), so each view places it differently: a small floating
    pill in the pitch's own corner, or a slim row above the table. */
-.pitch-toggle { position: absolute; top: 10px; right: 10px; z-index: 2; }
+.pitch-toggle {
+  position: absolute; top: 10px; right: 10px; z-index: 2;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
 .pitch-toggle .seg { background: rgba(8, 20, 10, 0.72); backdrop-filter: blur(2px); }
+/* Planner-only card view-mode filter (Expected points / Upcoming fixtures /
+   Expected stats) - a second, smaller pill stacked under the Cards/Table
+   toggle in the same corner, so it never takes width away from the pitch
+   itself. */
+.seg-sm button { padding: 3px 7px; font-size: 9.5px; }
 .table-toggle-row { display: flex; justify-content: flex-end; margin-bottom: 10px; }
 
 /* Bench row (still a labelled position-row grid, same as before) */
