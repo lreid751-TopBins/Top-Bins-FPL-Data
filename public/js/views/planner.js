@@ -268,7 +268,7 @@ function pitchWrap(inner, toggle) {
    mode switch - since it's showing one real, already-decided squad rather
    than something being planned. */
 const CARD_MODES = [
-  { k: "points", l: "Pts", full: "Expected points" },
+  { k: "points", l: "Kit", full: "Kit only" },
   { k: "fixtures", l: "Fx", full: "Upcoming fixtures" },
   { k: "xgi", l: "xGI", full: "Expected stats" },
 ];
@@ -281,8 +281,11 @@ function cardModeFilter() {
 }
 
 /* The footer every build-phase chip and lineup marker shares, driven by
-   PL.cardMode: price (the long-standing default, useful while budgeting),
-   a compact fixture-difficulty strip, or xGI/90. */
+   PL.cardMode: a compact fixture-difficulty strip, xGI/90, or nothing at
+   all in the default mode - price used to sit here, but every card
+   showing it left no room for a goalkeeper's taller kit to fit inside the
+   pitch without its top edge clipping off. Price is still visible in the
+   browse list and the budget bar, just not repeated on every single chip. */
 function cardFooter(p) {
   if (PL.cardMode === "fixtures") {
     return `<div class="ppc-fx-band">${fixtureChips(p.teamId, 3)}</div>`;
@@ -290,7 +293,7 @@ function cardFooter(p) {
   if (PL.cardMode === "xgi") {
     return statBand(f2(p.xgi90), "xGI/90");
   }
-  return statBand(`£${f1(p.price)}`, "");
+  return "";
 }
 
 function pitchView(complete, toggle) {
@@ -348,7 +351,12 @@ function pitchView(complete, toggle) {
 }
 
 // Depth (top %) per position line on the formation pitch, goal-to-goal.
-const FORMATION_Y = { GKP: 6, DEF: 33, MID: 61, FWD: 90 };
+// GKP sits further from the goal-line than it looks like it should - a
+// marker is centred on this point (translate(-50%,-50%)), so the top half
+// of its card extends above it. .squad-pitch clips anything outside its
+// own box, and 6% left less headroom than a card's height needed, cutting
+// the goalkeeper's kit off at the top. Evenly spread from there.
+const FORMATION_Y = { GKP: 12, DEF: 38, MID: 64, FWD: 90 };
 // Evenly spreads N players across a line's width (left %). A lone player
 // (e.g. the GK) centres; anything else fans out with a fixed side margin so
 // markers never sit flush against the pitch edge.

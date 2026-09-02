@@ -2056,7 +2056,7 @@ check("planner chip slots render cleanly, no undefined/NaN", () => {
   return `${slots.length} chip slots, no undefined values`;
 });
 
-check("Planner build-phase chip shows the real kit + a shaded price band", () => {
+check("Planner build-phase chip shows the real kit, no price band by default", () => {
   // Later tests rely on a squad progressively built up across this whole
   // file rather than each test being isolated, so this saves and restores
   // PL.draft around its own throwaway squad instead of calling newDraft()
@@ -2072,14 +2072,19 @@ check("Planner build-phase chip shows the real kit + a shaded price band", () =>
     if (!chip) throw new Error("no filled build-phase chip rendered");
     const img = chip.querySelector(".ppc-photo img");
     if (!img || img.getAttribute("src") !== p.jersey) throw new Error("build-phase chip kit doesn't match the added player's real kit");
-    const band = chip.querySelector(".ppc-stat-band b");
-    if (!band || !band.textContent.includes("£")) throw new Error("expected the price band to show a £ price, not points");
+    // Regression: every chip showing a price band left no room for a
+    // goalkeeper's taller kit to fit inside the pitch without clipping -
+    // the default mode shows kit only now, price stays in the browse list
+    // and budget bar instead of being repeated on every card.
+    if (chip.querySelector(".ppc-stat-band")) {
+      throw new Error("default card mode should show no stat band - price used to be here, removed to fix GK clipping");
+    }
 
     const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
     if (!css.includes(".chip-slot .ppc-photo {") || !css.includes("border: 1.5px solid var(--gold-deep)")) {
       throw new Error("expected the build-phase kit slot to keep its gold-deep border");
     }
-    return `build-phase chip shows ${p.name}'s kit and £${f1(p.price)}`;
+    return `build-phase chip shows ${p.name}'s kit, no price band`;
   } finally {
     PL.draft = savedDraft;
   }
@@ -2394,7 +2399,7 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   return `${filledSlots.length} chips in one pitch, captain/vice controls and gw-nav both present`;
 });
 
-check("lineup markers show the real kit + a shaded price band, at the marker size", () => {
+check("lineup markers show the real kit, no price band, at the marker size", () => {
   renderPlanner(panel("panel-planner"));
   const marker = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
   if (!marker) throw new Error("no lineup marker rendered");
@@ -2403,9 +2408,29 @@ check("lineup markers show the real kit + a shaded price band, at the marker siz
 
   const img = marker.querySelector(".ppc-photo img");
   if (!img || img.getAttribute("src") !== p.jersey) throw new Error("marker kit doesn't match the player in that slot");
-  const band = marker.querySelector(".ppc-stat-band b");
-  if (!band || !band.textContent.includes("£")) throw new Error("expected the marker's band to show price, same as the build-phase chip");
-  return `lineup marker shows ${p.name}'s kit and price at the marker size`;
+  if (marker.querySelector(".ppc-stat-band")) {
+    throw new Error("default card mode should show no stat band on the marker either");
+  }
+  return `lineup marker shows ${p.name}'s kit, no price band, at the marker size`;
+});
+
+check("a goalkeeper marker fits fully inside the pitch, not clipped at the top", () => {
+  // Regression: the GKP marker sat only 6% down the pitch, centred via
+  // translate(-50%,-50%) - with .squad-pitch clipping anything outside its
+  // own box (overflow: hidden), the top half of a card that tall left the
+  // goalkeeper's kit cut off above the visible pitch. FORMATION_Y.GKP now
+  // sits far enough down that even a full-height card clears the top edge.
+  renderPlanner(panel("panel-planner"));
+  const gk = startingPlayers().find((p) => p.pos === "GKP");
+  if (!gk) throw new Error("setup: no starting goalkeeper");
+  const marker = panel("panel-planner").querySelector(`.chip-slot.marker[data-lineup="${gk.id}"]`);
+  if (!marker) throw new Error("no goalkeeper marker rendered");
+  const style = marker.getAttribute("style") || "";
+  const topMatch = style.match(/top:([\d.]+)%/);
+  if (!topMatch) throw new Error("goalkeeper marker should carry an inline top:N% position");
+  const top = Number(topMatch[1]);
+  if (top < 10) throw new Error(`goalkeeper marker sits at top:${top}% - too close to the pitch edge for a full card to clear it`);
+  return `goalkeeper marker sits at top:${top}%, clear of the pitch's top edge`;
 });
 
 check("bench markers don't collapse onto the same spot as pitch markers", () => {
