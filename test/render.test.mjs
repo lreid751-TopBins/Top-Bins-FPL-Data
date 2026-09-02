@@ -2921,6 +2921,55 @@ check("Enter in Planner search adds the top result and clears the query", () => 
   return `Enter added ${target.name} and cleared the search box`;
 });
 
+check("a rejected add shows why, instead of silently doing nothing, and offers a fix", () => {
+  // Regression: double-clicking a browse row (or pressing Enter in search)
+  // when the add would be rejected - squad already full, over budget,
+  // position/club cap already hit - used to call addPlayer(), get
+  // {ok:false}, and just stop there. No error, no explanation, the row
+  // just sat there looking like nothing had happened. This is the "I try
+  // to add players and nothing happens" bug report.
+  const savedDraft = PL.draft;
+  const savedView = PL.squadView;
+  try {
+    if (!isComplete()) throw new Error("setup: expected the ambient shared draft to already be a full 15");
+    const candidate = S.players.find((p) => !PL.draft.picks.some((pk) => pk.id === p.id));
+    if (!candidate) throw new Error("setup: no player outside the full squad to attempt adding");
+
+    PL.squadView = "cards";
+    PL.browseQuery = candidate.name;
+    renderPlanner(panel("panel-planner"));
+
+    const row = panel("panel-planner").querySelector(`[data-browserow="${candidate.id}"]`);
+    if (!row) throw new Error("setup: candidate not showing in the browse list for its own search");
+    row.dispatchEvent(new window.Event("dblclick", { bubbles: true }));
+
+    if (PL.draft.picks.some((pk) => pk.id === candidate.id)) {
+      throw new Error("a full squad should still reject the add - this test's premise is broken if it succeeded");
+    }
+    if (PL.addError !== "Squad is full (15)") {
+      throw new Error(`expected PL.addError to explain the rejection, got: "${PL.addError}"`);
+    }
+    const banner = panel("panel-planner").querySelector(".add-error");
+    if (!banner || !banner.textContent.includes("Squad is full")) {
+      throw new Error("expected a visible error banner near the search box");
+    }
+    const fixBtn = panel("panel-planner").querySelector("#plAddErrorFix");
+    if (!fixBtn) throw new Error("expected a one-click fix action ('remove a player') on a full-squad rejection");
+
+    fixBtn.click();
+    if (PL.squadView !== "table") throw new Error("the fix action should switch to Table view, where every row can be removed");
+    if (PL.addError !== "") throw new Error("the fix action should clear the stale error once it's been acted on");
+
+    return `rejected add explained itself ("${candidate.name}" blocked, squad full) and offered a working fix`;
+  } finally {
+    PL.draft = savedDraft;
+    PL.squadView = savedView;
+    PL.browseQuery = "";
+    PL.addError = "";
+    renderPlanner(panel("panel-planner"));
+  }
+});
+
 check("Escape clears the Planner search box", () => {
   const savedDraft = PL.draft;
   newDraft();

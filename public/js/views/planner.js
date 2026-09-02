@@ -609,6 +609,15 @@ function addRow() {
       <input id="plSearch" placeholder="Search any player…" autocomplete="off" aria-label="Search any player" value="${esc(PL.browseQuery)}">
       <button type="button" class="search-clear" id="plSearchClear" aria-label="Clear search"${query ? "" : " hidden"}>✕</button>
     </div>
+    ${
+      PL.addError
+        ? `<p class="add-error" role="alert">${esc(PL.addError)}${
+            PL.addError === "Squad is full (15)"
+              ? ` — <button type="button" class="add-error-action" id="plAddErrorFix">remove a player</button>`
+              : ""
+          }</p>`
+        : ""
+    }
     <div class="enter-hint${topResult ? " show" : ""}"><span class="kbd">↵</span> ${topResult ? `adds ${esc(topResult.name)}` : ""}</div>
 
     <div class="browse-pos${searching ? " searching" : ""}" role="group" aria-label="Browse a position">
@@ -875,6 +884,12 @@ function wire(root, rerender) {
     const wrap = $(".browse-wrap", root);
     const scrollTop = wrap ? wrap.scrollTop : 0;
     const check = addPlayer(p);
+    // Regression: a rejected add (squad full, over budget, position/club
+    // cap) used to fail completely silently on this path - double-clicking
+    // a row (or the disabled + button's own click, which still reaches
+    // here) did nothing visible at all, no error, nothing. PL.addError
+    // surfaces the real reason right by the search box instead.
+    PL.addError = check.ok ? "" : check.reason;
     if (check.ok) {
       PL.justAddedId = p.id;
       if (!needed().some((x) => x.pos === PL.browsePos)) {
@@ -898,7 +913,7 @@ function wire(root, rerender) {
     el.onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } };
   });
 
-  bind("#plNew", "onclick", () => { newDraft(); rerender(); });
+  bind("#plNew", "onclick", () => { newDraft(); PL.addError = ""; rerender(); });
   bind("#plName", "oninput", (e) => { PL.draft.name = e.target.value; });
   bind("#plNote", "oninput", (e) => { PL.draft.note = e.target.value; });
 
@@ -923,6 +938,7 @@ function wire(root, rerender) {
       if (sq) {
         loadIntoDraft(sq);
         PL.savedSquadsOpen = false; // collapse back once a squad's actually been picked
+        PL.addError = "";
         rerender();
       }
     };
@@ -947,7 +963,7 @@ function wire(root, rerender) {
 
   // Remove / captain / vice
   $$("[data-remove]", root).forEach((b) => {
-    b.onclick = () => { removePlayer(+b.dataset.remove); rerender(); };
+    b.onclick = () => { removePlayer(+b.dataset.remove); PL.addError = ""; rerender(); };
   });
   $$("[data-cap]", root).forEach((b) => {
     b.onclick = () => {
@@ -1040,8 +1056,15 @@ function wire(root, rerender) {
     b.onclick = () => {
       PL.browseQuery = "";
       PL.browsePos = b.dataset.browsepos;
+      PL.addError = "";
       rerender();
     };
+  });
+
+  bind("#plAddErrorFix", "onclick", () => {
+    PL.squadView = "table";
+    PL.addError = "";
+    rerender();
   });
 
   // Add straight from the browse table.
@@ -1214,6 +1237,7 @@ function wire(root, rerender) {
     };
     search.oninput = () => {
       PL.browseQuery = search.value;
+      PL.addError = "";
       rerenderKeepingFocus();
     };
     search.onkeydown = (e) => {
@@ -1221,11 +1245,15 @@ function wire(root, rerender) {
         e.preventDefault();
         if (!PL.browseQuery.trim()) return;
         const top = sortedBrowseCandidates()[0];
-        if (top && canAdd(top).ok) {
-          PL.browseQuery = "";
-          addAndRerender(top);
-          $("#plSearch", root)?.focus();
-        }
+        if (!top) return;
+        // Route through addAndRerender even when canAdd will reject it -
+        // that's what actually sets PL.addError, so a rejected Enter-to-add
+        // explains itself instead of just doing nothing. Only clear the
+        // query on a real success, so a failed attempt leaves it in place.
+        const ok = canAdd(top).ok;
+        if (ok) PL.browseQuery = "";
+        addAndRerender(top);
+        $("#plSearch", root)?.focus();
       } else if (e.key === "Escape" && PL.browseQuery) {
         PL.browseQuery = "";
         rerenderKeepingFocus();

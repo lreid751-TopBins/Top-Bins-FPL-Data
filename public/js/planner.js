@@ -45,6 +45,7 @@ export const PL = {
   projWindow: 5,     // gameweeks to project over (adjustable)
   lineupSelect: null, // player id currently selected for a starting/bench swap
   lineupError: "",    // reason the last swap attempt was rejected
+  addError: "",       // reason the last "add to squad" attempt was rejected (e.g. squad full, over budget)
   lineupGw: null,     // gameweek the Starting XI is showing fixtures for; null = defaults to next GW
   squadView: "cards", // "cards" (jerseys) or "table" (dense stats) for the squad list
   cardMode: "points", // what the card footer shows: "points" (projected, or price mid-build), "fixtures", "xgi"

@@ -1465,6 +1465,16 @@ textarea::placeholder { color: var(--muted-2); }
 }
 .search-clear[hidden] { display: none; }
 .search-clear:hover { color: var(--chalk); }
+/* Why an add attempt was rejected (squad full, over budget, position/club
+   cap already hit) - a double-click or Enter-to-add used to fail with no
+   feedback at all, reading as "add is just broken" rather than "you're
+   already at 15". */
+.add-error { color: var(--neg); font-size: 11.5px; margin: 6px 0 0; line-height: 1.4; }
+.add-error-action {
+  background: none; border: none; padding: 0; color: var(--neg); font-family: inherit;
+  font-size: inherit; text-decoration: underline; cursor: pointer;
+}
+.add-error-action:hover { color: var(--chalk); }
 /* Reserves its own line height even when empty, so the position row below
    doesn't hop up and down as a search result count appears/disappears. */
 .enter-hint {
