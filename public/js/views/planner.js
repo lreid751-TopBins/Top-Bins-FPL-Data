@@ -251,7 +251,39 @@ function pitchWrap(inner, toggle) {
   return `<div class="pitch-stand"><div class="squad-pitch">
     ${toggle ? `<div class="pitch-toggle">${toggle}</div>` : ""}
     ${PITCH_LINES}${inner}
-  </div></div>`;
+  </div>${cardModeFilter()}</div>`;
+}
+
+/* ---------------- Card view-mode filter (Planner only) ----------------
+   Switches what every card's footer shows, without touching the pitch or
+   the cards' layout underneath. Sits beside the pitch rather than crowding
+   the cards themselves. My Team's own card is deliberately simpler - just
+   photo, club colour, name and points, no mode switch - since it's showing
+   one real, already-decided squad rather than something being planned. */
+const CARD_MODES = [
+  { k: "points", l: "Expected points" },
+  { k: "fixtures", l: "Upcoming fixtures" },
+  { k: "xgi", l: "Expected stats" },
+];
+function cardModeFilter() {
+  return `<div class="side-filter" role="group" aria-label="What each card shows">
+    ${CARD_MODES.map(
+      (m) => `<button data-cardmode="${m.k}" aria-pressed="${PL.cardMode === m.k}">${m.l}</button>`
+    ).join("")}
+  </div>`;
+}
+
+/* The footer every build-phase chip and lineup marker shares, driven by
+   PL.cardMode: price (the long-standing default, useful while budgeting),
+   a compact fixture-difficulty strip, or xGI/90. */
+function cardFooter(p) {
+  if (PL.cardMode === "fixtures") {
+    return `<div class="ppc-fx-band">${fixtureChips(p.teamId, 3)}</div>`;
+  }
+  if (PL.cardMode === "xgi") {
+    return statBand(f2(p.xgi90), "xGI/90");
+  }
+  return statBand(`£${f1(p.price)}`, "");
 }
 
 function pitchView(complete, toggle) {
@@ -387,7 +419,7 @@ function filledSlot(p) {
     ${photoTile(p)}
     ${clubRule(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
-    ${statBand(`£${f1(p.price)}`, "")}
+    ${cardFooter(p)}
   </div>`;
 }
 
@@ -417,7 +449,12 @@ function lineupSlot(p, starting, gw, style) {
   // per FORMATION_Y's step-through-the-season feature) - bench and the
   // building-phase chips don't, there just isn't room on a 40px chip and
   // the bench isn't playing this gameweek anyway.
-  const fxChip = starting ? `<div class="chip-fx chip-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>` : "";
+  // Skipped in fixtures mode - the footer below already shows fixtures, no
+  // need to say it twice on one marker.
+  const fxChip =
+    starting && PL.cardMode !== "fixtures"
+      ? `<div class="chip-fx chip-fx-current">${fixtureChips(p.teamId, 1, null, gw)}</div>`
+      : "";
   return `<div class="chip-slot filled marker${justAdded} ${starting ? "" : "bench-chip"} ${selected ? "selected" : ""}" data-lineup="${p.id}"
     tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap"
     ${style ? `style="${style}"` : ""}>
@@ -425,7 +462,7 @@ function lineupSlot(p, starting, gw, style) {
     ${photoTile(p)}
     ${clubRule(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
-    ${statBand(`£${f1(p.price)}`, "")}
+    ${cardFooter(p)}
     ${fxChip}
   </div>`;
 }
@@ -859,6 +896,10 @@ function wire(root, rerender) {
 
   $$("[data-squadview]", root).forEach((b) => {
     b.onclick = () => { PL.squadView = b.dataset.squadview; rerender(); };
+  });
+
+  $$("[data-cardmode]", root).forEach((b) => {
+    b.onclick = () => { PL.cardMode = b.dataset.cardmode; rerender(); };
   });
 
   // Load / branch / delete saved squads

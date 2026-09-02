@@ -485,8 +485,10 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
    that contrast is what makes the turf below read as an actual pitch. */
 .pitch-stand {
   background: var(--stand); border-radius: 16px; padding: 18px 12px; margin-bottom: 16px;
+  display: flex; gap: 10px; align-items: stretch;
 }
 .squad-pitch {
+  flex: 1 1 auto; min-width: 0;
   position: relative; overflow: hidden;
   background:
     repeating-linear-gradient(180deg, rgba(255,255,255,.025) 0 40px, transparent 40px 80px),
@@ -581,9 +583,6 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .plr .nm:hover { color: var(--gold); text-decoration: underline; }
 .plr .nm:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
-.plr .nx {
-  font-size: 9.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 3px;
-}
 .plr .tag {
   position: absolute; top: -7px; right: -6px; background: var(--gold); color: var(--ink);
   font-size: 9px; font-weight: 700; border-radius: 20px; padding: 1px 6px;
@@ -1126,9 +1125,18 @@ textarea::placeholder { color: var(--muted-2); }
    size, same cascading-override pattern the old jersey sizing used. */
 .ppc-photo {
   width: 76px; height: 84px; margin: 0 auto; border-radius: 6px; overflow: hidden;
-  background: var(--raise); flex: none;
+  background: var(--raise); flex: none; position: relative;
 }
-.ppc-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 16%; display: block; }
+.ppc-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 16%; display: block; position: relative; z-index: 1; }
+/* Sits underneath the <img> always - if the photo 404s (roughly 40% of
+   current players, mostly recent transfers FPL hasn't photographed yet)
+   the img hides itself and this shows through, so a missing photo reads as
+   a deliberate design rather than a broken image next to players who have
+   one. */
+.ppc-fallback {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-family: "Anton", sans-serif; font-size: 20px; letter-spacing: 0.5px;
+}
 .ppc-photo-empty {
   display: flex; align-items: center; justify-content: center; color: var(--muted-2); font-size: 22px;
   border: 1.5px dashed var(--gold-deep); background: transparent;
@@ -1161,6 +1169,26 @@ textarea::placeholder { color: var(--muted-2); }
 .chip-slot.marker .ppc-photo { width: 78px; height: 86px; }
 .chip-slot.marker .ppc-rule { width: 32px; }
 .chip-slot.marker .ppc-stat-band { width: 78px; }
+
+/* Fixture-mode card footer - a compact fixture-difficulty strip standing in
+   for the price/points band, same .fxc chips the browse table and season
+   ticker already use so the colours mean the same thing everywhere. */
+.ppc-fx-band { display: flex; align-items: center; justify-content: center; gap: 2px; margin-top: 4px; }
+
+/* Planner-only card view-mode filter (Expected points / Upcoming fixtures /
+   Expected stats) - sits beside the pitch, not on top of the cards, so
+   switching modes never reflows the formation underneath. */
+.side-filter { display: flex; flex-direction: column; gap: 6px; flex: none; width: 78px; padding-top: 4px; }
+.side-filter button {
+  border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(255, 255, 255, 0.03);
+  color: var(--muted); font-family: inherit; font-size: 9.5px; font-weight: 600; line-height: 1.25;
+  padding: 9px 5px; cursor: pointer; text-align: center;
+  transition: border-color 0.12s, color 0.12s, background-color 0.12s;
+}
+.side-filter button:hover { color: var(--chalk); border-color: var(--line); }
+.side-filter button[aria-pressed="true"] {
+  background: rgba(198, 166, 100, 0.14); border-color: var(--gold-deep); color: var(--gold);
+}
 .sp-flag {
   display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
   font-weight: 700; letter-spacing: 0.02em; padding: 1px 4px; margin-left: 5px;

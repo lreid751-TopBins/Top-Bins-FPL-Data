@@ -295,18 +295,7 @@ function playerCard(pick, benched) {
     ${clubRule(p)}
     <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
     ${statBand(pts, "pts")}
-    <div class="nx">${gwOpponent(p.teamId, S.picksGw)}</div>
-    <div class="fx">${fixtureStrip(p.teamId, 5)}</div>
   </div>`;
-}
-
-/** Who a team played (or is playing) in one specific gameweek, e.g. "MUN (H)" -
-    the actual fixture behind this gameweek's live or final points, not the
-    upcoming one. Joins multiple fixtures for a double gameweek. */
-function gwOpponent(teamId, gw) {
-  const list = S.fxByTeamGw[teamId]?.[gw] || [];
-  if (!list.length) return "—";
-  return list.map((f) => `${S.teams[f.opp]?.short || "?"} (${f.home ? "H" : "A"})`).join(", ");
 }
 
 /* =========================================================

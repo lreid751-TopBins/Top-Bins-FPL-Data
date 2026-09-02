@@ -992,9 +992,13 @@ check("My Team card shows a real photo, club-colour rule, and a shaded points ba
   const img = card.querySelector(".ppc-photo img");
   if (!img) throw new Error("no player photo rendered on the My Team card");
   if (img.getAttribute("src") !== p.photo) throw new Error("photo src doesn't match the player's real FPL headshot URL");
-  if (!img.hasAttribute("onerror") || !img.getAttribute("onerror").includes(p.jersey)) {
-    throw new Error("photo should fall back to the official kit shirt image (p.jersey) on error");
+  if (!img.hasAttribute("onerror") || !img.getAttribute("onerror").includes("display='none'")) {
+    throw new Error("photo should hide itself on error, revealing the initials fallback underneath");
   }
+
+  const fallback = card.querySelector(".ppc-fallback");
+  if (!fallback) throw new Error("no initials fallback layer rendered under the photo");
+  if (!fallback.getAttribute("style").includes(clubColor(p))) throw new Error("fallback background doesn't match the player's real club colour");
 
   const rule = card.querySelector(".ppc-rule");
   if (!rule) throw new Error("no club-colour rule rendered");
@@ -1251,27 +1255,16 @@ check("loading cue clears once the background refresh finishes", () => {
   return "cleared after refresh completed";
 });
 
-check("player cards show this gameweek's actual opponent, not the next one", () => {
-  // Regression: the opponent line used to default to S.nextGw (upcoming
-  // fixture) no matter which gameweek's picks were on screen, so during a
-  // live gameweek it showed a future opponent instead of the one the live
-  // points are actually for.
-  const cap = squadPicks.find((p) => p.is_captain);
-  const p = S.playerById[cap.element];
-  const fx = S.fxByTeamGw[p.teamId]?.[S.picksGw] || [];
-  const expected = fx.length
-    ? fx.map((f) => `${S.teams[f.opp]?.short || "?"} (${f.home ? "H" : "A"})`).join(", ")
-    : "—";
-
-  const card = [...panel("panel-squad").querySelectorAll(".plr")].find((el) =>
-    el.querySelector(".nm")?.textContent.includes(p.name)
-  );
-  if (!card) throw new Error(`captain's card (${p.name}) not found on the pitch`);
-  const shown = card.querySelector(".nx")?.textContent;
-  if (shown !== expected) {
-    throw new Error(`expected opponent "${expected}" for GW${S.picksGw}, card shows "${shown}"`);
-  }
-  return `GW${S.picksGw}: ${p.name} vs ${expected}`;
+check("My Team card is simplified - no opponent line, no fixture strip", () => {
+  // The card used to carry a .nx opponent line and a .fx fixture strip
+  // alongside the photo/points band, which read as clutter with everything
+  // shown at once. My Team's card is now photo, club rule, name, points -
+  // nothing else. (The Planner still gets fixtures via its own view-mode
+  // filter, not on the card itself.)
+  const card = panel("panel-squad").querySelector(".plr");
+  if (card.querySelector(".nx")) throw new Error("My Team card should no longer show an opponent line");
+  if (card.querySelector(".fx")) throw new Error("My Team card should no longer show a fixture strip");
+  return "My Team card carries no opponent/fixture clutter";
 });
 
 check("transfer scratchpad compares two players", () => {
@@ -2087,6 +2080,39 @@ check("Planner build-phase chip shows photo + club rule + a shaded price band", 
     return `build-phase chip shows ${p.name}'s photo, rule and £${f1(p.price)}`;
   } finally {
     PL.draft = savedDraft;
+  }
+});
+
+check("Planner's card view-mode filter switches every card's footer, and stays off My Team", () => {
+  const savedMode = PL.cardMode;
+  try {
+    renderPlanner(panel("panel-planner"));
+    const filterBtns = panel("panel-planner").querySelectorAll(".side-filter [data-cardmode]");
+    if (filterBtns.length !== 3) throw new Error(`expected 3 view-mode buttons, got ${filterBtns.length}`);
+    if (panel("panel-squad").querySelector(".side-filter")) {
+      throw new Error("the card view-mode filter should be Planner-only, not on My Team");
+    }
+
+    filterBtns[1].click(); // "Upcoming fixtures"
+    if (PL.cardMode !== "fixtures") throw new Error("clicking a mode button should update PL.cardMode");
+    renderPlanner(panel("panel-planner"));
+    const fxCard = panel("panel-planner").querySelector(".chip-slot.filled .ppc-fx-band");
+    if (!fxCard) throw new Error("fixtures mode should replace the card footer with a fixture-difficulty strip");
+    if (panel("panel-planner").querySelector(".chip-slot.filled .ppc-stat-band")) {
+      throw new Error("fixtures mode should replace the price band, not sit alongside it");
+    }
+
+    panel("panel-planner").querySelectorAll(".side-filter [data-cardmode]")[2].click(); // "Expected stats"
+    if (PL.cardMode !== "xgi") throw new Error("clicking Expected stats should switch PL.cardMode to xgi");
+    renderPlanner(panel("panel-planner"));
+    const statBand = panel("panel-planner").querySelector(".chip-slot.filled .ppc-stat-band");
+    if (!statBand || statBand.querySelector("span").textContent !== "xGI/90") {
+      throw new Error("expected stats mode should show an xGI/90 band");
+    }
+    return "3 modes present, Planner-only, and each swaps the card footer";
+  } finally {
+    PL.cardMode = savedMode;
+    renderPlanner(panel("panel-planner"));
   }
 });
 
