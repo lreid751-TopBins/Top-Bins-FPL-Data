@@ -506,6 +506,39 @@ Deno.test("the next day's snapshot announces again even though today's already w
   assertEquals(h.priceDiscordMessages.length, 2, "a new day should get its own digest, not be suppressed by yesterday's");
 });
 
+Deno.test("a second price-change wave later the same day gets its own digest, not swallowed by the first", async () => {
+  // Real incident, 1 Sep 2026: a digest went out at 11:57 UTC, then a
+  // second, separate batch of movers landed around 23:00 the same day -
+  // a plain "already announced today" flag would (and did, in production)
+  // block that second batch forever, since the day was already marked done.
+  const h = harness();
+  h.deps.priceMoves = async () => ({ "1": { change: 5, latest: 145 } }); // Salah, wave 1
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 1);
+  assert(h.priceDiscordMessages[0].includes("Salah"), "wave 1 should name Salah");
+
+  h.deps.priceMoves = async () => ({
+    "1": { change: 5, latest: 145 }, // Salah - unchanged since wave 1, shouldn't reappear
+    "2": { change: -3, latest: 78 }, // Gordon - new this wave
+  });
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 2, "a second wave the same day must still get announced");
+  const wave2 = h.priceDiscordMessages[1];
+  assert(wave2.includes("Gordon"), "wave 2 should name the new mover");
+  assert(!wave2.includes("Salah"), "wave 2 should not re-announce a mover already reported at the same price");
+});
+
+Deno.test("a player who moves again later the same day is re-announced at the new price", async () => {
+  const h = harness();
+  h.deps.priceMoves = async () => ({ "1": { change: 5, latest: 145 } });
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+
+  h.deps.priceMoves = async () => ({ "1": { change: 8, latest: 148 } }); // Salah moved again
+  await createHandler(h.deps)(SNAPSHOT_REQ());
+  assertEquals(h.priceDiscordMessages.length, 2);
+  assert(h.priceDiscordMessages[1].includes("£14.8m"), "the second move should report the new price, not repeat the old one");
+});
+
 const DEADLINE_REQ = () => GET("/deadline-reminder", { method: "POST", headers: { "x-snapshot-key": "s3cret" } });
 
 Deno.test("deadline-reminder requires the shared secret", async () => {

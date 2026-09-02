@@ -1,24 +1,25 @@
 name: Snapshot prices
 
-# FPL moved price changes earlier this season - confirmed live on 27 Aug
-# 2026, when Ødegaard rose around 7pm Eastern (~23:00 UTC in EDT) but our
-# old 02:20 UTC run was still hours off from it. 00:35 UTC clears 7pm EDT
-# (23:00 UTC) by 1h35 and 7pm EST (00:00 UTC, once clocks fall back) by 35
-# min, so it stays safely after the change either side of the DST switch.
-# Records every player's price for the day, which is the history the API
-# itself never gives you.
+# FPL doesn't confine price changes to a single fixed time - "once around
+# 7pm Eastern" (confirmed 27 Aug 2026) turned out not to hold either;
+# confirmed 1 Sep 2026 that a second, separate batch of changes landed
+# hours after the first. Trying to schedule around a specific time keeps
+# getting the timing wrong, so this just polls constantly instead - every
+# 5 minutes, GitHub's practical floor for a schedule trigger - and lets the
+# endpoint itself figure out whether anything's actually new to report.
+# Records every player's price on every run, which is also the history the
+# API itself never gives you.
 #
-# Runs every 6 hours, not just once at 00:35 - GitHub's own schedule
-# trigger has repeatedly gone missing or landed hours late (see CLAUDE.md's
-# cron-skip gotcha), which meant a dropped run silently cost a full day's
-# digest until someone noticed and it got recovered by hand. The endpoint
-# itself is idempotent per day (see handleSnapshot's announcedKey guard),
-# so extra checks the same day just confirm nothing needs doing rather than
-# re-posting the same digest.
+# GitHub's own schedule trigger has separately gone missing or landed hours
+# late (see CLAUDE.md's cron-skip gotcha) - polling this often means a
+# dropped run barely matters, since the next one is 5 minutes away. The
+# endpoint tracks exactly which (player, price) pairs it's already
+# announced today (handleSnapshot's announcedKey guard), so the other
+# ~99% of these runs that find nothing new are silent no-ops, not spam.
 
 on:
   schedule:
-    - cron: "35 */6 * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:

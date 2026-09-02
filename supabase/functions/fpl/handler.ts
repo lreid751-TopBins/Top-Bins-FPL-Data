@@ -1047,24 +1047,24 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
   // triggers this can fail loudly (see snapshot-prices.yml) instead of
   // reporting a green run that didn't actually announce anything.
   //
-  // This now runs every 6 hours (not once daily) so a dropped scheduled
-  // trigger gets caught within hours instead of needing a manual recovery
-  // - see CLAUDE.md's cron-skip gotcha, which this is the fix for. Running
-  // more often means it would re-find and re-post the SAME day's digest on
-  // every check without a guard, so once a real digest goes out for a given
-  // captured_on date, that's cached and later checks the same day skip
-  // straight past announcing again - a legitimate "nothing moved yet" check
-  // (e.g. one that runs before FPL applies that day's changes) does NOT set
-  // the flag, so a later check the same day still gets a real chance to
-  // announce once there's something to say.
+  // This runs every few minutes, not once daily, so a change gets announced
+  // close to when FPL actually applies it. FPL doesn't confine itself to
+  // one price-change pass a day either - confirmed 1 Sep 2026, two separate
+  // batches landed hours apart - so the guard against re-posting can't be
+  // "once per day" (that blocked the second batch entirely, since the
+  // first had already flagged the day done). Instead it remembers exactly
+  // which (player, price) pairs it's already announced today; a check only
+  // ever reports pairs that aren't in that set yet, so multiple waves the
+  // same day each get their own digest and nothing already-announced comes
+  // back around.
   const today = new Date(deps.now()).toISOString().slice(0, 10);
   const announcedKey = `price-announced:${today}`;
   let announced = true;
   try {
-    if (!(await deps.cacheGet(announcedKey))) {
-      const posted = await announcePriceChanges(deps, elements);
-      if (posted) await deps.cacheSet(announcedKey, { sent: true });
-    }
+    const priorRaw = await deps.cacheGet(announcedKey);
+    const prior = (priorRaw?.payload as Record<string, number> | undefined) ?? {};
+    const nextAnnounced = await announcePriceChanges(deps, elements, prior);
+    if (nextAnnounced) await deps.cacheSet(announcedKey, nextAnnounced);
   } catch (err) {
     announced = false;
     console.error("price-change announcement failed:", err);
@@ -1074,23 +1074,31 @@ async function handleSnapshot(req: Request, deps: Deps, cors: Record<string, str
 }
 
 /** Diffs today's snapshot against yesterday's (via the same price_moves the
- * client's own "Price move" column reads) and posts a risers/fallers digest
- * to the #price-changes Discord channel. Returns whether it actually posted
- * - false for a legitimate no-op (nothing moved yet), which callers use to
- * decide whether it's safe to try again later the same day. */
+ * client's own "Price move" column reads), then further narrows that down
+ * to whichever of those moves aren't already in `alreadyAnnounced`
+ * (element id -> the price last announced for it today) - so a mover that
+ * was already reported this run doesn't come back in the next one, but one
+ * that moves AGAIN later the same day does. Posts a digest of just the new
+ * ones and returns the updated announced-map to persist, or null if there
+ * was nothing new to say. */
 async function announcePriceChanges(
-  deps: Deps, elements: Array<{ id: number; web_name: string }>
-): Promise<boolean> {
+  deps: Deps,
+  elements: Array<{ id: number; web_name: string }>,
+  alreadyAnnounced: Record<string, number>
+): Promise<Record<string, number> | null> {
   const moves = await deps.priceMoves(1);
   const nameById = new Map(elements.map((e) => [e.id, e.web_name]));
   const risers: Array<{ name: string; latest: number }> = [];
   const fallers: Array<{ name: string; latest: number }> = [];
+  const updated = { ...alreadyAnnounced };
   for (const [elementStr, { change, latest }] of Object.entries(moves)) {
+    if (alreadyAnnounced[elementStr] === latest) continue; // already reported at this price
     const name = nameById.get(Number(elementStr));
     if (!name) continue; // e.g. a player removed from the game entirely
     (change > 0 ? risers : fallers).push({ name, latest });
+    updated[elementStr] = latest;
   }
-  if (!risers.length && !fallers.length) return false;
+  if (!risers.length && !fallers.length) return null;
 
   risers.sort((a, b) => a.name.localeCompare(b.name));
   fallers.sort((a, b) => a.name.localeCompare(b.name));
@@ -1102,7 +1110,7 @@ async function announcePriceChanges(
   if (risers.length) parts.push(`📈 **Risers (${risers.length})**\n${fmt(risers)}`);
   if (fallers.length) parts.push(`📉 **Fallers (${fallers.length})**\n${fmt(fallers)}`);
   await deps.postPriceChangesToDiscord(parts.join("\n\n"));
-  return true;
+  return updated;
 }
 
 const DEADLINE_REMINDER_KINDS = [
