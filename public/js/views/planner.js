@@ -1,7 +1,7 @@
 import { S, f1, f2, runDifficulty, upcoming } from "../store.js";
 import {
   PL, SQUAD_RULES, POSITION_ORDER, STARTING_XI_SIZE,
-  draftPlayers, spend, canAdd, addPlayer,
+  draftPlayers, spend, budgetCap, canAdd, addPlayer,
   removePlayer, isComplete, needed, squadTotals,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
   branchSquad, setCompare, compareTotals, transferLogDraft,
@@ -140,8 +140,15 @@ function draftHeader() {
 /* ---------------- Budget bar ---------------- */
 function budgetBar(left) {
   const used = spend();
-  const pct = Math.min(100, (used / SQUAD_RULES.budget) * 100);
+  const cap = budgetCap();
+  const pct = Math.min(100, (used / cap) * 100);
   const over = left < -1e-9;
+  // A real imported squad's ceiling is her actual squad value + bank, not
+  // the flat £100m every from-scratch squad starts with - team value drifts
+  // away from £100m all season, and using the flat number made a genuinely
+  // affordable transfer read as "over budget". Called out explicitly so the
+  // number isn't a mystery when it doesn't match the familiar £100m.
+  const realCap = cap !== SQUAD_RULES.budget;
   return `<div class="budget">
     <div class="budget-line">
       <span>Spent <b class="mono">£${f1(used)}</b></span>
@@ -150,6 +157,7 @@ function budgetBar(left) {
       </span>
     </div>
     <div class="budget-track"><span class="budget-fill ${over ? "over" : ""}" style="width:${pct}%"></span></div>
+    ${realCap ? `<p class="hint" style="margin:4px 0 0">£${f1(cap)}m budget — your real squad value + bank, not a flat £100m</p>` : ""}
   </div>`;
 }
 

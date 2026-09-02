@@ -136,7 +136,7 @@ const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
 const { renderPlanner } = await import("../public/js/views/planner.js");
 const {
-  PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
+  PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, budgetCap, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
   draftPlayers, branchSquad, compareTotals, deleteSquad, transferLogDraft,
   SQUAD_RULES, POSITION_ORDER, blankDraft, autoImportRealSquad,
@@ -954,6 +954,53 @@ check("Planner auto-imports the connected manager's real squad when opened with 
 
   return `imported ${PL.draft.picks.length} real picks, captain ${PL.draft.captain}`;
 });
+
+check("Planner auto-imports the manager's real budget headroom, not a flat £100m", () => {
+  // Real bug report: "I am taking Mbeumo out and bringing in Cherki... I
+  // already made the transfer... I can afford him... the site thinks I am
+  // priced out." A real squad's value drifts away from £100m all season
+  // (price rises, price falls, leftover bank) - S.picks.entry_history.value
+  // (mock: 101.3) + .bank (mock: 0.7) is FPL's own real total, £102.0m
+  // here. Using a flat £100m ceiling on an appreciated squad made a
+  // genuinely affordable transfer look impossible.
+  if (PL.draft.budget !== 102) {
+    throw new Error(`expected the imported draft to carry entry_history.value(101.3) + .bank(0.7) = £102.0m, got ${PL.draft.budget}`);
+  }
+  if (budgetCap() !== 102) throw new Error(`budgetCap() should read the draft's real ceiling, got £${budgetCap()}m`);
+
+  // Exercise the exact failure mode directly: a position/club-legal draft
+  // whose current spend already exceeds the old flat £100m - exactly what a
+  // season-appreciated real squad's current-price total plausibly does.
+  // Priciest-first crosses that line in only a handful of picks, keeping
+  // the overshoot small (confirmed against this mock data: 7 picks, stops
+  // at £101.2m, comfortably inside the real £102m ceiling).
+  const synthetic = { ...blankDraft(), budget: 102, picks: [] };
+  const byPriceDesc = [...S.players].sort((a, b) => b.price - a.price);
+  for (const p of byPriceDesc) {
+    if (spendOf(synthetic) > 100) break;
+    if (canAdd(p, synthetic).ok) synthetic.picks.push({ id: p.id, slot: synthetic.picks.length + 1 });
+  }
+  const spentSoFar = spendOf(synthetic);
+  if (spentSoFar <= 100) throw new Error(`setup: couldn't build a legal partial squad over £100m from mock prices, got £${spentSoFar.toFixed(1)}`);
+
+  // The old flat £100m rule would already call this squad over budget
+  // before adding anyone new at all - budgetLeft would be negative for any
+  // player, at any price.
+  const oldStyleLeft = 100 - spentSoFar;
+  if (oldStyleLeft >= 0) throw new Error(`setup: £${spentSoFar.toFixed(1)}m doesn't actually exceed the old £100m rule`);
+
+  // The real rule (this manager's actual squad value + bank) should show
+  // genuine room instead, purely from holding these same players.
+  const realLeft = budgetLeft(synthetic);
+  if (realLeft < 0) throw new Error(`expected real headroom under £102m, got a negative budgetLeft: £${realLeft.toFixed(1)}m`);
+  if (Math.abs(realLeft - (102 - spentSoFar)) > 1e-9) throw new Error("budgetLeft should compute off the draft's real £102m ceiling, not the flat £100m");
+
+  return `£${spentSoFar.toFixed(1)}m spend reads as over budget under the old flat £100m rule (£${oldStyleLeft.toFixed(1)}m) but has real headroom under the actual £102.0m ceiling (£${realLeft.toFixed(1)}m left)`;
+});
+
+function spendOf(draft) {
+  return draft.picks.reduce((sum, pk) => sum + (S.playerById[pk.id]?.price || 0), 0);
+}
 
 check("auto-import only runs once - doesn't clobber a squad already being built by hand", () => {
   PL.autoImported = false; // simulate a fresh page load's initial state

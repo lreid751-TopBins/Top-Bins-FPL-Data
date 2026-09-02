@@ -66,7 +66,7 @@ export const PL = {
 };
 
 export function blankDraft() {
-  return { name: "New squad", note: "", picks: [], captain: null, vice: null };
+  return { name: "New squad", note: "", picks: [], captain: null, vice: null, budget: null };
 }
 
 /** Auto-populates a blank draft from the connected manager's real, currently
@@ -100,9 +100,24 @@ export function autoImportRealSquad() {
     picks: mapped,
     captain: picks.find((p) => p.is_captain)?.element ?? null,
     vice: picks.find((p) => p.is_vice_captain)?.element ?? null,
+    // Real budget headroom, not the flat £100m every from-scratch squad
+    // starts with. A real squad's value drifts away from £100m all season
+    // (price rises, price falls, bank left over) - entry_history.value is
+    // FPL's own squad valuation (selling prices, not today's buy price) and
+    // .bank is what's actually spendable. Using the flat £100m here made
+    // every transfer on an appreciated squad look "over budget" even when
+    // the real bank had room - the exact bug behind a real player who'd
+    // genuinely just been bought reading as unaffordable.
+    budget: realBudgetCeiling(S.picks?.entry_history),
   };
   PL.autoImported = true;
   return true;
+}
+
+function realBudgetCeiling(eh) {
+  if (!eh || eh.value == null || eh.bank == null) return null;
+  const total = (n(eh.value) + n(eh.bank)) / 10;
+  return total > 0 ? total : null;
 }
 
 /* =========================================================
@@ -140,8 +155,14 @@ export function countByClub(draft = PL.draft) {
 export function spend(draft = PL.draft) {
   return draft.picks.reduce((sum, pk) => sum + (S.playerById[pk.id]?.price || 0), 0);
 }
+/** The real ceiling for this draft - a real imported squad's actual value
+ * + bank (see realBudgetCeiling above) when known, otherwise the standard
+ * £100m every from-scratch squad starts with. */
+export function budgetCap(draft = PL.draft) {
+  return draft.budget ?? SQUAD_RULES.budget;
+}
 export function budgetLeft(draft = PL.draft) {
-  return SQUAD_RULES.budget - spend(draft);
+  return budgetCap(draft) - spend(draft);
 }
 
 /**
