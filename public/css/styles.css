@@ -570,16 +570,13 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 }
 .plr {
   width: 104px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
-  padding: 8px 6px; text-align: center; position: relative;
+  padding: 9px 6px 8px; text-align: center; position: relative;
   /* Lifts the card off the pitch/stand rather than letting it sit flush,
      now that the pitch has its own background separate from the page. */
   box-shadow: 0 8px 16px -10px rgba(0, 0, 0, 0.6);
 }
-.plr .pts {
-  font-family: "Anton", sans-serif; font-size: 22px; line-height: 1; color: var(--gold);
-}
 .plr .nm {
-  font-size: 11.5px; font-weight: 600; margin-top: 4px; overflow: hidden;
+  font-size: 10px; font-weight: 600; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; cursor: pointer; border-radius: 4px;
 }
 .plr .nm:hover { color: var(--gold); text-decoration: underline; }
@@ -1121,12 +1118,49 @@ textarea::placeholder { color: var(--muted-2); }
   .dbar-m { grid-column: 1 / -1; order: 4; }
 }
 
-/* ---------------- Jerseys & set-piece flags (added) ---------------- */
-.jersey-icon {
-  display: block; width: 100%; height: 100%;
-  image-rendering: pixelated; image-rendering: crisp-edges;
+/* ---------------- Player photo card (& set-piece flags, added) ----------------
+   Real FPL headshot + a thin club-colour rule + a shaded stat band, in place
+   of the old pixel-art jersey icon. One shared component (playerPhoto.js),
+   sized per context below - My Team's full card, the Planner's build-phase
+   chips, and the Planner's on-pitch lineup markers each override the base
+   size, same cascading-override pattern the old jersey sizing used. */
+.ppc-photo {
+  width: 76px; height: 84px; margin: 0 auto; border-radius: 6px; overflow: hidden;
+  background: var(--raise); flex: none;
 }
-.plr .jersey-wrap { width: 56px; height: 40px; margin: 2px auto 4px; }
+.ppc-photo img { width: 100%; height: 100%; object-fit: cover; object-position: center 16%; display: block; }
+.ppc-photo-empty {
+  display: flex; align-items: center; justify-content: center; color: var(--muted-2); font-size: 22px;
+  border: 1.5px dashed var(--gold-deep); background: transparent;
+}
+.chip-slot.chip-empty:hover .ppc-photo-empty, .chip-slot.chip-empty:focus-visible .ppc-photo-empty {
+  border-color: var(--gold); color: var(--gold);
+}
+.ppc-rule { width: 34px; height: 3px; border-radius: 2px; margin: 5px auto 6px; }
+.ppc-stat-band {
+  height: 22px; margin: 5px -6px -8px; background: linear-gradient(180deg, var(--raise), var(--panel-2));
+  border-top: 1px solid var(--line-soft); border-radius: 0 0 2px 2px;
+  display: flex; align-items: center; justify-content: center; gap: 3px;
+}
+.ppc-stat-band b {
+  font-family: "Anton", sans-serif; font-size: 15px; color: var(--gold); font-style: normal; line-height: 1;
+}
+.ppc-stat-band span { font-size: 8px; color: var(--muted); font-family: "JetBrains Mono", monospace; }
+
+/* Planner build-phase chips (100px shell, no card padding) - stat band
+   matches the photo's own width rather than the negative-margin trick
+   above, since there's no padding here to cancel out. */
+.chip-slot .ppc-photo {
+  width: 72px; height: 80px; border: 1.5px solid var(--gold-deep);
+  box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5); transition: border-color 0.12s;
+}
+.chip-slot .ppc-rule { width: 30px; }
+.chip-slot .ppc-stat-band { width: 72px; margin: 4px auto 0; border-radius: 4px; }
+/* On-pitch lineup markers get a slightly bigger photo - it's the more
+   prominent, "this is your actual formation" view. */
+.chip-slot.marker .ppc-photo { width: 78px; height: 86px; }
+.chip-slot.marker .ppc-rule { width: 32px; }
+.chip-slot.marker .ppc-stat-band { width: 78px; }
 .sp-flag {
   display: inline-block; font-family: "JetBrains Mono", monospace; font-size: 9px;
   font-weight: 700; letter-spacing: 0.02em; padding: 1px 4px; margin-left: 5px;
@@ -1273,33 +1307,19 @@ textarea::placeholder { color: var(--muted-2); }
 .pos-label { display: flex; flex-direction: column; gap: 5px; padding-top: 6px; }
 
 /* ---------------- Chip markers ----------------
-   Small jersey + name + price, replacing the old full-size cards - used two
-   ways: stacked in labelled rows while the squad is still being built (see
-   .build-*), and absolutely positioned on a real pitch diagram once the
+   Small photo card + name + price, replacing the old full-size cards - used
+   two ways: stacked in labelled rows while the squad is still being built
+   (see .build-*), and absolutely positioned on a real pitch diagram once the
    squad is complete and has an actual formation (see .formation-pitch). One
-   marker component, two layouts, so a jersey looks the same whichever state
+   marker component, two layouts, so a card looks the same whichever state
    you're in. */
 .chip-slot {
   width: 100px; display: flex; flex-direction: column; align-items: center; text-align: center;
   position: relative;
 }
-/* Grown a second time, from 56px to 72px (+28%) - there was still real
-   headroom left in the building rows' height budget after the first pass. */
-.chip-jersey {
-  width: 72px; height: 72px; border-radius: var(--r); background: var(--raise);
-  border: 1.5px solid var(--gold-deep); display: flex; align-items: center; justify-content: center;
-  overflow: hidden; box-shadow: 0 3px 8px -2px rgba(0, 0, 0, 0.5); transition: border-color 0.12s;
-}
-.chip-jersey svg { width: 100%; height: 100%; }
-.chip-jersey-empty {
-  background: transparent; border-style: dashed; color: var(--muted-2); font-size: 24px;
-}
-.chip-slot.chip-empty:hover .chip-jersey-empty, .chip-slot.chip-empty:focus-visible .chip-jersey-empty {
-  border-color: var(--gold); color: var(--gold);
-}
 .chip-slot.chip-empty[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
 .chip-name {
-  font-size: 12.5px; font-weight: 700; line-height: 1.15; margin-top: 5px;
+  font-size: 12.5px; font-weight: 700; line-height: 1.15;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
   cursor: pointer; border-radius: 3px;
 }
@@ -1307,7 +1327,6 @@ textarea::placeholder { color: var(--muted-2); }
 .chip-name:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
 .chip-name.muted { color: var(--muted-2); cursor: default; }
 .chip-name.muted:hover { color: var(--muted-2); text-decoration: none; }
-.chip-price { font-size: 10px; color: var(--muted); font-family: "JetBrains Mono", monospace; margin-top: 1px; }
 .chip-fx { margin-top: 3px; }
 /* Current-gameweek opponent chip on a starting marker runs a little wider
    than the shared .fxc default (24px) for legibility at this size - same
@@ -1367,10 +1386,9 @@ textarea::placeholder { color: var(--muted-2); }
    would collapse onto the same default (0,0) point and stack directly on
    top of each other. */
 .chip-slot.marker:not(.bench-chip) { position: absolute; transform: translate(-50%, -50%); }
-.chip-slot.marker .chip-jersey { width: 76px; height: 76px; }
 .chip-slot.marker[tabindex]:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; border-radius: var(--r); }
-.chip-slot.marker:hover .chip-jersey { border-color: var(--gold); }
-.chip-slot.marker.selected .chip-jersey { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
+.chip-slot.marker:hover .ppc-photo { border-color: var(--gold); }
+.chip-slot.marker.selected .ppc-photo { border-color: var(--gold); box-shadow: 0 0 0 2px var(--gold); }
 /* Bench demotes the same-size marker via opacity, same convention the old
    card-based bench used, rather than shrinking it - a smaller-but-still-
    legible jersey reads better than a second, fiddlier size to maintain. */

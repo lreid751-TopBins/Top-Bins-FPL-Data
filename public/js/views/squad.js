@@ -7,7 +7,7 @@ import {
 import { openPlayerDetail } from "../playerDetail.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { openRater } from "../teamRater.js";
-import { jerseyIcon } from "../jersey.js";
+import { photoTile, clubRule, statBand } from "../playerPhoto.js";
 import { POS_COLOR } from "../charts.js";
 import {
   RC, loadReportCard, gwList, playerReportRow, teamReportSummary, windowFor,
@@ -289,13 +289,12 @@ function playerCard(pick, benched) {
     ? `<span class="tag v">${armband}V</span>`
     : "";
 
-  const jersey = `<div class="jersey-wrap">${jerseyIcon(p)}</div>`;
-
   return `<div class="plr ${benched ? "benched" : ""} ${playing ? "playing" : ""}">
     ${tag}
-    ${jersey}
-    <div class="pts">${pts}</div>
+    ${photoTile(p)}
+    ${clubRule(p)}
     <div class="nm" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}${profileHint()}</div>
+    ${statBand(pts, "pts")}
     <div class="nx">${gwOpponent(p.teamId, S.picksGw)}</div>
     <div class="fx">${fixtureStrip(p.teamId, 5)}</div>
   </div>`;

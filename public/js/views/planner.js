@@ -13,7 +13,7 @@ import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
 import { tickerRow } from "./fixtures.js";
-import { jerseyIcon } from "../jersey.js";
+import { photoTile, clubRule, statBand } from "../playerPhoto.js";
 import { openRater } from "../teamRater.js";
 
 const TOTAL_GWS = 38;
@@ -384,15 +384,16 @@ function filledSlot(p) {
   const justAdded = PL.justAddedId === p.id ? " just-added" : "";
   return `<div class="chip-slot filled${justAdded}">
     <button class="chip-x" data-remove="${p.id}" aria-label="Remove ${esc(p.name)}">×</button>
-    <div class="chip-jersey">${jerseyIcon(p)}</div>
+    ${photoTile(p)}
+    ${clubRule(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
-    <div class="chip-price">£${f1(p.price)}</div>
+    ${statBand(`£${f1(p.price)}`, "")}
   </div>`;
 }
 
 function emptySlot(posKey) {
   return `<div class="chip-slot chip-empty" data-addpos="${posKey}" tabindex="0" role="button" aria-label="Add a ${posKey}">
-    <div class="chip-jersey chip-jersey-empty">+</div>
+    <div class="ppc-photo ppc-photo-empty">+</div>
     <div class="chip-name muted">${posKey}</div>
   </div>`;
 }
@@ -421,9 +422,10 @@ function lineupSlot(p, starting, gw, style) {
     tabindex="0" role="button" aria-label="${esc(p.name)}, ${starting ? "starting" : "bench"} - select, then select another player to swap"
     ${style ? `style="${style}"` : ""}>
     ${cvBadges}
-    <div class="chip-jersey">${jerseyIcon(p)}</div>
+    ${photoTile(p)}
+    ${clubRule(p)}
     <div class="chip-name" data-playerid="${p.id}" tabindex="0" role="button" aria-label="View ${esc(p.name)}'s profile">${esc(p.name)}${availabilityFlag(p)}</div>
-    <div class="chip-price">£${f1(p.price)}</div>
+    ${statBand(`£${f1(p.price)}`, "")}
     ${fxChip}
   </div>`;
 }

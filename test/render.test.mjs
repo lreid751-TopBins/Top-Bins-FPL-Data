@@ -146,6 +146,7 @@ const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
 const { optimalSquad, scoreSquad, validateSquad } = await import("../public/js/teamRating.js");
 const { buildStartingXIRows, shareCardText } = await import("../public/js/shareCard.js");
 const { RC, gwList, playerReportRow, teamReportSummary } = await import("../public/js/reportCard.js");
+const { clubColor } = await import("../public/js/playerPhoto.js");
 
 // jsdom has no <canvas> 2D context and no built-in Clipboard API, so the
 // canvas-drawing and image-copy paths aren't exercised here (verified live
@@ -984,6 +985,28 @@ check("squad renders with live points", () => {
   return `${cards.length} cards, ${bench.length} benched`;
 });
 
+check("My Team card shows a real photo, club-colour rule, and a shaded points band", () => {
+  const card = panel("panel-squad").querySelector(".plr");
+  const p = S.playerById[+card.querySelector(".nm").dataset.playerid];
+
+  const img = card.querySelector(".ppc-photo img");
+  if (!img) throw new Error("no player photo rendered on the My Team card");
+  if (img.getAttribute("src") !== p.photo) throw new Error("photo src doesn't match the player's real FPL headshot URL");
+  if (!img.hasAttribute("onerror") || !img.getAttribute("onerror").includes(p.jersey)) {
+    throw new Error("photo should fall back to the official kit shirt image (p.jersey) on error");
+  }
+
+  const rule = card.querySelector(".ppc-rule");
+  if (!rule) throw new Error("no club-colour rule rendered");
+  if (!rule.getAttribute("style").includes(clubColor(p))) throw new Error("rule colour doesn't match the player's real club colour");
+
+  const band = card.querySelector(".ppc-stat-band");
+  if (!band || !band.querySelector("b") || band.querySelector("span").textContent !== "pts") {
+    throw new Error("expected a shaded stat band showing points");
+  }
+  return `photo/rule/points band all present for ${p.name}`;
+});
+
 check("My Team pitch shows a faint crest watermark for the picked club theme, none for classic", () => {
   renderHub(panel("panel-hub"));
   panel("panel-hub").querySelector('[data-theme-pick="ARS"]').click();
@@ -1098,7 +1121,7 @@ check("captain multiplier applied", () => {
   const live = MOCK[`/api/live/${CURRENT_GW}`].elements.find((e) => e.id === cap.element);
   const html = panel("panel-squad").innerHTML;
   const want = live.stats.total_points * 2;
-  if (!html.includes(`>${want}</div>`)) throw new Error(`captain points ${want} not shown doubled`);
+  if (!html.includes(`<b>${want}</b>`)) throw new Error(`captain points ${want} not shown doubled`);
   return `captain shown as ${want}`;
 });
 
@@ -2037,6 +2060,36 @@ check("planner chip slots render cleanly, no undefined/NaN", () => {
   return `${slots.length} chip slots, no undefined values`;
 });
 
+check("Planner build-phase chip shows photo + club rule + a shaded price band", () => {
+  // Later tests rely on a squad progressively built up across this whole
+  // file rather than each test being isolated, so this saves and restores
+  // PL.draft around its own throwaway squad instead of calling newDraft()
+  // and leaking a reset onto everything downstream.
+  const savedDraft = JSON.parse(JSON.stringify(PL.draft));
+  try {
+    newDraft();
+    const p = S.players.find((x) => x.pos === "GKP");
+    addPlayer(p);
+    renderPlanner(panel("panel-planner"));
+
+    const chip = panel("panel-planner").querySelector(".chip-slot.filled:not(.marker)");
+    if (!chip) throw new Error("no filled build-phase chip rendered");
+    const img = chip.querySelector(".ppc-photo img");
+    if (!img || img.getAttribute("src") !== p.photo) throw new Error("build-phase chip photo doesn't match the added player");
+    if (!chip.querySelector(".ppc-rule")) throw new Error("no club-colour rule on the build-phase chip");
+    const band = chip.querySelector(".ppc-stat-band b");
+    if (!band || !band.textContent.includes("£")) throw new Error("expected the price band to show a £ price, not points");
+
+    const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
+    if (!css.includes(".chip-slot .ppc-photo {") || !css.includes("border: 1.5px solid var(--gold-deep)")) {
+      throw new Error("expected the build-phase photo to keep the gold-deep border the old jersey chip had");
+    }
+    return `build-phase chip shows ${p.name}'s photo, rule and £${f1(p.price)}`;
+  } finally {
+    PL.draft = savedDraft;
+  }
+});
+
 check("planner fixture chips show the opponent, not just a colour", () => {
   renderPlanner(panel("panel-planner"));
   const chips = panel("panel-planner").querySelectorAll(".fxc");
@@ -2243,10 +2296,10 @@ check("building-phase chips are compact enough that all 4 position rows fit with
   if (!css.includes("width: 100px; display: flex; flex-direction: column;")) {
     throw new Error(".chip-slot should be a compact ~100px-wide chip, not a full-size card");
   }
-  if (!css.includes("width: 72px; height: 72px; border-radius: var(--r);")) {
-    throw new Error(".chip-jersey should be a compact 72px jersey, not the old 50x36 card jersey");
+  if (!css.includes(".chip-slot .ppc-photo {") || !css.includes("width: 72px; height: 80px;")) {
+    throw new Error(".chip-slot .ppc-photo should be a compact 72x80 photo, not the old 50x36 card jersey");
   }
-  return "build-strip gap and chip-slot/chip-jersey sizing confirmed compact";
+  return "build-strip gap and chip-slot/ppc-photo sizing confirmed compact";
 });
 
 check("add-player row sits above the squad, with a full browse-by-position list", () => {
@@ -2299,6 +2352,21 @@ check("squad and Starting XI are one pitch, not two stacked sections", () => {
   return `${filledSlots.length} chips in one pitch, captain/vice controls and gw-nav both present`;
 });
 
+check("lineup markers show photo + club rule + a shaded price band, at the marker size", () => {
+  renderPlanner(panel("panel-planner"));
+  const marker = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
+  if (!marker) throw new Error("no lineup marker rendered");
+  const id = +marker.dataset.lineup;
+  const p = S.playerById[id];
+
+  const img = marker.querySelector(".ppc-photo img");
+  if (!img || img.getAttribute("src") !== p.photo) throw new Error("marker photo doesn't match the player in that slot");
+  if (!marker.querySelector(".ppc-rule")) throw new Error("no club-colour rule on the lineup marker");
+  const band = marker.querySelector(".ppc-stat-band b");
+  if (!band || !band.textContent.includes("£")) throw new Error("expected the marker's band to show price, same as the build-phase chip");
+  return `lineup marker shows ${p.name}'s photo, rule and price at the marker size`;
+});
+
 check("bench markers don't collapse onto the same spot as pitch markers", () => {
   // Regression: bench chips share the .marker class with pitch chips (for
   // the same jersey/hover/selected styling), but the base .chip-slot.marker
@@ -2349,9 +2417,9 @@ check("captain/vice controls sit in the marker's corners, not a separate row bel
 });
 
 check("building-phase and lineup chips share the same base marker component", () => {
-  // Both states render through the same .chip-slot/.chip-jersey/.chip-name
+  // Both states render through the same .chip-slot/.ppc-photo/.chip-name
   // component (see filledSlot/lineupSlot in planner.js) - a lineup marker
-  // gets a slightly larger jersey via a scoped .chip-slot.marker override
+  // gets a slightly larger photo via a scoped .chip-slot.marker override
   // (more room on an open pitch than a packed building row), but the shape,
   // corner-badge layout and name/price treatment are the same component,
   // not two different card designs that happen to look similar.
@@ -2359,15 +2427,15 @@ check("building-phase and lineup chips share the same base marker component", ()
   const lineupMarker = panel("panel-planner").querySelector(".chip-slot.marker[data-lineup]");
   if (!lineupMarker) throw new Error("no lineup marker rendered to compare against");
   if (!lineupMarker.classList.contains("chip-slot")) throw new Error("lineup marker should share the base .chip-slot class");
-  if (!lineupMarker.querySelector(".chip-jersey")) throw new Error("lineup marker should use the shared .chip-jersey");
+  if (!lineupMarker.querySelector(".ppc-photo")) throw new Error("lineup marker should use the shared .ppc-photo");
   if (!lineupMarker.querySelector(".chip-name")) throw new Error("lineup marker should use the shared .chip-name");
 
   const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-  if (!css.includes(".chip-slot.marker .chip-jersey { width: 76px; height: 76px; }")) {
-    throw new Error("expected the marker's jersey-size override to still exist");
+  if (!css.includes(".chip-slot.marker .ppc-photo { width: 78px; height: 86px; }")) {
+    throw new Error("expected the marker's photo-size override to still exist");
   }
 
-  return "lineup marker and building chip share .chip-slot/.chip-jersey/.chip-name, sized via a scoped override";
+  return "lineup marker and building chip share .chip-slot/.ppc-photo/.chip-name, sized via a scoped override";
 });
 
 check("clicking a player's name on the Planner pitch opens their profile, not a lineup swap", () => {

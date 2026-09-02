@@ -48,7 +48,7 @@ for (const t of teams) {
       const xg = +(rnd() * (type >= 3 ? 6 : 1.5)).toFixed(2);
       const xa = +(rnd() * 4).toFixed(2);
       elements.push({
-        id: elId, web_name: `${t.short_name}-P${j + 1}`,
+        id: elId, code: 100000 + elId, web_name: `${t.short_name}-P${j + 1}`,
         first_name: "Test", second_name: `${t.short_name}${j}`,
         team: t.id, element_type: type,
         now_cost: ri(38, 145), status: rnd() > 0.94 ? "d" : "a",
