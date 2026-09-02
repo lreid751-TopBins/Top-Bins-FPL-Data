@@ -11,7 +11,8 @@
     "dev": "node test/mock-server.mjs",
     "test": "node test/render.test.mjs",
     "test:function": "deno test --no-remote supabase/functions/fpl/handler.test.ts",
-    "serve:function": "supabase functions serve fpl --no-verify-jwt"
+    "serve:function": "supabase functions serve fpl --no-verify-jwt",
+    "build:seo": "node scripts/build-seo-pages.mjs"
   },
   "devDependencies": {
     "jsdom": "^29.1.1"

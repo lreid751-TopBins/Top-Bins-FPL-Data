@@ -1,0 +1,26 @@
+# Top Bins FPL Data Room - everything here is public FPL analysis,
+# nothing sensitive. Open to regular search crawlers and AI crawlers alike.
+User-agent: *
+Allow: /
+
+# Explicit welcome for the major AI crawlers - some sites block these by
+# default, so this says plainly that isn't the case here.
+User-agent: GPTBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+Sitemap: https://fpl.topbinswithtwins.com/sitemap.xml

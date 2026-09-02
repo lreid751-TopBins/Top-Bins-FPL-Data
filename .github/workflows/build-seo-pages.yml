@@ -1,0 +1,41 @@
+name: Build SEO pages
+
+# Generates real, crawlable static HTML under public/ (see
+# scripts/build-seo-pages.mjs) - most AI crawlers (GPTBot, ClaudeBot,
+# PerplexityBot, CCBot) fetch raw HTML and don't execute JavaScript, so the
+# main app (a client-rendered SPA) is otherwise invisible to them. Commits
+# the generated page(s) back to main, which triggers Deploy site the normal
+# way via its public/** path filter - no separate deploy step needed here.
+
+on:
+  schedule:
+    - cron: "10 6 * * *"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Generate static pages
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+        run: node scripts/build-seo-pages.mjs
+
+      - name: Commit if changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add public/price-changes/
+          if git diff --cached --quiet; then
+            echo "No changes - prices haven't moved since the last build."
+            exit 0
+          fi
+          git commit -m "Regenerate SEO pages with today's data"
+          git push

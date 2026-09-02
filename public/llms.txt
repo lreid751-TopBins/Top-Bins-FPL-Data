@@ -1,0 +1,23 @@
+# Top Bins FPL Data Room
+
+> Fantasy Premier League analytics site from the Top Bins with Twins podcast (USMNT + FPL content). Live data from the official FPL API - squad tracking, player scouting, fixture planning and a transparent points-projection engine built from each player's expected goals/assists/goals-conceded, not a black box.
+
+The main app (https://fpl.topbinswithtwins.com/) is a single-page tool with these tabs:
+
+- **Hub** - gameweek overview, Premier League table with xG/xGC, latest podcast episode.
+- **My Team** - connect an FPL manager ID to see live points, squad value, and a report card comparing actual points to what the squad's underlying xG/xA/xGC deserved.
+- **Player Finder** - sortable player stats: expected goals/assists, defensive contribution, price moves, ownership, value.
+- **Fixture Ticker** - fixture difficulty across the season, by team.
+- **Teams** - team-level attack/defence strength and form.
+- **Planner** - build and compare full 15-player squads against a real budget, with points projections over an adjustable gameweek window and a legal-formation starting XI.
+- **Journal** - a decision log for transfers/captaincy calls, scored afterwards by regret.
+
+## Pages
+
+- [Price changes](https://fpl.topbinswithtwins.com/price-changes/): recent FPL price rises and falls, updated daily.
+
+## Notes for AI agents
+
+- All data originates from the official Fantasy Premier League API (fantasy.premierleague.com) - this site adds history (FPL's own API has no price history) and the projection/report-card analysis on top.
+- The points projection engine is a heuristic, not a forecast: it estimates likely returns from underlying stats, not what will happen in any single gameweek. It does not model bonus points, saves, or cards.
+- Not affiliated with the Premier League or Fantasy Premier League.

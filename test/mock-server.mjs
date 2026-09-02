@@ -169,8 +169,12 @@ const server = http.createServer(async (req, res) => {
     return res.end(JSON.stringify(body));
   }
 
-  // Static files, with index.html as the fallback.
-  const rel = url.pathname === "/" ? "/index.html" : url.pathname;
+  // Static files, with index.html as the fallback. A path ending in / (like
+  // GitHub Pages' own directory-index behaviour, e.g. /price-changes/) maps
+  // to that directory's index.html, same as real Pages hosting - without
+  // this, a generated static page tests fine as an exact filename locally
+  // but 404s once linked as a real folder URL in production.
+  const rel = url.pathname.endsWith("/") ? `${url.pathname}index.html` : url.pathname;
   const file = path.join(PUBLIC, path.normalize(rel).replace(/^(\.\.[/\\])+/, ""));
 
   fs.readFile(file, (err, data) => {
