@@ -139,7 +139,7 @@ const {
   PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
   draftPlayers, branchSquad, compareTotals, deleteSquad, transferLogDraft,
-  SQUAD_RULES, POSITION_ORDER, blankDraft,
+  SQUAD_RULES, POSITION_ORDER, blankDraft, autoImportRealSquad,
 } = await import("../public/js/planner.js");
 const { PD, openPlayerDetail, closePlayerDetail } = await import("../public/js/playerDetail.js");
 const { RT, openRater, closeRater } = await import("../public/js/teamRater.js");
@@ -929,6 +929,51 @@ check("xGC estimate is plausible", () => {
 
 renderSquad(panel("panel-squad"));
 await loadManager("1234567", () => renderSquad(panel("panel-squad")));
+
+check("Planner auto-imports the connected manager's real squad when opened with nothing built", () => {
+  // Real request: "I should not have to build the squad, it should
+  // automatically populate when I open the planner tab." PL hasn't been
+  // touched by any other check yet at this point in the file, so this is
+  // genuinely the first-open state.
+  const imported = autoImportRealSquad();
+  if (!imported) throw new Error("expected the real squad to auto-import into a blank draft");
+  if (PL.draft.picks.length !== 15) throw new Error(`expected 15 imported picks, got ${PL.draft.picks.length}`);
+
+  const realIds = new Set(S.picks.picks.map((p) => p.element));
+  const draftIds = new Set(PL.draft.picks.map((p) => p.id));
+  if (realIds.size !== draftIds.size || [...realIds].some((id) => !draftIds.has(id))) {
+    throw new Error("imported draft doesn't match the real squad's players");
+  }
+  const realCaptain = S.picks.picks.find((p) => p.is_captain)?.element;
+  if (PL.draft.captain !== realCaptain) throw new Error("imported draft's captain doesn't match the real one");
+
+  // Slots come straight from FPL's own position field (her actual real
+  // lineup/bench split), not recomputed via autoPickLineup.
+  const realBenchCount = S.picks.picks.filter((p) => p.position > 11).length;
+  const draftBenchCount = PL.draft.picks.filter((p) => p.slot > 11).length;
+  if (draftBenchCount !== realBenchCount) throw new Error("imported bench split doesn't match the real one");
+
+  return `imported ${PL.draft.picks.length} real picks, captain ${PL.draft.captain}`;
+});
+
+check("auto-import only runs once - doesn't clobber a squad already being built by hand", () => {
+  PL.autoImported = false; // simulate a fresh page load's initial state
+  PL.draft = { ...blankDraft(), picks: [{ id: S.picks.picks[0].element, slot: 1 }] }; // one manual pick already made
+  const imported = autoImportRealSquad();
+  if (imported) throw new Error("should not auto-import over a draft that's already being built");
+  if (PL.draft.picks.length !== 1) throw new Error("manual pick should be untouched");
+});
+
+check("+ New squad after an auto-import stays genuinely blank, doesn't re-import", () => {
+  PL.autoImported = false;
+  PL.draft = blankDraft();
+  autoImportRealSquad();
+  if (PL.draft.picks.length !== 15) throw new Error("setup: expected the auto-import to populate 15 picks");
+
+  newDraft(); // "+ New squad"
+  if (PL.draft.picks.length !== 0) throw new Error("+ New squad should start genuinely blank, not get re-imported");
+  return "stays blank after an explicit New squad";
+});
 
 check("squad renders with live points", () => {
   const cards = panel("panel-squad").querySelectorAll(".plr");

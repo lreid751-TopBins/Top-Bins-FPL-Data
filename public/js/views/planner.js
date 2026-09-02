@@ -5,7 +5,7 @@ import {
   removePlayer, isComplete, needed, squadTotals,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup,
   branchSquad, setCompare, compareTotals, transferLogDraft,
-  loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad,
+  loadSquads, loadIntoDraft, newDraft, saveDraft, deleteSquad, autoImportRealSquad,
 } from "../planner.js";
 import { J, blankDraft as blankJournalDraft } from "../journal.js";
 import { $, $$, esc, fixtureChips, availabilityFlag, sparkline, profileHint, teamCrest, th } from "../ui.js";
@@ -27,6 +27,13 @@ export function renderPlanner(root) {
   const rerender = () => renderPlanner(root);
 
   if (!PL.loaded && !PL.loading) loadSquads().then(rerender);
+  // Runs on every render (cheap, self-guarding) rather than once at load,
+  // since My Team's manager data often finishes loading asynchronously
+  // after the Planner's first render - this needs to catch it whenever it
+  // actually arrives, not just check once and give up. Updates PL.draft
+  // synchronously, so the rest of this same render already sees it - no
+  // need to loop back through rerender() for it to take effect.
+  autoImportRealSquad();
   if (PL.loading && !PL.loaded) {
     root.innerHTML = `<div class="empty"><div class="anton">Opening the planner</div>Loading your saved squads.</div>`;
     return;

@@ -60,10 +60,47 @@ export const PL = {
   searchWidthPct: 29,     // width of the search/analysis column, user-adjustable by dragging
   savedSquadsOpen: false, // whether the saved-squads list is expanded below its tab
   justAddedId: null, // player id to play a one-shot "just added" animation for, then cleared
+  autoImported: false, // whether the real-squad auto-import has run yet this session
 };
 
 export function blankDraft() {
   return { name: "New squad", note: "", picks: [], captain: null, vice: null };
+}
+
+/** Auto-populates a blank draft from the connected manager's real, currently
+ * -held squad (the same S.picks My Team already loads) the first time the
+ * Planner opens with nothing built yet - "my team" is the actual point of
+ * the tool, not a squad built from scratch every visit. Real slot numbers
+ * and captain/vice come straight from FPL, not recomputed, so it's her
+ * actual lineup, not just an optimal one.
+ *
+ * Runs at most once per page load (PL.autoImported), so it never overwrites
+ * a squad she's since started building by hand, and "+ New squad" afterward
+ * stays genuinely blank rather than re-importing. Returns true if it
+ * actually populated the draft, so the caller knows to re-render. */
+export function autoImportRealSquad() {
+  if (PL.autoImported) return false;
+  if (PL.draft.picks.length > 0) {
+    PL.autoImported = true; // already building something by hand - leave it alone
+    return false;
+  }
+  const picks = S.picks?.picks;
+  if (!picks || picks.length !== 15) return false; // not loaded yet - try again next render
+
+  const mapped = picks
+    .map((pk) => (S.playerById[pk.element] ? { id: pk.element, slot: pk.position } : null))
+    .filter(Boolean);
+  if (mapped.length !== 15) return false; // a pick didn't resolve to a real player - don't import a broken squad
+
+  PL.draft = {
+    ...blankDraft(),
+    name: S.entry?.name || "My real squad",
+    picks: mapped,
+    captain: picks.find((p) => p.is_captain)?.element ?? null,
+    vice: picks.find((p) => p.is_vice_captain)?.element ?? null,
+  };
+  PL.autoImported = true;
+  return true;
 }
 
 /* =========================================================
