@@ -125,6 +125,7 @@ export async function load({ onProgress = () => {} } = {}) {
   buildGameweeks(boot);
   buildPlayers(boot);
   applyRateShrinkage();
+  applyInvolvementShare();
   buildFixtureIndex(fixtures);
   buildCurrentStrength();
 
@@ -179,6 +180,7 @@ export function buildFromData(boot, fixtures, form) {
   buildGameweeks(boot);
   buildPlayers(boot);
   applyRateShrinkage();
+  applyInvolvementShare();
   buildFixtureIndex(fixtures);
   buildCurrentStrength();
 
@@ -386,6 +388,24 @@ export function applyRateShrinkage() {
         p.xgi90 = shrink90(p.xgi, p.minutes, baseXgi);
         p.chanceQuality = p.threat90 > 0 ? (p.xg90 / p.threat90) * 100 : 0;
       });
+  });
+}
+
+/** How central a player is to their own team's attack: their share of the
+ * team's total expected goal involvements this season, not just their raw
+ * xGI number. A striker on a struggling side can have a modest xGI but
+ * still be carrying most of the attack; a squad player at a title
+ * contender can post a similar raw number while being a bit-part of a
+ * much bigger shared total. Season totals, not per-90 - "share of the
+ * team's output" is inherently a whole-season question, not a rate one.
+ * Early in a season, with everyone's totals still small, this can swing
+ * on a single goal - same small-sample caveat as anything else here. */
+export function applyInvolvementShare() {
+  const teamXgi = {};
+  S.players.forEach((p) => { teamXgi[p.teamId] = (teamXgi[p.teamId] || 0) + p.xgi; });
+  S.players.forEach((p) => {
+    const total = teamXgi[p.teamId] || 0;
+    p.involvementShare = total > 0 ? (p.xgi / total) * 100 : 0;
   });
 }
 

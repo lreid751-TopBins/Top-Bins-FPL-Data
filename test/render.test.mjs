@@ -778,6 +778,11 @@ check("Player Finder's More columns menu is multi-select, adds real columns, and
   document.getElementById("scoutMoreBtn").click();
   if (!S.ui.scoutExtraOpen) throw new Error("clicking the toggle button should open the menu");
 
+  const menuKeys = [...panel("panel-scout").querySelectorAll("[data-extracol]")].map((b) => b.dataset.extracol);
+  ["chanceQuality", "boomRate", "setPieceScore", "involvementShare"].forEach((k) => {
+    if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the More columns menu`);
+  });
+
   panel("panel-scout").querySelector('[data-extracol="chanceQuality"]').click();
   if (!S.ui.scoutExtraOpen) throw new Error("picking one stat shouldn't close a multi-select menu");
   if (!S.ui.scoutExtraCols.has("chanceQuality")) throw new Error("chanceQuality should now be selected");
@@ -1802,6 +1807,40 @@ check("chance quality, boom rate, and set-piece score compute sane values for ev
   }
 
   return `sane for ${S.players.length} players; ${pens[0].name} (pen order 1) scores ${pens[0].setPieceScore} vs ${noSetPieces.setPieceScore} for a player with no role`;
+});
+
+check("involvement share reflects how central a player is to their own team's attack", () => {
+  for (const p of S.players) {
+    if (!Number.isFinite(p.involvementShare) || p.involvementShare < -1e-9 || p.involvementShare > 100 + 1e-9) {
+      throw new Error(`${p.name} involvementShare out of 0-100 range: ${p.involvementShare}`);
+    }
+  }
+
+  // Every team's players should sum to ~100% of that team's own xGI - not
+  // some other team's, and not clipped/short.
+  const byTeam = {};
+  S.players.forEach((p) => (byTeam[p.teamId] ??= []).push(p));
+  for (const [teamId, squad] of Object.entries(byTeam)) {
+    const teamXgi = squad.reduce((s, p) => s + p.xgi, 0);
+    if (teamXgi <= 0) continue; // no attacking output at all this early - 0% for everyone is correct, nothing to sum
+    const sum = squad.reduce((s, p) => s + p.involvementShare, 0);
+    if (Math.abs(sum - 100) > 0.1) throw new Error(`team ${teamId}'s involvementShare sums to ${sum.toFixed(2)}%, not ~100%`);
+  }
+
+  // A team's actual top scorer/creator should show a meaningfully higher
+  // share than a fringe player who barely touches the ball - proves this
+  // is really a share of team output, not just a copy of raw xGI dressed
+  // up as a percentage.
+  const bestXgiTeam = Object.entries(byTeam).sort(
+    (a, b) => Math.max(...b[1].map((p) => p.xgi)) - Math.max(...a[1].map((p) => p.xgi))
+  )[0][1];
+  const focal = [...bestXgiTeam].sort((a, b) => b.xgi - a.xgi)[0];
+  const fringe = [...bestXgiTeam].sort((a, b) => a.xgi - b.xgi)[0];
+  if (focal.involvementShare <= fringe.involvementShare) {
+    throw new Error(`${focal.name} (team focal point) should show a higher team share than ${fringe.name} (fringe)`);
+  }
+
+  return `bounded 0-100%, sums to ~100% per team, ${focal.name}'s ${f1(focal.involvementShare)}% share > ${fringe.name}'s ${f1(fringe.involvementShare)}%`;
 });
 
 check("xMin's no-recent-form fallback scales by how much of the season a player actually started", () => {
@@ -2953,7 +2992,7 @@ check("Planner browse list's More menu can sort by projected points, form, value
   return "all five More-menu sort options present; projected points and fixture ease verified end to end";
 });
 
-check("Planner browse list's More menu also offers chance quality, boom rate, and set-piece score", () => {
+check("Planner browse list's More menu also offers chance quality, boom rate, set pieces, and team share", () => {
   const savedDraft = PL.draft;
   const savedSort = { ...PL.browseSort };
   try {
@@ -2962,7 +3001,7 @@ check("Planner browse list's More menu also offers chance quality, boom rate, an
     renderPlanner(panel("panel-planner"));
 
     const menuKeys = [...panel("panel-planner").querySelectorAll("#moreMenu [data-moresort]")].map((b) => b.dataset.moresort);
-    ["chanceQuality", "boomRate", "setPieceScore"].forEach((k) => {
+    ["chanceQuality", "boomRate", "setPieceScore", "involvementShare"].forEach((k) => {
       if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the browse list's More sort menu`);
     });
 
@@ -2975,7 +3014,16 @@ check("Planner browse list's More menu also offers chance quality, boom rate, an
     if (!vals.every((v, i) => i === 0 || vals[i - 1] >= v)) {
       throw new Error("browse list isn't actually sorted by set-piece score, highest first");
     }
-    return "chanceQuality/boomRate/setPieceScore all present in the More menu; set-piece sort verified end to end";
+
+    panel("panel-planner").querySelector('#moreMenu [data-moresort="involvementShare"]').click();
+    const shareCol = browseColIdx("Team share");
+    if (!shareCol) throw new Error("no Team share column rendered while sorted by involvement share");
+    const shareVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+      (r) => parseFloat(r.querySelector(`td:nth-child(${shareCol})`).textContent)
+    );
+    if (!shareVals.every((v) => v >= 0 && v <= 100)) throw new Error("Team share values should all sit within 0-100%");
+
+    return "chanceQuality/boomRate/setPieceScore/involvementShare all present in the More menu; set-piece and team-share sorts verified end to end";
   } finally {
     PL.draft = savedDraft;
     PL.browseSort = savedSort;

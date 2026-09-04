@@ -34,9 +34,9 @@ function columns(per90) {
 
 /* Opt-in stats, off by default so the table doesn't get any denser than it
    already is - picked from the "More columns" menu instead of living here
-   permanently. Same three added to the Planner's browse list "More" menu,
-   same underlying store.js fields (chanceQuality, boomRate, setPieceScore),
-   so a number means the same thing wherever you see it. */
+   permanently. Same four added to the Planner's browse list "More" menu,
+   same underlying store.js fields (chanceQuality, boomRate, setPieceScore,
+   involvementShare), so a number means the same thing wherever you see it. */
 const EXTRA_SCOUT_COLS = [
   {
     k: "chanceQuality", l: "Chance qlty",
@@ -47,11 +47,16 @@ const EXTRA_SCOUT_COLS = [
     k: "setPieceScore", l: "Set pieces",
     help: "Penalty + corner/indirect-free + direct-free order, weighted by how much each usually matters for points — not an FPL stat, a heuristic",
   },
+  {
+    k: "involvementShare", l: "Team share",
+    help: "This player's share of their own team's total expected goal involvements (xGI) this season — how central they are to the attack, not just their raw number",
+  },
 ];
 function extraCell(p, k) {
   if (k === "boomRate") return p.boomRate == null ? `<span class="sub-t">—</span>` : `${Math.round(p.boomRate)}%`;
   if (k === "chanceQuality") return f2(p.chanceQuality);
   if (k === "setPieceScore") return f1(p.setPieceScore);
+  if (k === "involvementShare") return f1(p.involvementShare) + "%";
   return "";
 }
 
