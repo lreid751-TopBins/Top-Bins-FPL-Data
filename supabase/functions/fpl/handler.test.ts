@@ -335,10 +335,16 @@ Deno.test("form endpoint stitches the recent gameweeks together", async () => {
     gws: number[];
     current: number;
     points: Record<string, Array<number | null>>;
+    xgi: Record<string, Array<number | null>>;
   };
   assertEquals(body.gws, [10, 11, 12], "should cover the last three gameweeks");
   assertEquals(body.current, 12);
   assertEquals(body.points["1"], [10, 11, 12], "points should line up with gameweeks");
+  // Frontend fixture-adjusted stats need real per-gameweek xG+xA, not just
+  // points/minutes - this reuses the exact same /event/{gw}/live/ calls
+  // already being made, no extra fetches. Harness element 1 always carries
+  // expected_goals 0.5 + expected_assists 0.2 = 0.7.
+  assertEquals(body.xgi["1"], [0.7, 0.7, 0.7], "xgi should be expected_goals + expected_assists per gameweek");
 });
 
 Deno.test("form clamps a silly window", async () => {

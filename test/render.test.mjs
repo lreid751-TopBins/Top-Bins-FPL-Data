@@ -124,6 +124,7 @@ console.error = (...a) => { errors.push(a.join(" ")); origError(...a); };
 /* ---------------- Run ---------------- */
 const {
   S, load, runDifficulty, difficultyOf, teamResults, startShareFallback, buildCurrentStrength, f1, buildGameweeks,
+  attachForm,
 } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
@@ -779,7 +780,7 @@ check("Player Finder's More columns menu is multi-select, adds real columns, and
   if (!S.ui.scoutExtraOpen) throw new Error("clicking the toggle button should open the menu");
 
   const menuKeys = [...panel("panel-scout").querySelectorAll("[data-extracol]")].map((b) => b.dataset.extracol);
-  ["chanceQuality", "boomRate", "setPieceScore", "involvementShare"].forEach((k) => {
+  ["chanceQuality", "boomRate", "setPieceScore", "involvementShare", "fixtureAdjXgi90"].forEach((k) => {
     if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the More columns menu`);
   });
 
@@ -1841,6 +1842,47 @@ check("involvement share reflects how central a player is to their own team's at
   }
 
   return `bounded 0-100%, sums to ~100% per team, ${focal.name}'s ${f1(focal.involvementShare)}% share > ${fringe.name}'s ${f1(fringe.involvementShare)}%`;
+});
+
+check("fixture-adjusted xGI/90 weighs recent output by how hard the opponent actually was", () => {
+  for (const p of S.players) {
+    if (!Number.isFinite(p.fixtureAdjXgi90) || p.fixtureAdjXgi90 < 0) {
+      throw new Error(`${p.name} fixtureAdjXgi90 isn't a sane non-negative number: ${p.fixtureAdjXgi90}`);
+    }
+  }
+
+  const p = S.players.find((x) => x.pos !== "GKP" && (x.formMins || []).some((m) => m > 0));
+  if (!p) throw new Error("setup: no outfield player with recent minutes in the mock data");
+
+  const savedFx = S.fxByTeamGw[p.teamId];
+  const gws = S.form.gws;
+  try {
+    // Opponent id 999999 isn't a real team - difficultyOf() falls back to
+    // the fixture's own .fdr whenever S.teams[opp] doesn't exist, which
+    // lets this pin the difficulty exactly instead of fighting with real
+    // team-strength internals to find a genuinely hard/easy real opponent.
+    const fxAt = (fdr) => {
+      const map = {};
+      gws.forEach((gw) => { map[gw] = [{ opp: 999999, home: true, fdr }]; });
+      return map;
+    };
+
+    S.fxByTeamGw[p.teamId] = fxAt(5);
+    attachForm();
+    const hard = S.playerById[p.id].fixtureAdjXgi90;
+
+    S.fxByTeamGw[p.teamId] = fxAt(1);
+    attachForm();
+    const easy = S.playerById[p.id].fixtureAdjXgi90;
+
+    if (!(hard > easy)) {
+      throw new Error(`same underlying xGI should read higher against difficulty-5 opponents (${hard}) than difficulty-1 (${easy})`);
+    }
+    return `${p.name}: ${hard.toFixed(2)} adj xGI/90 vs difficulty-5 opponents, ${easy.toFixed(2)} vs difficulty-1 - same underlying output, opposite read`;
+  } finally {
+    S.fxByTeamGw[p.teamId] = savedFx;
+    attachForm();
+  }
 });
 
 check("xMin's no-recent-form fallback scales by how much of the season a player actually started", () => {
@@ -2992,7 +3034,7 @@ check("Planner browse list's More menu can sort by projected points, form, value
   return "all five More-menu sort options present; projected points and fixture ease verified end to end";
 });
 
-check("Planner browse list's More menu also offers chance quality, boom rate, set pieces, and team share", () => {
+check("Planner browse list's More menu also offers chance quality, boom rate, set pieces, team share, and adjusted xGI", () => {
   const savedDraft = PL.draft;
   const savedSort = { ...PL.browseSort };
   try {
@@ -3001,7 +3043,7 @@ check("Planner browse list's More menu also offers chance quality, boom rate, se
     renderPlanner(panel("panel-planner"));
 
     const menuKeys = [...panel("panel-planner").querySelectorAll("#moreMenu [data-moresort]")].map((b) => b.dataset.moresort);
-    ["chanceQuality", "boomRate", "setPieceScore", "involvementShare"].forEach((k) => {
+    ["chanceQuality", "boomRate", "setPieceScore", "involvementShare", "fixtureAdjXgi90"].forEach((k) => {
       if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the browse list's More sort menu`);
     });
 
@@ -3023,7 +3065,15 @@ check("Planner browse list's More menu also offers chance quality, boom rate, se
     );
     if (!shareVals.every((v) => v >= 0 && v <= 100)) throw new Error("Team share values should all sit within 0-100%");
 
-    return "chanceQuality/boomRate/setPieceScore/involvementShare all present in the More menu; set-piece and team-share sorts verified end to end";
+    panel("panel-planner").querySelector('#moreMenu [data-moresort="fixtureAdjXgi90"]').click();
+    const adjCol = browseColIdx("Adj xGI/90");
+    if (!adjCol) throw new Error("no Adj xGI/90 column rendered while sorted by fixture-adjusted xGI");
+    const adjVals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+      (r) => parseFloat(r.querySelector(`td:nth-child(${adjCol})`).textContent)
+    );
+    if (adjVals.some((v) => !Number.isFinite(v) || v < 0)) throw new Error("Adj xGI/90 values should all be sane non-negative numbers");
+
+    return "chanceQuality/boomRate/setPieceScore/involvementShare/fixtureAdjXgi90 all present in the More menu; set-piece and team-share sorts verified end to end";
   } finally {
     PL.draft = savedDraft;
     PL.browseSort = savedSort;

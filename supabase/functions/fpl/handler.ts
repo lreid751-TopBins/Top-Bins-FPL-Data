@@ -304,7 +304,7 @@ export async function buildForm(deps: Deps, last: number) {
   const current =
     events.find((e) => e.is_current) ?? [...events].reverse().find((e) => e.finished) ?? null;
   const currentId = current?.id ?? 0;
-  if (!currentId) return { gws: [], points: {}, minutes: {}, current: 0 };
+  if (!currentId) return { gws: [], points: {}, minutes: {}, xgi: {}, current: 0 };
 
   const gws: number[] = [];
   for (let g = Math.max(1, currentId - last + 1); g <= currentId; g++) gws.push(g);
@@ -317,6 +317,12 @@ export async function buildForm(deps: Deps, last: number) {
 
   const points: Record<number, Array<number | null>> = {};
   const minutes: Record<number, Array<number | null>> = {};
+  // Expected goal involvements (xg + xa) per player per gameweek - same
+  // /event/{gw}/live/ calls already being made for points/minutes, so this
+  // is free (no extra fetches). Lets the frontend re-weight a player's
+  // recent underlying output by which specific opponents it came against,
+  // rather than only ever seeing a season-long average.
+  const xgi: Record<number, Array<number | null>> = {};
 
   rounds.forEach((data, idx) => {
     const elements = (data as LiveLike | null)?.elements;
@@ -325,13 +331,15 @@ export async function buildForm(deps: Deps, last: number) {
       if (!points[el.id]) {
         points[el.id] = new Array(gws.length).fill(null);
         minutes[el.id] = new Array(gws.length).fill(null);
+        xgi[el.id] = new Array(gws.length).fill(null);
       }
       points[el.id][idx] = el.stats?.total_points ?? 0;
       minutes[el.id][idx] = el.stats?.minutes ?? 0;
+      xgi[el.id][idx] = Number(el.stats?.expected_goals ?? 0) + Number(el.stats?.expected_assists ?? 0);
     }
   });
 
-  return { gws, points, minutes, current: currentId };
+  return { gws, points, minutes, xgi, current: currentId };
 }
 
 /* ---------------------------------------------------------------

@@ -410,7 +410,7 @@ export function applyInvolvementShare() {
 }
 
 export function attachForm() {
-  const { points, minutes } = S.form;
+  const { points, minutes, xgi, gws } = S.form;
   S.players.forEach((p) => {
     p.formSeries = points?.[p.id] || [];
     p.formMins = minutes?.[p.id] || [];
@@ -422,7 +422,33 @@ export function attachForm() {
     // with the same season total alone. null (not 0) with no games played,
     // so an actual 0% real rate never reads the same as no data at all.
     p.boomRate = played.length ? (played.filter((v) => v >= 8).length / played.length) * 100 : null;
+    p.fixtureAdjXgi90 = fixtureAdjustedXgi90(p, xgi?.[p.id], gws);
   });
+}
+
+/** Recent xGI/90, re-weighted by how hard each specific opponent was to
+ * score against (the same "attack" difficulty model the Ticker/Teams
+ * pages already use) - so padding output against weak defences reads
+ * differently from doing it against top sides, instead of both looking
+ * identical in a plain xGI/90 number. Uses the same recent window as
+ * form6/boomRate. Current opponent strength, not their strength at the
+ * time of that past match - same simplification every FDR number on this
+ * site already makes. */
+function fixtureAdjustedXgi90(p, xgiSeries, gws) {
+  if (!xgiSeries || !gws) return 0;
+  let weightedSum = 0;
+  let minutesSum = 0;
+  gws.forEach((gw, i) => {
+    const mins = p.formMins?.[i];
+    const xgiThisGw = xgiSeries[i];
+    if (!mins || mins <= 0 || xgiThisGw == null) return;
+    const fixtures = S.fxByTeamGw[p.teamId]?.[gw];
+    if (!fixtures || !fixtures.length) return;
+    const avgDifficulty = fixtures.reduce((s, fx) => s + difficultyOf(fx, "attack"), 0) / fixtures.length;
+    weightedSum += xgiThisGw * (avgDifficulty / 3);
+    minutesSum += mins;
+  });
+  return minutesSum > 0 ? (weightedSum * 90) / minutesSum : 0;
 }
 
 /**

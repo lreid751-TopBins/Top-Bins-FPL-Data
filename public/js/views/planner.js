@@ -508,6 +508,7 @@ const BROWSE_SORT_COLS = [
   { k: "boomRate", l: "Boom rate", dir: -1 },
   { k: "setPieceScore", l: "Set pieces", dir: -1 },
   { k: "involvementShare", l: "Team share", dir: -1 },
+  { k: "fixtureAdjXgi90", l: "Adj xGI/90", dir: -1 },
   { k: "name", l: "Name", dir: 1 },
 ];
 // Sort keys already shown as their own fixed column below - anything else
@@ -525,6 +526,7 @@ const BROWSE_EXTRA_HELP = {
   boomRate: () => "Share of the last 6 played gameweeks returning 8+ points",
   setPieceScore: () => "Penalty + corner/indirect-free + direct-free order, weighted by how much each usually matters for points",
   involvementShare: () => "Share of their own team's total xGI this season — how central they are to the attack",
+  fixtureAdjXgi90: () => "Last 6 played GWs' xGI/90, re-weighted by how hard each specific opponent was to score against",
 };
 // The columns that already have a fixed place in the table, in header order -
 // click-to-sort on these (▲/▼, same convention as Player Finder/Teams/the
@@ -573,6 +575,7 @@ function formatBrowseStat(p, k) {
   if (k === "chanceQuality") return f2(v);
   if (k === "setPieceScore") return f1(v);
   if (k === "involvementShare") return f1(v) + "%";
+  if (k === "fixtureAdjXgi90") return f2(v);
   return f1(v);
 }
 

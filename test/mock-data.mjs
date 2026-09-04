@@ -129,12 +129,31 @@ fixtures.push({
   team_h_difficulty: 3, team_a_difficulty: 3, kickoff_time: null,
 });
 
+// Deterministic per (element, gameweek), so the same decision/gameweek
+// always scores the same way, which is what makes the render tests
+// meaningful. Different salts per stat so they don't all move in lockstep.
+// Declared here (ahead of formXgi below, which needs xgFor/xaFor already
+// initialized - these are `const`s, not hoisted function declarations)
+// rather than down with the rest of the Journal fixtures.
+const statHash = (element, gw, salt) => (element * salt + gw * 104729) % 97;
+export function xgFor(element, gw) {
+  return +((statHash(element, gw, 7919) % 90) / 100).toFixed(2); // 0.00-0.89
+}
+export function xaFor(element, gw) {
+  return +((statHash(element, gw, 6151) % 60) / 100).toFixed(2); // 0.00-0.59
+}
+
 const gws = [7, 8, 9, 10, 11, 12];
 const formPoints = {};
 const formMinutes = {};
+const formXgi = {};
 elements.forEach((e) => {
   formPoints[e.id] = gws.map(() => (rnd() > 0.15 ? ri(0, 14) : 0));
   formMinutes[e.id] = gws.map(() => (rnd() > 0.15 ? ri(20, 90) : 0));
+  // Same xgFor/xaFor hash the Journal fixtures already use, so a real
+  // xG/xA figure is available wherever a player actually had minutes that
+  // gameweek, 0 otherwise (no minutes, no chances).
+  formXgi[e.id] = gws.map((gw, i) => (formMinutes[e.id][i] > 0 ? +(xgFor(e.id, gw) + xaFor(e.id, gw)).toFixed(2) : 0));
 });
 
 // A real FPL squad is 2 GKP/5 DEF/5 MID/3 FWD, max 3 from one club, under
@@ -185,7 +204,7 @@ elements.filter((e) => e.element_type <= 4).slice(0, 40).forEach((e, i) => {
 const MOCK = {
   "/api/bootstrap": { events, teams, element_types, elements, total_players: 11000000 },
   "/api/fixtures": fixtures,
-  "/api/form?last=6": { gws, points: formPoints, minutes: formMinutes, current: CURRENT_GW },
+  "/api/form?last=6": { gws, points: formPoints, minutes: formMinutes, xgi: formXgi, current: CURRENT_GW },
   [`/api/live/${CURRENT_GW}`]: {
     elements: elements.map((e) => ({
       id: e.id,
@@ -244,19 +263,8 @@ export function pointsFor(element, gw) {
   return h % 17;
 }
 
-// Same deterministic-hash approach as pointsFor, different salts per stat so
-// they don't all move in lockstep - lets the report card's actual-vs-xG
-// comparison show real over/underperformance locally instead of every row
-// reading 0, which is all the real endpoint's shape can't demonstrate on
-// its own without live data.
-const statHash = (element, gw, salt) => (element * salt + gw * 104729) % 97;
-
-export function xgFor(element, gw) {
-  return +((statHash(element, gw, 7919) % 90) / 100).toFixed(2); // 0.00-0.89
-}
-export function xaFor(element, gw) {
-  return +((statHash(element, gw, 6151) % 60) / 100).toFixed(2); // 0.00-0.59
-}
+// statHash/xgFor/xaFor now live up near formXgi, which needs them already
+// initialized - see the comment there.
 export function goalsFor(element, gw) {
   const h = statHash(element, gw, 4111) % 100;
   return h < 6 ? 2 : h < 22 ? 1 : 0;
