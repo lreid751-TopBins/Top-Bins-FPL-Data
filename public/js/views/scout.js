@@ -32,6 +32,50 @@ function columns(per90) {
   ];
 }
 
+/* Opt-in stats, off by default so the table doesn't get any denser than it
+   already is - picked from the "More columns" menu instead of living here
+   permanently. Same three added to the Planner's browse list "More" menu,
+   same underlying store.js fields (chanceQuality, boomRate, setPieceScore),
+   so a number means the same thing wherever you see it. */
+const EXTRA_SCOUT_COLS = [
+  {
+    k: "chanceQuality", l: "Chance qlty",
+    help: "xG per 100 Threat (FPL's own positioning-danger score) — higher means more of a player's dangerous positions are converting into real chance quality, not just busy positioning",
+  },
+  { k: "boomRate", l: "Boom rate", help: "Share of the last 6 played gameweeks returning 8+ points" },
+  {
+    k: "setPieceScore", l: "Set pieces",
+    help: "Penalty + corner/indirect-free + direct-free order, weighted by how much each usually matters for points — not an FPL stat, a heuristic",
+  },
+];
+function extraCell(p, k) {
+  if (k === "boomRate") return p.boomRate == null ? `<span class="sub-t">—</span>` : `${Math.round(p.boomRate)}%`;
+  if (k === "chanceQuality") return f2(p.chanceQuality);
+  if (k === "setPieceScore") return f1(p.setPieceScore);
+  return "";
+}
+
+/* Multi-select, unlike the Planner browse list's "one extra column follows
+   the sort key" menu - here any combination can be on at once, so the menu
+   has to stay open across clicks (u.scoutExtraOpen, real state, not a
+   transient DOM class) instead of closing the moment you pick one. */
+function moreColumnsMenu(u) {
+  const activeCount = u.scoutExtraCols.size;
+  return `<div class="more-sort${u.scoutExtraOpen ? " open" : ""}" id="scoutMore">
+    <button type="button" id="scoutMoreBtn" aria-haspopup="true" aria-expanded="${u.scoutExtraOpen}">
+      More columns${activeCount ? ` <span class="badge">${activeCount}</span>` : ""} ▾
+    </button>
+    <div class="more-menu" id="scoutMoreMenu" role="menu">
+      ${EXTRA_SCOUT_COLS.map((c) => {
+        const on = u.scoutExtraCols.has(c.k);
+        return `<button type="button" role="menuitemcheckbox" aria-checked="${on}" data-extracol="${c.k}" title="${esc(c.help)}">
+          ${esc(c.l)} <span class="cur">${on ? "✓" : ""}</span>
+        </button>`;
+      }).join("")}
+    </div>
+  </div>`;
+}
+
 function viewData() {
   const u = S.ui;
   const q = u.fQuery.toLowerCase().trim();
@@ -53,7 +97,8 @@ function viewData() {
 export function renderScout(root) {
   const u = S.ui;
   const data = viewData();
-  const cols = columns(u.per90);
+  const extraCols = EXTRA_SCOUT_COLS.filter((c) => u.scoutExtraCols.has(c.k));
+  const cols = [...columns(u.per90), ...extraCols];
   const { k, dir } = u.scoutSort;
   const isText = k === "name" || k === "short" || k === "pos";
 
@@ -74,6 +119,7 @@ export function renderScout(root) {
           <button data-p90="0" ${!u.per90 ? 'aria-pressed="true"' : ""}>Season totals</button>
           <button data-p90="1" ${u.per90 ? 'aria-pressed="true"' : ""}>Per 90</button>
         </div>
+        ${moreColumnsMenu(u)}
       </div>
     </div>
 
@@ -111,7 +157,7 @@ export function renderScout(root) {
     <div class="twrap">
       <table>
         <thead><tr>${cols.map((c) => th(c, k, dir)).join("")}</tr></thead>
-        <tbody>${data.slice(0, 300).map((p) => row(p, u, maxDefcon)).join("")}</tbody>
+        <tbody>${data.slice(0, 300).map((p) => row(p, u, maxDefcon, extraCols)).join("")}</tbody>
       </table>
     </div>
     ${data.length > 300 ? `<p class="hint" style="margin-top:8px">Showing the top 300 by this sort. Narrow the filters to see the rest.</p>` : ""}
@@ -146,7 +192,7 @@ export function renderScout(root) {
   wire(root);
 }
 
-function row(p, u, maxDefcon) {
+function row(p, u, maxDefcon, extraCols) {
   const dc = u.per90 ? p.defcon90 : p.defcon;
   const w = Math.round((100 * dc) / maxDefcon);
   const starred = u.watchlist.has(p.id);
@@ -172,6 +218,7 @@ function row(p, u, maxDefcon) {
     <td class="${p.netTransfers >= 0 ? "pos" : "neg"}">${signed(p.netTransfers.toLocaleString())}</td>
     <td>${f1(p.ppm)}</td>
     <td><span style="display:inline-flex;gap:2px">${fixtureStrip(p.teamId, 5)}</span> <span class="sub-t">${f2(p.fdr5)}</span></td>
+    ${extraCols.map((c) => `<td>${extraCell(p, c.k)}</td>`).join("")}
   </tr>`;
 }
 
@@ -232,6 +279,34 @@ function wire(root) {
   });
 
   $$("[data-p90]", root).forEach((b) => (b.onclick = () => { u.per90 = b.dataset.p90 === "1"; re(); }));
+
+  // More-columns popover - real state (u.scoutExtraOpen), not a transient
+  // DOM class, since picking one stat shouldn't close the menu on a multi-
+  // select the way it does on the Planner's single-extra-column version.
+  // Closed via the toggle button itself or a click outside it - not
+  // focusout, which fires unreliably here: every checkbox click triggers a
+  // full re() (root.innerHTML rebuild), which destroys the just-clicked
+  // element mid-click and can fire a spurious blur before the deliberate
+  // refocus below ever runs.
+  const moreBtn = $("#scoutMoreBtn", root);
+  if (moreBtn) moreBtn.onclick = () => { u.scoutExtraOpen = !u.scoutExtraOpen; re(); };
+  if (u.scoutExtraOpen) {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (!e.target.closest("#scoutMore")) { u.scoutExtraOpen = false; re(); }
+      },
+      { once: true, capture: true }
+    );
+  }
+  $$("[data-extracol]", root).forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const key = b.dataset.extracol;
+      u.scoutExtraCols.has(key) ? u.scoutExtraCols.delete(key) : u.scoutExtraCols.add(key);
+      re();
+    };
+  });
 
   const q = $("#sQuery", root);
   if (q)

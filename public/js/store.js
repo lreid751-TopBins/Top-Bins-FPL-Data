@@ -33,6 +33,8 @@ export const S = {
     // Scout
     scoutSort: { k: "total_points", dir: -1 },
     per90: false,
+    scoutExtraCols: new Set(), // opt-in derived stats (chance quality, boom rate, set pieces) - not permanent columns, the table's already dense
+    scoutExtraOpen: false,
     fPos: "",
     fTeam: "",
     fMaxPrice: 17,
@@ -278,10 +280,29 @@ export function buildPlayers(boot) {
         xgc90: per90(e.expected_goals_conceded),
         defcon90: per90(e.defensive_contribution),
         pts90: per90(e.total_points),
+        threat90: per90(e.threat),
         gi: goals + assists,
         gi90: per90(goals + assists),
         overperf: goals + assists - xgi,
         ppm: price > 0 ? n(e.total_points) / price : 0,
+        // Chance quality, not just volume: how much real expected-goal value
+        // a player gets out of every unit of FPL's Threat (their own raw
+        // attacking-positioning score). Set once xg90 is shrunk below, in
+        // applyRateShrinkage() - threat90 itself isn't shrunk, there's no
+        // equivalent baseline to blend toward for an index stat like this.
+        chanceQuality: 0,
+        // How reliable a source of set-piece returns a player actually is,
+        // combining penalties/corners+indirect-frees/direct-frees into one
+        // sortable number rather than three separate order fields you'd
+        // have to eyeball together. Heuristic weights, not FPL's own rule:
+        // penalties matter most for points, corners/indirect frees next
+        // (an assist source), direct frees least often decisive. First
+        // choice scores full weight, second choice partial, anything lower
+        // (or not on the list at all) scores 0.
+        setPieceScore:
+          (e.penalties_order === 1 ? 3 : e.penalties_order === 2 ? 1 : 0) +
+          (e.corners_and_indirect_freekicks_order === 1 ? 2 : e.corners_and_indirect_freekicks_order === 2 ? 0.5 : 0) +
+          (e.direct_freekicks_order === 1 ? 1 : e.direct_freekicks_order === 2 ? 0.25 : 0),
         // The real, official FPL kit graphic - not a redrawn replica. Keyed by
         // team code (not player), so it's always this player's current club
         // and can never be missing the way a per-player headshot can be.
@@ -363,6 +384,7 @@ export function applyRateShrinkage() {
         p.xg90 = shrink90(p.xg, p.minutes, baseXg);
         p.xa90 = shrink90(p.xa, p.minutes, baseXa);
         p.xgi90 = shrink90(p.xgi, p.minutes, baseXgi);
+        p.chanceQuality = p.threat90 > 0 ? (p.xg90 / p.threat90) * 100 : 0;
       });
   });
 }
@@ -375,6 +397,11 @@ export function attachForm() {
     const played = p.formSeries.filter((v, i) => v !== null && (p.formMins[i] ?? 0) > 0);
     p.form6 = played.length ? played.reduce((a, b) => a + b, 0) : 0;
     p.xMin = expectedMinutes(p);
+    // Boom rate: the share of his last 6 played gameweeks that returned 8+
+    // points - an "explosive vs. consistent" signal two players can't show
+    // with the same season total alone. null (not 0) with no games played,
+    // so an actual 0% real rate never reads the same as no data at all.
+    p.boomRate = played.length ? (played.filter((v) => v >= 8).length / played.length) * 100 : null;
   });
 }
 

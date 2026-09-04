@@ -763,6 +763,51 @@ check("player finder filters", () => {
   return `${chips.length} midfielders after filtering`;
 });
 
+check("Player Finder's More columns menu is multi-select, adds real columns, and closes on an outside click", () => {
+  // Regression risk: unlike the Planner's browse-list "More" menu (one
+  // extra column follows the active sort key, closes on every pick), this
+  // one has to let several stats be on at once - each click re-renders the
+  // whole panel, so the "stay open across picks" state has to survive a
+  // full DOM rebuild, not just a CSS class on a node that's about to be
+  // destroyed.
+  S.ui.scoutExtraCols = new Set();
+  S.ui.scoutExtraOpen = false;
+  renderScout(panel("panel-scout"));
+
+  const before = panel("panel-scout").querySelectorAll("thead th").length;
+  document.getElementById("scoutMoreBtn").click();
+  if (!S.ui.scoutExtraOpen) throw new Error("clicking the toggle button should open the menu");
+
+  panel("panel-scout").querySelector('[data-extracol="chanceQuality"]').click();
+  if (!S.ui.scoutExtraOpen) throw new Error("picking one stat shouldn't close a multi-select menu");
+  if (!S.ui.scoutExtraCols.has("chanceQuality")) throw new Error("chanceQuality should now be selected");
+
+  panel("panel-scout").querySelector('[data-extracol="boomRate"]').click();
+  if (!S.ui.scoutExtraOpen) throw new Error("picking a second stat still shouldn't close the menu");
+  if (S.ui.scoutExtraCols.size !== 2) throw new Error(`expected 2 extra columns selected, got ${S.ui.scoutExtraCols.size}`);
+
+  const afterTwo = panel("panel-scout").querySelectorAll("thead th").length;
+  if (afterTwo !== before + 2) throw new Error(`expected 2 new columns in the table, header count went ${before} -> ${afterTwo}`);
+  if (!panel("panel-scout").querySelector("thead th").parentElement.textContent.includes("Chance qlty")) {
+    throw new Error("Chance qlty header not actually rendered");
+  }
+
+  const chanceCol = scoutColIdx("Chance qlty");
+  const someValue = panel("panel-scout").querySelector(`tbody tr td:nth-child(${chanceCol})`)?.textContent;
+  if (someValue == null || someValue === "") throw new Error("Chance qlty column rendered with no value");
+
+  // Clicking outside the menu (not inside it) should close it - a stray
+  // stopPropagation() bug would leave it stuck open forever.
+  document.body.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+  if (S.ui.scoutExtraOpen) throw new Error("clicking outside the menu should close it");
+  if (S.ui.scoutExtraCols.size !== 2) throw new Error("closing the menu shouldn't clear the selected columns");
+
+  S.ui.scoutExtraCols = new Set();
+  S.ui.scoutExtraOpen = false;
+  renderScout(panel("panel-scout"));
+  return "multi-select stayed open across 2 picks, added 2 real columns with real values, closed cleanly on an outside click";
+});
+
 // Finds a Player Finder column by its header text rather than a fixed
 // nth-child position - a column-index test breaks the moment a column is
 // added or reordered (see the CLAUDE.md gotcha this project already
@@ -1727,6 +1772,36 @@ check("xMin is computed and bounded 0-90", () => {
   const injured = S.players.find((p) => ["i", "s", "u"].includes(p.status));
   if (injured && injured.xMin !== 0) throw new Error("sidelined player should have xMin 0");
   return `computed for ${S.players.length} players, all 0-90`;
+});
+
+check("chance quality, boom rate, and set-piece score compute sane values for every player", () => {
+  const pens = S.players.filter((p) => p.penaltyOrder === 1);
+  if (!pens.length) throw new Error("setup: no first-choice penalty taker in the mock data");
+
+  for (const p of S.players) {
+    if (!Number.isFinite(p.chanceQuality) || p.chanceQuality < 0) {
+      throw new Error(`${p.name} chanceQuality isn't a sane non-negative number: ${p.chanceQuality}`);
+    }
+    if (p.boomRate !== null && (!Number.isFinite(p.boomRate) || p.boomRate < 0 || p.boomRate > 100)) {
+      throw new Error(`${p.name} boomRate out of 0-100 range: ${p.boomRate}`);
+    }
+    if (!Number.isFinite(p.setPieceScore) || p.setPieceScore < 0) {
+      throw new Error(`${p.name} setPieceScore isn't a sane non-negative number: ${p.setPieceScore}`);
+    }
+  }
+
+  // A real first-choice penalty taker should score higher than a player
+  // with no set-piece role at all - proves the weighting actually applies,
+  // not just that every player defaults to 0.
+  const noSetPieces = S.players.find(
+    (p) => p.penaltyOrder == null && p.cornersOrder == null && p.freekickOrder == null
+  );
+  if (!noSetPieces) throw new Error("setup: no player with zero set-piece involvement in the mock data");
+  if (pens[0].setPieceScore <= noSetPieces.setPieceScore) {
+    throw new Error("a first-choice penalty taker should score higher than a player with no set-piece role");
+  }
+
+  return `sane for ${S.players.length} players; ${pens[0].name} (pen order 1) scores ${pens[0].setPieceScore} vs ${noSetPieces.setPieceScore} for a player with no role`;
 });
 
 check("xMin's no-recent-form fallback scales by how much of the season a player actually started", () => {
@@ -2876,6 +2951,36 @@ check("Planner browse list's More menu can sort by projected points, form, value
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
   return "all five More-menu sort options present; projected points and fixture ease verified end to end";
+});
+
+check("Planner browse list's More menu also offers chance quality, boom rate, and set-piece score", () => {
+  const savedDraft = PL.draft;
+  const savedSort = { ...PL.browseSort };
+  try {
+    newDraft();
+    PL.browsePos = "MID";
+    renderPlanner(panel("panel-planner"));
+
+    const menuKeys = [...panel("panel-planner").querySelectorAll("#moreMenu [data-moresort]")].map((b) => b.dataset.moresort);
+    ["chanceQuality", "boomRate", "setPieceScore"].forEach((k) => {
+      if (!menuKeys.includes(k)) throw new Error(`"${k}" isn't offered in the browse list's More sort menu`);
+    });
+
+    panel("panel-planner").querySelector('#moreMenu [data-moresort="setPieceScore"]').click();
+    const col = browseColIdx("Set pieces");
+    if (!col) throw new Error("no Set pieces column rendered while sorted by set-piece score");
+    const vals = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")].map(
+      (r) => +r.querySelector(`td:nth-child(${col})`).textContent
+    );
+    if (!vals.every((v, i) => i === 0 || vals[i - 1] >= v)) {
+      throw new Error("browse list isn't actually sorted by set-piece score, highest first");
+    }
+    return "chanceQuality/boomRate/setPieceScore all present in the More menu; set-piece sort verified end to end";
+  } finally {
+    PL.draft = savedDraft;
+    PL.browseSort = savedSort;
+    renderPlanner(panel("panel-planner"));
+  }
 });
 
 check("Planner browse list sorts by clicking a column header, same as Player Finder/Teams/the Ticker", () => {

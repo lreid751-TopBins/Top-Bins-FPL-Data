@@ -1565,6 +1565,11 @@ textarea::placeholder { color: var(--muted-2); }
 .more-menu button { width: 100%; text-align: left; background: transparent; border: none; color: var(--chalk); font-size: 12px; padding: 8px 10px; display: flex; justify-content: space-between; }
 .more-menu button:hover { background: var(--raise); }
 .more-menu button .cur { color: var(--gold); font-size: 10px; }
+.more-sort .badge {
+  background: var(--raise); color: var(--gold); border: 1px solid var(--gold-deep); border-radius: 20px;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; font-family: "JetBrains Mono", monospace; margin-left: 3px;
+}
+.more-menu button[aria-checked="true"] .cur { font-size: 12px; }
 
 .twrap.browse-wrap { max-height: 320px; }
 /* The top search result gets the same "this one's selected" rail already

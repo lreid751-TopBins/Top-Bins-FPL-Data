@@ -504,6 +504,9 @@ const BROWSE_SORT_COLS = [
   { k: "price", l: "Price", dir: -1 },
   { k: "xMin", l: "xMin", dir: -1 },
   { k: "xgi", l: "xGI", dir: -1 },
+  { k: "chanceQuality", l: "Chance quality", short: "Chance qlty", dir: -1 },
+  { k: "boomRate", l: "Boom rate", dir: -1 },
+  { k: "setPieceScore", l: "Set pieces", dir: -1 },
   { k: "name", l: "Name", dir: 1 },
 ];
 // Sort keys already shown as their own fixed column below - anything else
@@ -517,6 +520,9 @@ const BROWSE_EXTRA_HELP = {
   ppm: () => "Total points per million spent",
   fixtureEase: () => `Avg fixture difficulty, next ${PL.projWindow} GWs — lower is kinder`,
   selected: () => "Selected by",
+  chanceQuality: () => "xG per 100 Threat (FPL's positioning-danger score) — higher means more of their dangerous positions convert into real chance quality, not just busy positioning",
+  boomRate: () => "Share of the last 6 played gameweeks returning 8+ points",
+  setPieceScore: () => "Penalty + corner/indirect-free + direct-free order, weighted by how much each usually matters for points",
 };
 // The columns that already have a fixed place in the table, in header order -
 // click-to-sort on these (▲/▼, same convention as Player Finder/Teams/the
@@ -561,6 +567,9 @@ function formatBrowseStat(p, k) {
   const v = browseStat(p, k);
   if (k === "selected") return f1(v) + "%";
   if (k === "fixtureEase") return f2(v);
+  if (k === "boomRate") return v == null ? "—" : Math.round(v) + "%";
+  if (k === "chanceQuality") return f2(v);
+  if (k === "setPieceScore") return f1(v);
   return f1(v);
 }
 
