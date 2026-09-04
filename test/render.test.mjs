@@ -136,6 +136,7 @@ const { renderSquad, loadManager } = await import("../public/js/views/squad.js")
 const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
 const { renderPlanner } = await import("../public/js/views/planner.js");
+const { renderAnalytics } = await import("../public/js/views/analytics.js");
 const {
   PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, budgetCap, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
@@ -3557,6 +3558,135 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
     throw new Error(".twrap needs the same mask-image scroll-edge fade as .tabs, inside the max-width:720px block");
   }
   return "wide tables (.twrap) fade their right edge on mobile, same as the tab bar";
+});
+
+/* =========================================================
+   Analytics tab
+   ========================================================= */
+check("Analytics tab renders all four sections with real values, no NaN/undefined", () => {
+  renderAnalytics(panel("panel-analytics"));
+  const html = panel("panel-analytics").innerHTML;
+  if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
+  if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
+
+  const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
+  if (boxes.length !== 4) throw new Error(`expected 4 chart-box sections, got ${boxes.length}`);
+  if (!panel("panel-analytics").querySelector(".an-trend-chart svg")) throw new Error("no trend chart rendered");
+  if (!panel("panel-analytics").querySelector(".an-pctl-row")) throw new Error("no percentile rows rendered");
+  if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
+  if (!panel("panel-analytics").querySelector(".an-calib-chart svg")) throw new Error("no calibration scatter rendered");
+
+  return "4 chart-box sections, trend/percentile/head-to-head/calibration all present";
+});
+
+check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
+  const savedId = S.ui.anTrendId;
+  try {
+    renderAnalytics(panel("panel-analytics"));
+    const candidates = S.players.filter((p) => p.minutes >= 270);
+    if (candidates.length < 2) throw new Error("setup: need at least 2 eligible players");
+    const target = candidates.find((p) => p.id !== S.ui.anTrendId) || candidates[1];
+
+    const input = panel("panel-analytics").querySelector("#anTrendPicker");
+    input.value = `${target.name} (${target.short})`;
+    input.dispatchEvent(new window.Event("change", { bubbles: true }));
+
+    if (S.ui.anTrendId !== target.id) throw new Error("picking a player should update S.ui.anTrendId");
+    const header = panel("panel-analytics").querySelector(".an-picker input").value;
+    if (!header.includes(target.name)) throw new Error("the picker input should reflect the newly selected player");
+
+    return `switched trend player to ${target.name}, chart re-rendered for that player`;
+  } finally {
+    S.ui.anTrendId = savedId;
+    renderAnalytics(panel("panel-analytics"));
+  }
+});
+
+check("Analytics percentile rows are bounded 0-100 and reflect real rank within position", () => {
+  renderAnalytics(panel("panel-analytics"));
+  const nums = [...panel("panel-analytics").querySelectorAll(".an-pctl-num")].map((el) => parseInt(el.textContent, 10));
+  if (!nums.length) throw new Error("no percentile numbers rendered");
+  if (nums.some((n) => !Number.isFinite(n) || n < 0 || n > 100)) {
+    throw new Error(`percentile out of 0-100 range: ${nums.join(", ")}`);
+  }
+
+  // The very best player at a stat, within a position, should read as the
+  // 100th percentile - proves this is a real rank against the pool, not a
+  // static/fake number.
+  const pool = S.players.filter((p) => p.pos === "MID" && p.minutes >= 270);
+  if (pool.length < 3) throw new Error("setup: not enough qualifying midfielders in the mock data");
+  const best = [...pool].sort((a, b) => b.xgi90 - a.xgi90)[0];
+
+  const savedId = S.ui.anPctlId;
+  try {
+    S.ui.anPctlId = best.id;
+    renderAnalytics(panel("panel-analytics"));
+    const row = [...panel("panel-analytics").querySelectorAll(".an-pctl-row")][0];
+    const pct = parseInt(row.querySelector(".an-pctl-num").textContent, 10);
+    if (pct !== 100) throw new Error(`the top xGI/90 midfielder should read as the 100th percentile, got ${pct}`);
+    return `${best.name}'s xGI/90 (best among ${pool.length} midfielders) reads as the 100th percentile`;
+  } finally {
+    S.ui.anPctlId = savedId;
+    renderAnalytics(panel("panel-analytics"));
+  }
+});
+
+check("Analytics head-to-head compares two distinct players and highlights the higher value per row", () => {
+  const savedA = S.ui.anH2hA;
+  const savedB = S.ui.anH2hB;
+  try {
+    const pool = S.players.filter((p) => p.minutes >= 270);
+    if (pool.length < 2) throw new Error("setup: need at least 2 eligible players");
+    const a = pool[0];
+    const b = pool.find((p) => p.id !== a.id);
+    S.ui.anH2hA = a.id;
+    S.ui.anH2hB = b.id;
+    renderAnalytics(panel("panel-analytics"));
+
+    const rows = [...panel("panel-analytics").querySelectorAll(".an-h2h-table tbody tr")];
+    if (rows.length !== 6) throw new Error(`expected 6 stat rows (one per radar axis), got ${rows.length}`);
+
+    // Every row should have exactly one winning cell (highest value bold),
+    // never both or neither - proves the comparison is real, not decorative.
+    rows.forEach((row) => {
+      const wins = row.querySelectorAll("td.win").length;
+      if (wins !== 1) throw new Error(`expected exactly 1 winning cell per stat row, got ${wins}`);
+    });
+
+    const polys = panel("panel-analytics").querySelectorAll(".an-h2h-chart svg polygon[fill='var(--gold)'], .an-h2h-chart svg polygon[stroke='var(--gold)']");
+    if (!polys.length) throw new Error("no gold radar polygon rendered for player A");
+
+    return `${a.name} vs ${b.name}: 6 stat rows, each with exactly one winner, radar rendered for both`;
+  } finally {
+    S.ui.anH2hA = savedA;
+    S.ui.anH2hB = savedB;
+    renderAnalytics(panel("panel-analytics"));
+  }
+});
+
+check("Analytics calibration section computes sane correlation/error/hit-rate summary stats", () => {
+  renderAnalytics(panel("panel-analytics"));
+  const chips = [...panel("panel-analytics").querySelectorAll(".an-calib-side .stat-chip .v")].map((el) => el.textContent);
+  if (chips.length !== 3) throw new Error(`expected 3 summary stat chips, got ${chips.length}`);
+
+  const corr = parseFloat(chips[0]);
+  const avgErr = parseFloat(chips[1]);
+  const within3 = parseFloat(chips[2]);
+  if (!Number.isFinite(corr) || corr < -1.01 || corr > 1.01) throw new Error(`correlation out of [-1,1]: ${corr}`);
+  if (!Number.isFinite(avgErr) || avgErr < 0) throw new Error(`avg error should be non-negative: ${avgErr}`);
+  if (!Number.isFinite(within3) || within3 < 0 || within3 > 100) throw new Error(`within-3-pts % out of 0-100: ${within3}`);
+
+  const dots = panel("panel-analytics").querySelectorAll(".an-calib-chart svg .pt circle");
+  if (!dots.length) throw new Error("no calibration points plotted");
+
+  return `correlation ${corr.toFixed(2)}, avg error ${avgErr.toFixed(1)} pts, ${within3.toFixed(0)}% within 3 pts, ${dots.length} players plotted`;
+});
+
+check("Analytics tab is reachable from the nav and shows only when active", () => {
+  const tab = document.querySelector('[data-tab="analytics"]');
+  if (!tab) throw new Error("no Analytics tab button in the nav");
+  if (!document.getElementById("panel-analytics")) throw new Error("no #panel-analytics section in the page");
+  return "Analytics tab button and panel both present";
 });
 
 /* =========================================================

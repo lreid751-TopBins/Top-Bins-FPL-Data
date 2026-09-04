@@ -53,6 +53,11 @@ export const S = {
     swapOut: null,
     swapIn: null,
     swapSort: { k: "total_points", dir: -1 }, // sort applied to the "In" candidate list
+    // Analytics
+    anTrendId: null,   // player shown in the rolling trend chart
+    anPctlId: null,    // player shown in the percentile breakdown
+    anH2hA: null,      // head-to-head comparison, player A
+    anH2hB: null,      // head-to-head comparison, player B
   },
 };
 

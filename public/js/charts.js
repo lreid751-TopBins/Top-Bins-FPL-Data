@@ -135,6 +135,115 @@ export function scatter(points, opts = {}) {
   </svg>`;
 }
 
+/**
+ * A single rolling series over recent gameweeks - area + line + dots, the
+ * last point emphasised. Used for "is this trending up or down", where
+ * scatter() answers "how does this compare to everyone else".
+ *
+ * points: [{ x: "GW7", y: 0.31 }, ...]
+ * opts:   { color, fmt }
+ */
+export function lineChart(points, opts = {}) {
+  const { color = "var(--gold)", fmt = (v) => v.toFixed(2) } = opts;
+  if (!points.length) return `<p class="hint">Not enough recent gameweeks to plot.</p>`;
+
+  const W = 560, H = 200;
+  const PAD = { t: 14, r: 14, b: 26, l: 34 };
+  const ys = points.map((p) => p.y);
+  const yMin = Math.min(0, ...ys);
+  const rawMax = Math.max(...ys) || 1;
+  const yMax = rawMax + (rawMax - yMin) * 0.15 || rawMax + 0.2;
+
+  const px = (i) =>
+    PAD.l + (points.length <= 1 ? (W - PAD.l - PAD.r) / 2 : (i / (points.length - 1)) * (W - PAD.l - PAD.r));
+  const py = (v) => H - PAD.b - ((v - yMin) / (yMax - yMin || 1)) * (H - PAD.t - PAD.b);
+
+  const yt = niceTicks(yMin, yMax, 4);
+  const grid = yt.map((v) => `<line class="gridline" x1="${PAD.l}" y1="${py(v)}" x2="${W - PAD.r}" y2="${py(v)}"/>`).join("");
+
+  const linePts = points.map((p, i) => `${px(i)},${py(p.y)}`).join(" ");
+  const areaPts = `${px(0)},${py(yMin)} ${linePts} ${px(points.length - 1)},${py(yMin)}`;
+  const gid = "lc" + Math.random().toString(36).slice(2, 8);
+
+  const dots = points
+    .map((p, i) => {
+      const last = i === points.length - 1;
+      return `<g class="pt"><circle cx="${px(i)}" cy="${py(p.y)}" r="${last ? 5 : 3}" fill="${last ? color : "var(--stand)"}" stroke="${color}" stroke-width="${last ? 0 : 2}"/><title>${esc(p.x)}: ${fmt(p.y)}</title></g>`;
+    })
+    .join("");
+
+  const axis = `<g class="axis">
+    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}"/>
+    ${yt.map((v) => `<text x="${PAD.l - 6}" y="${py(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join("")}
+    ${points.map((p, i) => `<text x="${px(i)}" y="${H - 8}" text-anchor="middle">${esc(p.x)}</text>`).join("")}
+  </g>`;
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trend over recent gameweeks">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="${color}" stop-opacity="0.32"/>
+      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+    </linearGradient></defs>
+    ${grid}
+    <polygon points="${areaPts}" fill="url(#${gid})"/>
+    <polyline points="${linePts}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
+    ${dots}
+    ${axis}
+  </svg>`;
+}
+
+/**
+ * Overlay 1-3 players' underlying profile across a shared set of axes, each
+ * normalised to its own reasonable max so one big-scale stat (Team share,
+ * 0-100) doesn't swallow a small-scale one (xA/90, 0-0.5) in the same shape.
+ *
+ * axes:   [{ key, label, max }]
+ * series: [{ label, color, values: { [axisKey]: number } }]
+ */
+export function radar(axes, series, opts = {}) {
+  if (!axes.length || !series.length) return `<p class="hint">Not enough data to compare.</p>`;
+  const size = 300;
+  const cx = size / 2;
+  const cy = size / 2 + 6;
+  const R = size / 2 - 46;
+  const count = axes.length;
+  const angle = (i) => (Math.PI * 2 * i) / count - Math.PI / 2;
+  const pt = (i, frac) => [cx + Math.cos(angle(i)) * R * frac, cy + Math.sin(angle(i)) * R * frac];
+  const num = (v) => (Number.isFinite(v) ? v : 0);
+
+  const rings = [0.25, 0.5, 0.75, 1]
+    .map((f) => `<polygon points="${axes.map((_, i) => pt(i, f).join(",")).join(" ")}" fill="none" stroke="var(--line)" stroke-width="1"/>`)
+    .join("");
+
+  const spokesAndLabels = axes
+    .map((a, i) => {
+      const [ex, ey] = pt(i, 1);
+      const [lx, ly] = pt(i, 1.2);
+      return `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="var(--line)" stroke-width="1"/>
+        <text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" style="font-size:9.5px;fill:var(--muted);font-family:'JetBrains Mono',monospace">${esc(a.label)}</text>`;
+    })
+    .join("");
+
+  const polys = series
+    .map((s) => {
+      const pts = axes
+        .map((a, i) => pt(i, Math.max(0, Math.min(1, num(s.values[a.key]) / a.max))).join(","))
+        .join(" ");
+      const dots = axes
+        .map((a, i) => {
+          const raw = num(s.values[a.key]);
+          const [dx, dy] = pt(i, Math.max(0, Math.min(1, raw / a.max)));
+          return `<circle cx="${dx}" cy="${dy}" r="3" fill="${s.color}"><title>${esc(s.label)} — ${esc(a.label)}: ${raw}</title></circle>`;
+        })
+        .join("");
+      return `<polygon points="${pts}" fill="${s.color}" fill-opacity="0.16" stroke="${s.color}" stroke-width="2"/>${dots}`;
+    })
+    .join("");
+
+  return `<svg viewBox="0 0 ${size} ${size}" role="img" aria-label="Head-to-head comparison">
+    ${rings}${spokesAndLabels}${polys}
+  </svg>`;
+}
+
 export const POS_COLOR = {
   GKP: "#e7c15e",
   GK: "#e7c15e",

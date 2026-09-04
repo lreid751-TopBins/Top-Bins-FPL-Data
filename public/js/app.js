@@ -7,6 +7,7 @@ import { renderFixtures } from "./views/fixtures.js";
 import { renderTeams } from "./views/teams.js";
 import { renderJournal } from "./views/journal.js";
 import { renderPlanner } from "./views/planner.js";
+import { renderAnalytics } from "./views/analytics.js";
 // No panel of its own - importing it wires up its close interactions
 // (backdrop click, Escape) once, regardless of which tab loads first.
 import "./playerDetail.js";
@@ -18,6 +19,7 @@ const PANELS = {
   fixtures: { el: () => $("#panel-fixtures"), render: renderFixtures, label: "Fixture Ticker" },
   teams: { el: () => $("#panel-teams"), render: renderTeams, label: "Teams" },
   planner: { el: () => $("#panel-planner"), render: renderPlanner, label: "Planner" },
+  analytics: { el: () => $("#panel-analytics"), render: renderAnalytics, label: "Analytics" },
   journal: { el: () => $("#panel-journal"), render: renderJournal, label: "Journal" },
 };
 
