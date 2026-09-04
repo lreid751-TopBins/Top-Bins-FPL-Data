@@ -20,7 +20,7 @@ function niceTicks(min, max, count = 5) {
 
 /**
  * points: [{ x, y, label, color, id }]
- * opts:   { xLabel, yLabel, parity, quadrant, fmt, labelTop }
+ * opts:   { xLabel, yLabel, parity, quadrant, fmt, labelTop, empty }
  */
 export function scatter(points, opts = {}) {
   const {
@@ -30,10 +30,15 @@ export function scatter(points, opts = {}) {
     quadrant = false,
     fmt = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
     labelTop = 8,
+    // Callers without a minutes filter of their own (the Analytics tab's
+    // calibration chart, which sets its own eligibility bar internally)
+    // need their own message here - the default assumes a filter exists
+    // to lower, which isn't true everywhere this gets called.
+    empty = "Not enough minutes played yet to plot anything. Lower the minutes filter.",
   } = opts;
 
   if (!points.length) {
-    return `<p class="hint">Not enough minutes played yet to plot anything. Lower the minutes filter.</p>`;
+    return `<p class="hint">${esc(empty)}</p>`;
   }
 
   const xs = points.map((p) => p.x);

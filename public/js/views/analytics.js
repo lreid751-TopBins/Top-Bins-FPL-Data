@@ -16,7 +16,17 @@ import { openPlayerDetail } from "../playerDetail.js";
    Finder/the Planner already pull.
    ========================================================= */
 
-const MIN_MINUTES = 270; // same "meaningful sample" floor used elsewhere (SHRINK_PRIOR_MINUTES)
+// A flat 270-minute floor (three full games - the same "meaningful sample"
+// prior store.js's rate-shrinkage uses) was the plan, but it's unreachable
+// by definition before GW3 even finishes - every section came back
+// completely empty for the season's first couple of gameweeks, which is
+// exactly when a manager actually wants this tab. Scales with how much
+// season has actually happened instead: roughly two-thirds of the maximum
+// possible minutes so far, floored at one half-game and capped at the
+// original 270 once there's enough season for that to mean something.
+function minMinutes() {
+  return Math.min(270, Math.max(45, Math.round(S.currentGw * 60)));
+}
 
 export function renderAnalytics(root) {
   root.innerHTML = `
@@ -45,7 +55,7 @@ export function renderAnalytics(root) {
 
 /* ---------------- Shared helpers ---------------- */
 function eligiblePlayers() {
-  return S.players.filter((p) => p.minutes >= MIN_MINUTES).sort((a, b) => b.total_points - a.total_points);
+  return S.players.filter((p) => p.minutes >= minMinutes()).sort((a, b) => b.total_points - a.total_points);
 }
 function playerLabel(p) {
   return `${p.name} (${p.short})`;
@@ -63,12 +73,20 @@ function playerPicker(id, label, selected) {
     <input type="text" list="anPlayerList" id="${id}" placeholder="Search a player…" value="${selected ? esc(playerLabel(selected)) : ""}">
   </label>`;
 }
+/** True pre-season edge case only (before literally anyone has minutes) -
+ * every other guard in this file has data by GW1. A message here beats a
+ * silently blank section. */
+function emptyBox(title) {
+  return `<div class="chart-box"><h3>${esc(title)}</h3>
+    <p class="hint">Not enough of the season played yet - check back once a gameweek or two has kicked off.</p>
+  </div>`;
+}
 
 /* ---------------- 1. Trend ---------------- */
 function trendSection() {
   const p = S.ui.anTrendId ? S.playerById[S.ui.anTrendId] : null;
-  const player = p && p.minutes >= MIN_MINUTES ? p : defaultPlayer();
-  if (!player) return "";
+  const player = p && p.minutes >= minMinutes() ? p : defaultPlayer();
+  if (!player) return emptyBox("Is he heating up, or cooling off?");
 
   const series = trendSeries(player);
   const latest = series.length ? series[series.length - 1].y : null;
@@ -127,14 +145,14 @@ const PCTL_STATS = [
 
 function percentileSection() {
   const p = S.ui.anPctlId ? S.playerById[S.ui.anPctlId] : null;
-  const player = p && p.minutes >= MIN_MINUTES ? p : defaultPlayer();
-  if (!player) return "";
+  const player = p && p.minutes >= minMinutes() ? p : defaultPlayer();
+  if (!player) return emptyBox("What the raw number doesn't tell you");
 
-  const posPool = S.players.filter((x) => x.pos === player.pos && x.minutes >= MIN_MINUTES);
+  const posPool = S.players.filter((x) => x.pos === player.pos && x.minutes >= minMinutes());
 
   return `<div class="chart-box">
     <h3>What the raw number doesn't tell you</h3>
-    <p class="cap">Ranked against every other <b>${esc(player.pos)}</b> with at least ${MIN_MINUTES} minutes this
+    <p class="cap">Ranked against every other <b>${esc(player.pos)}</b> with at least ${minMinutes()} minutes this
       season (${posPool.length} players) - the same stats already on Player Finder and the Planner, just placed
       against who he's actually competing with for a squad spot.</p>
     ${playerPicker("anPctlPicker", "Player", player)}
@@ -178,7 +196,7 @@ const H2H_AXES_DEF = [
 ];
 
 function h2hAxes() {
-  const pool = S.players.filter((p) => p.minutes >= MIN_MINUTES);
+  const pool = S.players.filter((p) => p.minutes >= minMinutes());
   return H2H_AXES_DEF.map((a) => ({
     ...a,
     max: Math.max(1e-6, ...pool.map((p) => Number(p[a.key]) || 0)) * 1.05,
@@ -187,10 +205,10 @@ function h2hAxes() {
 
 function headToHeadSection() {
   const pool = eligiblePlayers();
-  if (pool.length < 2) return "";
+  if (pool.length < 2) return emptyBox("Weighing two transfer targets directly");
   const a = (S.ui.anH2hA ? S.playerById[S.ui.anH2hA] : null) || pool[0];
   const b = (S.ui.anH2hB ? S.playerById[S.ui.anH2hB] : null) || defaultPlayer(a.id);
-  if (!a || !b) return "";
+  if (!a || !b) return emptyBox("Weighing two transfer targets directly");
 
   const axes = h2hAxes();
   const series = [
@@ -256,7 +274,13 @@ function calibrationSection() {
       Not a stored forecast from the time - a live check that the formula itself tracks reality.</p>
     <div class="an-calib-layout">
       <div class="an-calib-chart">
-        ${scatter(points, { xLabel: "Projected points (avg)", yLabel: "Actual points (avg)", parity: true, fmt: (v) => v.toFixed(1) })}
+        ${scatter(points, {
+          xLabel: "Projected points (avg)",
+          yLabel: "Actual points (avg)",
+          parity: true,
+          fmt: (v) => v.toFixed(1),
+          empty: "Not enough of the season played yet to check the model - come back after a few more gameweeks.",
+        })}
       </div>
       <div class="an-calib-side">
         <div class="stat-chip"><div class="v">${summary.corr.toFixed(2)}</div><div class="l">Correlation</div></div>
@@ -271,7 +295,7 @@ function calibrationPoints() {
   const gws = S.form.gws || [];
   const out = [];
   S.players
-    .filter((p) => p.minutes >= MIN_MINUTES)
+    .filter((p) => p.minutes >= minMinutes())
     .forEach((p) => {
       let projSum = 0;
       let actualSum = 0;
