@@ -58,6 +58,8 @@ export const S = {
     anPctlId: null,    // player shown in the percentile breakdown
     anH2hA: null,      // head-to-head comparison, player A
     anH2hB: null,      // head-to-head comparison, player B
+    anLbPos: "",       // due-a-goal-or-assist leaderboard, position filter
+    anLbWindow: "5",   // due-a-goal-or-assist leaderboard, gameweek window
   },
 };
 

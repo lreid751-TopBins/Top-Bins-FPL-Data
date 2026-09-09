@@ -1,19 +1,24 @@
 import { S, f1, f2, difficultyOf } from "../store.js";
 import { $, $$, esc } from "../ui.js";
-import { scatter, radar, lineChart, POS_COLOR } from "../charts.js";
+import { scatter, radar, lineChart, divergingBars, POS_COLOR } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
+import { gwList } from "../reportCard.js";
+import { api } from "../api.js";
 
 /* =========================================================
    Analytics tab
 
-   Four structural ways to get more out of the stats already computed
+   Structural ways to get more out of the stats already computed
    elsewhere on the site - not new numbers, new lenses on the same ones:
    a rolling trend instead of one flat figure, a percentile instead of a
-   bare decimal, a head-to-head overlay instead of two separate rows, and
-   a check on whether the projection engine's own formula actually tracks
-   reality. Nothing here needs new data beyond what My Team/Player
-   Finder/the Planner already pull.
+   bare decimal, a head-to-head overlay instead of two separate rows, a
+   goals+assists-vs-xGI leaderboard over a chosen window, and a check on
+   whether the projection engine's own formula actually tracks reality.
+   Everything but the leaderboard reuses data My Team/Player Finder/the
+   Planner already pull; the leaderboard is the one section that needs
+   its own fetch (goals/assists per gameweek aren't in that shared pool),
+   reusing the /points endpoint already built for the My Team report card.
    ========================================================= */
 
 // A flat 270-minute floor (three full games - the same "meaningful sample"
@@ -35,8 +40,8 @@ export function renderAnalytics(root) {
       <h2>Analytics</h2>
     </div>
     <p class="hint" style="margin-top:-6px;max-width:70ch">
-      Four ways to look past the raw numbers already on the site - trend, percentile, head-to-head, and how well the
-      Planner's own projection engine actually tracks what happens.
+      Ways to look past the raw numbers already on the site - trend, percentile, head-to-head, who's due a goal or
+      assist, and how well the Planner's own projection engine actually tracks what happens.
     </p>
 
     <datalist id="anPlayerList">
@@ -48,6 +53,7 @@ export function renderAnalytics(root) {
     ${trendSection()}
     ${percentileSection()}
     ${headToHeadSection()}
+    ${dueSection(() => renderAnalytics(root))}
     ${calibrationSection()}
   `;
   wire(root);
@@ -261,7 +267,130 @@ function h2hFmt(key, v) {
   return f2(v);
 }
 
-/* ---------------- 4. Model accountability ---------------- */
+/* ---------------- 4. Due a goal or assist ---------------- */
+const LB_WINDOWS = ["3", "5", "8", "season"];
+function lbWindowLabel(spec) {
+  return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
+}
+
+/** Same adaptive-floor idea as minMinutes(), keyed to how many gameweeks
+ * are actually in the chosen window rather than the whole season - a
+ * 3-GW window shouldn't demand the same minutes as a full-season one. */
+function windowMinMinutes(gwCount) {
+  return Math.min(270, Math.max(45, Math.round(gwCount * 60)));
+}
+
+/** Fetched goals/assists/xG/xA/minutes for the window currently loaded,
+ * keyed by player id -> gw -> value. Not part of S: nothing else on the
+ * site needs actual goals/assists per gameweek for every player, so this
+ * stays a leaderboard-local fetch instead of another S.form field. */
+const LB = { loading: false, data: null, from: null, to: null };
+
+/** Mirrors fetchReportCardData in reportCard.js - same <=15-GW chunking
+ * around the /points endpoint's own range cap - but for the whole player
+ * pool instead of one squad's 15 (no `elements` filter = every player). */
+async function loadLeaderboardData(rerender) {
+  const gws = gwList(S.ui.anLbWindow);
+  if (!gws.length || LB.loading) return;
+  const from = gws[0];
+  const to = gws[gws.length - 1];
+  if (LB.data && LB.from === from && LB.to === to) return;
+
+  LB.loading = true;
+  const merged = { goals: {}, assists: {}, xg: {}, xa: {}, minutes: {} };
+  try {
+    for (let start = from; start <= to; start += 15) {
+      const end = Math.min(start + 14, to);
+      const res = await api.points(start, end).catch(() => null);
+      if (!res) continue;
+      for (const key of Object.keys(merged)) {
+        for (const [id, byGw] of Object.entries(res[key] ?? {})) {
+          merged[key][id] = { ...(merged[key][id] ?? {}), ...byGw };
+        }
+      }
+    }
+    LB.data = merged;
+    LB.from = from;
+    LB.to = to;
+  } finally {
+    LB.loading = false;
+    rerender();
+  }
+}
+
+function leaderboardRows() {
+  const gws = gwList(S.ui.anLbWindow);
+  if (!LB.data || !gws.length) return null;
+  const floor = windowMinMinutes(gws.length);
+  const rows = [];
+  S.players.forEach((p) => {
+    if (S.ui.anLbPos && p.pos !== S.ui.anLbPos) return;
+    let mins = 0, g = 0, a = 0, xg = 0, xa = 0;
+    gws.forEach((gw) => {
+      mins += LB.data.minutes[p.id]?.[gw] ?? 0;
+      g += LB.data.goals[p.id]?.[gw] ?? 0;
+      a += LB.data.assists[p.id]?.[gw] ?? 0;
+      xg += LB.data.xg[p.id]?.[gw] ?? 0;
+      xa += LB.data.xa[p.id]?.[gw] ?? 0;
+    });
+    if (mins < floor) return;
+    const xgi = xg + xa;
+    const actual = g + a;
+    rows.push({ id: p.id, name: p.name, short: p.short, pos: p.pos, g, a, xgi, actual, delta: actual - xgi });
+  });
+  return rows;
+}
+
+function dueSection(rerender) {
+  loadLeaderboardData(rerender); // fire-and-forget; rerenders itself once loaded
+
+  const filters = `<div class="filters">
+    <select id="anLbPos" aria-label="Position">
+      <option value="">All positions</option>
+      ${["GKP", "DEF", "MID", "FWD"].map((pos) => `<option ${pos === S.ui.anLbPos ? "selected" : ""}>${pos}</option>`).join("")}
+    </select>
+    <select id="anLbWindow" aria-label="Gameweek window">
+      ${LB_WINDOWS.map((w) => `<option value="${w}" ${S.ui.anLbWindow === w ? "selected" : ""}>${esc(lbWindowLabel(w))}</option>`).join("")}
+    </select>
+  </div>`;
+  const header = `<h3>Who's due a goal or assist?</h3>
+    <p class="cap">Actual goals + assists minus expected (xGI) over the window below - the same idea as the
+      Hub/Teams "finishing hot" and "due a correction" cards, at player level instead of team level. A big negative
+      gap means the chances are there and the finish hasn't arrived yet; a big positive gap means the output is
+      running ahead of the underlying chances.</p>
+    ${filters}`;
+
+  const gws = gwList(S.ui.anLbWindow);
+  if (!gws.length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
+
+  const rows = leaderboardRows();
+  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
+  if (!rows.length) {
+    return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
+  }
+
+  const meta = (r) => `${r.pos} · ${r.short} · ${r.g}G ${r.a}A vs ${r.xgi.toFixed(1)} xGI`;
+  const due = rows
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+  const hot = rows
+    .filter((r) => r.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+
+  return `<div class="chart-box">
+    ${header}
+    <h3 class="compare-sub">Due a goal or assist</h3>
+    ${divergingBars(due, { meta, empty: "Nobody's underperforming their xGI in this window." })}
+    <h3 class="compare-sub">Running hot</h3>
+    ${divergingBars(hot, { meta, empty: "Nobody's outperforming their xGI in this window." })}
+  </div>`;
+}
+
+/* ---------------- 5. Model accountability ---------------- */
 function calibrationSection() {
   const points = calibrationPoints();
   const summary = calibrationSummary(points);
@@ -374,4 +503,9 @@ function wire(root) {
   bindPicker("anPctlPicker", (id) => (S.ui.anPctlId = id));
   bindPicker("anH2hAPicker", (id) => (S.ui.anH2hA = id));
   bindPicker("anH2hBPicker", (id) => (S.ui.anH2hB = id));
+
+  const lbPos = $("#anLbPos", root);
+  if (lbPos) lbPos.addEventListener("change", () => { S.ui.anLbPos = lbPos.value; re(); });
+  const lbWindow = $("#anLbWindow", root);
+  if (lbWindow) lbWindow.addEventListener("change", () => { S.ui.anLbWindow = lbWindow.value; re(); });
 }

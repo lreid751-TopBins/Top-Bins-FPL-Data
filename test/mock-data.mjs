@@ -277,7 +277,7 @@ export function xgcFor(element, gw) {
   return +((statHash(element, gw, 2003) % 250) / 100).toFixed(2); // 0.00-2.49
 }
 
-export function pointsPayload(from, to, elements) {
+export function pointsPayload(from, to, onlyIds) {
   const points = {};
   const minutes = {};
   const goals = {};
@@ -285,11 +285,10 @@ export function pointsPayload(from, to, elements) {
   const xg = {};
   const xa = {};
   const xgc = {};
-  const ids = elements && elements.length
-    ? elements
-    : elements.length === 0
-    ? []
-    : [];
+  // Mirrors handler.ts's buildPoints: an explicit id list scopes the
+  // response to those players, an empty/missing one means no filter at all -
+  // every player, same as the real /points endpoint with no `elements` param.
+  const ids = onlyIds && onlyIds.length ? onlyIds : elements.map((e) => e.id);
   for (const id of ids) {
     for (let gw = from; gw <= Math.min(to, CURRENT_GW); gw++) {
       (points[id] ??= {})[gw] = pointsFor(id, gw);

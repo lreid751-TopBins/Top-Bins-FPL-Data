@@ -23,6 +23,16 @@ global.window = dom.window;
 global.document = dom.window.document;
 global.localStorage = dom.window.localStorage;
 global.Node = dom.window.Node;
+// In a real browser, confirm()/alert()/prompt() are reachable as bare
+// globals (planner.js's delete-squad confirm relies on exactly that) -
+// jsdom implements them on window but Node's global scope doesn't alias
+// them automatically the way it does document/localStorage/Node above.
+// Without this, calling bare confirm() from an async handler throws a
+// ReferenceError inside a promise nobody awaits - a silently dangling
+// unhandled rejection that only crashes the process whenever something
+// elsewhere in the run happens to yield the event loop long enough for
+// Node to notice it, instead of failing the specific check that caused it.
+global.confirm = dom.window.confirm;
 
 const misses = [];
 let journalRows = seedDecisions.map((d) => ({ ...d }));
@@ -3563,20 +3573,21 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
 /* =========================================================
    Analytics tab
    ========================================================= */
-check("Analytics tab renders all four sections with real values, no NaN/undefined", () => {
+check("Analytics tab renders all five sections with real values, no NaN/undefined", () => {
   renderAnalytics(panel("panel-analytics"));
   const html = panel("panel-analytics").innerHTML;
   if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
   if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
 
   const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
-  if (boxes.length !== 4) throw new Error(`expected 4 chart-box sections, got ${boxes.length}`);
+  if (boxes.length !== 5) throw new Error(`expected 5 chart-box sections, got ${boxes.length}`);
   if (!panel("panel-analytics").querySelector(".an-trend-chart svg")) throw new Error("no trend chart rendered");
   if (!panel("panel-analytics").querySelector(".an-pctl-row")) throw new Error("no percentile rows rendered");
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
+  if (!panel("panel-analytics").querySelector("#anLbPos")) throw new Error("no leaderboard position filter rendered");
   if (!panel("panel-analytics").querySelector(".an-calib-chart svg")) throw new Error("no calibration scatter rendered");
 
-  return "4 chart-box sections, trend/percentile/head-to-head/calibration all present";
+  return "5 chart-box sections, trend/percentile/head-to-head/due-a-goal/calibration all present";
 });
 
 check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
@@ -3681,6 +3692,67 @@ check("Analytics calibration section computes sane correlation/error/hit-rate su
 
   return `correlation ${corr.toFixed(2)}, avg error ${avgErr.toFixed(1)} pts, ${within3.toFixed(0)}% within 3 pts, ${dots.length} players plotted`;
 });
+
+await (async () => {
+  // The leaderboard's fetch is fire-and-forget from dueSection() (same
+  // shape as the report card's loadReportCard) - give it a tick to resolve
+  // before checking real content instead of its interim "Loading…" state.
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics due-a-goal-or-assist leaderboard renders due and hot lists from real per-GW goals/assists vs xGI", () => {
+    const html = panel("panel-analytics").innerHTML;
+    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the leaderboard");
+    const bars = panel("panel-analytics").querySelectorAll(".dbar");
+    if (!bars.length) throw new Error("no leaderboard bars rendered once data loaded");
+    const negs = panel("panel-analytics").querySelectorAll(".dbar-v.neg");
+    const poss = panel("panel-analytics").querySelectorAll(".dbar-v.pos");
+    if (!negs.length) throw new Error("expected at least one underperforming (due) player");
+    if (!poss.length) throw new Error("expected at least one overperforming (hot) player");
+    return `${bars.length} leaderboard bars, ${negs.length} due, ${poss.length} hot`;
+  });
+
+  const savedPos = S.ui.anLbPos;
+  const savedWindow = S.ui.anLbWindow;
+
+  S.ui.anLbPos = "GKP";
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics leaderboard position filter restricts the pool to that position only", () => {
+    const names = [...panel("panel-analytics").querySelectorAll(".dbar-l")].map((el) => el.textContent);
+    if (!names.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
+    const gkpNames = new Set(S.players.filter((p) => p.pos === "GKP").map((p) => p.name));
+    const leaked = names.filter((n) => !gkpNames.has(n));
+    if (leaked.length) throw new Error(`non-GKP name(s) leaked into the GKP-filtered leaderboard: ${leaked.join(", ")}`);
+    return `${names.length} GKP-only rows, no other position leaked in`;
+  });
+
+  S.ui.anLbPos = savedPos;
+  renderAnalytics(panel("panel-analytics"));
+  const before = panel("panel-analytics").querySelector(".dbar-m")?.textContent;
+
+  S.ui.anLbWindow = "3";
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics leaderboard gameweek-window control changes what's fetched and summed", () => {
+    const gws5 = gwList(savedWindow);
+    const gws3 = gwList("3");
+    if (gws3.length >= gws5.length) throw new Error("setup: 3-GW window should be shorter than the default window");
+    const after = panel("panel-analytics").querySelector(".dbar-m")?.textContent;
+    if (!before) throw new Error("setup: no leaderboard row before switching the window");
+    if (!after) throw new Error("no leaderboard rows after switching the window");
+    if (after === before) throw new Error("switching the GW window didn't change the summed G/A/xGI shown");
+    return `window narrowed from ${gws5.length} to ${gws3.length} GWs, summed totals changed`;
+  });
+
+  S.ui.anLbWindow = savedWindow;
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+})();
 
 check("Analytics tab is reachable from the nav and shows only when active", () => {
   const tab = document.querySelector('[data-tab="analytics"]');
