@@ -1259,7 +1259,7 @@ check("clicking a player's name on My Team opens their profile drawer", () => {
   if (drawer.hidden) throw new Error("drawer should no longer be hidden once opened");
   if (!drawer.innerHTML.includes(p.name)) throw new Error("drawer doesn't show the clicked player's name");
   if (!drawer.innerHTML.includes("xG")) throw new Error("drawer is missing xG");
-  if (!drawer.innerHTML.includes("Fixtures ahead")) throw new Error("drawer is missing the fixtures section");
+  if (!drawer.querySelector(".pd-timeline")) throw new Error("drawer is missing the form/fixtures timeline");
 
   document.getElementById("pdClose").click();
   if (PD.openId !== null) throw new Error("close button should clear PD.openId");
@@ -1322,7 +1322,7 @@ check("the drawer's hidden attribute is actually restored once the close animati
   return "hidden attribute correctly restored after the close transition completes";
 });
 
-check("player profile drawer shows a photo, grouped stats, and vertical fixture/result lists", () => {
+check("player profile drawer shows a photo, a hero stat, grouped stats, and one form/fixtures timeline", () => {
   const nameEl = panel("panel-squad").querySelector(".plr .nm[data-playerid]");
   const id = +nameEl.dataset.playerid;
   const p = S.playerById[id];
@@ -1334,19 +1334,26 @@ check("player profile drawer shows a photo, grouped stats, and vertical fixture/
   if (p.photo && img.tagName === "IMG" && img.src !== p.photo)
     throw new Error("drawer photo src doesn't match the player's photo field");
 
+  if (!drawer.querySelector(".pd-hero .an-big")) throw new Error("drawer is missing the hero stat");
+  if (!drawer.querySelector(".pd-hero-pct")) throw new Error("drawer is missing the hero stat's percentile rank");
+
   ["Underlying", "Returns", "Ownership &amp; risk"].forEach((group) => {
     if (!drawer.innerHTML.includes(group)) throw new Error(`drawer is missing the "${group}" stat group`);
   });
 
-  if (!drawer.innerHTML.includes("Recent results")) throw new Error("drawer is missing the recent-results list");
-  const fixtureRows = drawer.querySelectorAll(".pd-list .pd-row");
-  if (fixtureRows.length < 2) throw new Error("fixtures/results should render as a vertical list of rows, not chips");
-  fixtureRows.forEach((row) => {
-    if (!row.querySelector(".pd-row-gw")) throw new Error("each fixture/result row needs a gameweek label");
+  const timelineItems = drawer.querySelectorAll(".pd-timeline .pd-tl-item");
+  if (timelineItems.length < 2) throw new Error("form/fixtures should render as one timeline strip of items, not chips");
+  timelineItems.forEach((item) => {
+    if (!item.querySelector(".pd-tl-gw")) throw new Error("each timeline item needs a gameweek label");
   });
+  // Recent results and fixtures ahead used to be two separate lists -
+  // confirm they're genuinely one strip now, with exactly one divider
+  // between the last played and next unplayed gameweek.
+  const dividers = drawer.querySelectorAll(".pd-timeline .pd-tl-divider");
+  if (dividers.length > 1) throw new Error("expected at most one past/future divider in a single timeline");
 
   closePlayerDetail();
-  return `photo present, 3 stat groups, ${fixtureRows.length} fixture/result rows rendered vertically`;
+  return `photo + hero stat present, 3 stat groups, ${timelineItems.length} timeline items in one strip`;
 });
 
 await (async () => {
@@ -1358,7 +1365,7 @@ await (async () => {
 
   check("player profile drawer renders its core content immediately, not blocked by the third-party shot-map fetch", () => {
     const drawer = document.getElementById("playerDetail");
-    if (!drawer.innerHTML.includes("Fixtures ahead")) {
+    if (!drawer.querySelector(".pd-timeline")) {
       throw new Error("core drawer content should render synchronously regardless of the shots fetch");
     }
     if (!drawer.innerHTML.includes("Shots in the box")) {
@@ -1367,13 +1374,25 @@ await (async () => {
     return "core drawer content (incl. the shots header) renders synchronously on open";
   });
 
+  check("shots in the box starts collapsed", () => {
+    const drawer = document.getElementById("playerDetail");
+    const toggle = drawer.querySelector("#pdShotsToggle");
+    if (!toggle) throw new Error("no shots-section toggle button rendered");
+    if (toggle.getAttribute("aria-expanded") !== "false") throw new Error("shots section should start collapsed");
+    if (drawer.querySelector(".shot-box")) throw new Error("shot box shouldn't render before the section is expanded");
+    return "collapsed by default, no shot box rendered yet";
+  });
+
+  document.getElementById("playerDetail").querySelector("#pdShotsToggle").click();
   await new Promise((r) => setTimeout(r, 30));
 
-  check("shot box renders real plotted shots once understat data resolves", () => {
+  check("shot box renders real plotted shots once expanded and understat data resolves", () => {
     const drawer = document.getElementById("playerDetail");
     if (drawer.innerHTML.includes("NaN") || drawer.innerHTML.includes("undefined")) {
       throw new Error("bad value leaked into the shot box");
     }
+    const toggle = drawer.querySelector("#pdShotsToggle");
+    if (toggle.getAttribute("aria-expanded") !== "true") throw new Error("clicking the toggle should mark it expanded");
     const box = drawer.querySelector(".shot-box");
     if (!box) throw new Error("no shot box rendered once the mock fetch resolved");
     const dots = box.querySelectorAll(".shot-dot");
@@ -1393,6 +1412,18 @@ await (async () => {
   openPlayerDetail(idB);
   await new Promise((r) => setTimeout(r, 30));
 
+  check("switching players resets the shots toggle to collapsed, not carrying over the previous player's expanded state", () => {
+    const toggle = document.getElementById("playerDetail").querySelector("#pdShotsToggle");
+    if (!toggle) throw new Error("no shots-section toggle rendered for the newly-opened player");
+    if (toggle.getAttribute("aria-expanded") !== "false") {
+      throw new Error("a fresh openPlayerDetail() call should always start the shots section collapsed");
+    }
+    return "collapsed again after switching players";
+  });
+
+  document.getElementById("playerDetail").querySelector("#pdShotsToggle").click();
+  await new Promise((r) => setTimeout(r, 30));
+
   check("switching players shows that player's own shot box, not a stale or mixed-up one", () => {
     const drawer = document.getElementById("playerDetail");
     if (!drawer.innerHTML.includes(S.playerById[idB].name)) {
@@ -1401,6 +1432,7 @@ await (async () => {
     if (drawer.innerHTML.includes("NaN") || drawer.innerHTML.includes("undefined")) {
       throw new Error("bad value leaked into the shot box");
     }
+    if (!drawer.querySelector(".shot-box")) throw new Error("expanding should render player B's own shot box");
     return `switched to ${S.playerById[idB].name}'s own profile without mixing up shot data`;
   });
 

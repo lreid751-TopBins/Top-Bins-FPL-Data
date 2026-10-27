@@ -24,6 +24,12 @@ export const PD = {
  * of the drawer, which renders everything else synchronously today. */
 const SHOTS = { data: {}, loading: {} };
 
+// Collapsed by default - the box diagram is the deepest, most optional
+// layer of this drawer, and always resets closed on open (including
+// re-opening the same player) rather than trying to remember per-player
+// state, so it can never bleed one player's expanded view onto another's.
+let shotsExpanded = false;
+
 function loadShotMap(id) {
   if (id in SHOTS.data || SHOTS.loading[id]) return;
   SHOTS.loading[id] = true;
@@ -45,6 +51,7 @@ function backdropEl() {
 }
 
 export function openPlayerDetail(id) {
+  shotsExpanded = false;
   PD.openId = id;
   render();
   loadShotMap(id); // fire-and-forget; render() runs again when it resolves
@@ -87,47 +94,124 @@ function statBlock(label, value, help = "", cls = "") {
 }
 
 function statGroup(title, blocksHtml) {
-  return `<h3 class="pd-h3 pd-h3-tight">${esc(title)}</h3><div class="pd-stats">${blocksHtml}</div>`;
+  return `<h3 class="pd-h3 pd-h3-tight">${esc(title)}</h3><div class="pd-stats pd-stats-quiet">${blocksHtml}</div>`;
 }
 
-// One row of a vertical fixture/result list - shared shape for both the
-// "Fixtures ahead" (difficulty dot) and "Recent results" (points) lists,
-// so a blank gameweek or a missing opponent renders identically either way.
-function fixtureRow(gw, list, { pts, mins } = {}) {
-  const f = list[0];
-  const oppHtml = f
-    ? `${teamCrest(f.opp, 16)} ${esc(S.teams[f.opp]?.short || "?")} <i>${f.home ? "H" : "A"}</i>${
-        list.length > 1 ? ` <span class="pd-row-extra">+${list.length - 1}</span>` : ""
-      }`
-    : `<span class="sub-t">Blank gameweek</span>`;
+/* ---------------- Hero stat ----------------
+   One number, not twelve: the single most decision-relevant figure for
+   this player's position, shown big with a percentile rank underneath -
+   same "Adj xGI/90" and "DEFCON/90" the rest of the site already treats
+   as its premier attacking/defensive signals (Analytics' percentile
+   section, the Hub's Best Performers panel), just not previously shown
+   anywhere in this drawer at all - this is additive, not a promotion of
+   one of the twelve tiles below. */
+const HERO_STAT = {
+  attack: { key: "fixtureAdjXgi90", label: "Adj xGI/90", help: "Fixture-adjusted expected goal involvements per 90" },
+  defend: { key: "defcon90", label: "DEFCON/90", help: "Defensive contributions per 90" },
+};
 
-  let right = "";
-  if (pts !== undefined) {
-    const played = (mins ?? 0) > 0;
-    right = played
-      ? `<span class="pd-row-pts ${n(pts) >= 6 ? "hit" : n(pts) <= 1 ? "low" : ""}">${n(pts)}</span>`
-      : `<span class="pd-row-pts blank">DNP</span>`;
-  } else if (f) {
-    const d = difficultyOf(f, S.ui.fdrMode);
-    right = `<span class="pd-row-fdr" style="background:var(--fdr-${d})" title="Difficulty ${d}/5"></span>`;
-  }
+// Mirrors analytics.js's own adaptive minutes floor - kept as its own
+// couple of lines here rather than imported, since importing across
+// playerDetail.js/analytics.js for a four-line formula would be a new
+// coupling neither file currently has.
+function heroMinMinutes() {
+  return Math.min(270, Math.max(45, Math.round(S.currentGw * 60)));
+}
 
-  return `<div class="pd-row${f ? "" : " blank"}">
-    <span class="pd-row-gw">GW${gw}</span>
-    <span class="pd-row-opp">${oppHtml}</span>
-    ${right}
+function heroPercentile(player, key) {
+  const pool = S.players.filter((x) => x.pos === player.pos && x.minutes >= heroMinMinutes());
+  const value = player[key];
+  if (!pool.length || value == null || !Number.isFinite(value)) return 0;
+  const below = pool.filter((x) => x[key] != null && x[key] <= value).length;
+  return Math.round((below / pool.length) * 100);
+}
+
+function heroSection(p) {
+  const defensive = p.pos === "GKP" || p.pos === "DEF";
+  const stat = defensive ? HERO_STAT.defend : HERO_STAT.attack;
+  const value = p[stat.key];
+  const pct = heroPercentile(p, stat.key);
+  return `<div class="pd-hero">
+    <div class="an-big">${value == null ? "—" : f2(value)}</div>
+    <div class="an-big-label" title="${esc(stat.help)}">${esc(stat.label)}</div>
+    <div class="an-pctl-track pd-hero-track">
+      <span class="an-pctl-fill" style="width:${pct}%"></span>
+      <span class="an-pctl-tick" style="left:25%"></span>
+      <span class="an-pctl-tick" style="left:50%"></span>
+      <span class="an-pctl-tick" style="left:75%"></span>
+    </div>
+    <div class="pd-hero-pct">${pct}<span>th percentile for a ${esc(p.pos)}</span></div>
   </div>`;
 }
 
+/* ---------------- Unified timeline ----------------
+   One horizontally-scrolling strip, oldest-recent on the left through
+   furthest-future on the right, instead of two stacked vertical lists
+   that used the same row shape but never read as connected. */
+function timelineItem(gw, list, { pts, mins } = {}) {
+  const f = list[0];
+  const isPast = pts !== undefined;
+  const oppHtml = f
+    ? `${teamCrest(f.opp, 16)}<span class="pd-tl-code">${esc(S.teams[f.opp]?.short || "?")}</span><i>${f.home ? "H" : "A"}</i>${
+        list.length > 1 ? ` <span class="pd-tl-extra">+${list.length - 1}</span>` : ""
+      }`
+    : `<span class="sub-t">Blank</span>`;
+
+  let value;
+  if (isPast) {
+    const played = (mins ?? 0) > 0;
+    value = played
+      ? `<span class="pd-tl-pts ${n(pts) >= 6 ? "hit" : n(pts) <= 1 ? "low" : ""}">${n(pts)}</span>`
+      : `<span class="pd-tl-pts blank">DNP</span>`;
+  } else if (f) {
+    const d = difficultyOf(f, S.ui.fdrMode);
+    value = `<span class="pd-tl-fdr" style="background:var(--fdr-${d})" title="Difficulty ${d}/5"></span>`;
+  } else {
+    value = `<span class="pd-tl-fdr blank" title="Blank gameweek"></span>`;
+  }
+
+  return `<div class="pd-tl-item${f ? "" : " blank"}">
+    <div class="pd-tl-gw">GW${gw}</div>
+    <div class="pd-tl-opp">${oppHtml}</div>
+    ${value}
+  </div>`;
+}
+
+function timelineSection(p) {
+  const pastItems = p.formSeries.length
+    ? p.formSeries
+        .map((pts, i) => ({ gw: S.form.gws[i], pts, mins: p.formMins[i] }))
+        .filter((r) => r.gw != null)
+        .map((r) => timelineItem(r.gw, S.fxByTeamGw[p.teamId]?.[r.gw] || [], { pts: r.pts, mins: r.mins }))
+    : [];
+  const futureItems = upcoming(p.teamId, 6).map((r) => timelineItem(r.gw, r.list));
+
+  if (!pastItems.length && !futureItems.length) {
+    return `<h3 class="pd-h3">Form &amp; fixtures</h3><p class="pd-cap">No matches played or scheduled right now.</p>`;
+  }
+
+  const divider = pastItems.length && futureItems.length ? `<div class="pd-tl-divider" title="Now"></div>` : "";
+  return `<h3 class="pd-h3">Form &amp; fixtures</h3>
+    <p class="pd-cap">Points scored, most recent gameweeks through upcoming difficulty.</p>
+    <div class="pd-timeline">${pastItems.join("")}${divider}${futureItems.join("")}</div>`;
+}
+
+/* ---------------- Shots in the box (collapsible) ---------------- */
 function shotMapSection(id) {
-  const header = `<h3 class="pd-h3">Shots in the box</h3>
-    <p class="pd-cap">Shot locations and xG inside the box this season, from understat.com - not the FPL API, which has no shot data at all. Dot size is xG; gold is a goal.</p>`;
-  if (!(id in SHOTS.data)) return `${header}<p class="pd-cap">Loading shot data…</p>`;
+  const header = `<h3 class="pd-h3 pd-h3-toggle">
+    <button type="button" id="pdShotsToggle" aria-expanded="${shotsExpanded ? "true" : "false"}">
+      Shots in the box <span class="pd-h3-chevron">${shotsExpanded ? "▲" : "▼"}</span>
+    </button>
+  </h3>`;
+  if (!shotsExpanded) return header;
+
+  const cap = `<p class="pd-cap">Shot locations and xG inside the box this season, from understat.com - not the FPL API, which has no shot data at all. Dot size is xG; gold is a goal.</p>`;
+  if (!(id in SHOTS.data)) return `${header}${cap}<p class="pd-cap">Loading shot data…</p>`;
   const shots = SHOTS.data[id];
   if (shots == null) {
-    return `${header}<p class="pd-cap">Couldn't reach it just now - this third-party source can be temporarily unavailable.</p>`;
+    return `${header}${cap}<p class="pd-cap">Couldn't reach it just now - this third-party source can be temporarily unavailable.</p>`;
   }
-  return `${header}${shotBox(shots)}`;
+  return `${header}${cap}${shotBox(shots)}`;
 }
 
 function render() {
@@ -137,7 +221,6 @@ function render() {
   if (!p) { panel.innerHTML = ""; return; }
 
   const team = S.teams[p.teamId];
-  const defensive = p.pos === "GKP" || p.pos === "DEF";
 
   // Layered under the img rather than swapped in by hand: a headshot 404
   // falls back to the jersey graphic, and if THAT fails too (mock/dev data,
@@ -150,19 +233,7 @@ function render() {
       ? `<img class="pd-photo pd-photo-fallback" src="${p.jersey}" alt="" loading="lazy" onerror="this.style.display='none'">`
       : "";
 
-  const resultsRows = p.formSeries.length
-    ? p.formSeries
-        .map((pts, i) => ({ gw: S.form.gws[i], pts, mins: p.formMins[i] }))
-        .filter((r) => r.gw != null)
-        .reverse()
-        .map((r) => fixtureRow(r.gw, S.fxByTeamGw[p.teamId]?.[r.gw] || [], { pts: r.pts, mins: r.mins }))
-        .join("")
-    : `<p class="pd-cap">No matches played yet this season.</p>`;
-
-  const fixturesRows = upcoming(p.teamId, 6)
-    .map((r) => fixtureRow(r.gw, r.list))
-    .join("");
-
+  const defensive = p.pos === "GKP" || p.pos === "DEF";
   const netCls = p.netTransfers > 0 ? "pos" : p.netTransfers < 0 ? "neg" : "";
   const moveCls = p.priceMove > 0 ? "pos" : p.priceMove < 0 ? "neg" : "";
 
@@ -184,6 +255,8 @@ function render() {
         ? `<p class="pd-news">${esc(p.news || (p.status === "d" ? "Doubtful for the next match." : "Unavailable."))}</p>`
         : ""
     }
+
+    ${heroSection(p)}
 
     ${statGroup(
       "Underlying",
@@ -221,17 +294,23 @@ function render() {
         statBlock("xMin", p.xMin + "'", "Expected minutes next gameweek")
     )}
 
-    <h3 class="pd-h3">Recent results</h3>
-    <p class="pd-cap">Points in each of the last six gameweeks, most recent first.</p>
-    <div class="pd-list">${resultsRows}</div>
-
-    <h3 class="pd-h3">Fixtures ahead</h3>
-    <div class="pd-list">${fixturesRows}</div>
+    ${timelineSection(p)}
 
     ${shotMapSection(p.id)}
   `;
 
   $("#pdClose", panel).onclick = closePlayerDetail;
+  const shotsToggle = $("#pdShotsToggle", panel);
+  // stopPropagation matters here, not just tidiness: this handler calls
+  // render(), which replaces panel.innerHTML - including the very button
+  // the click is still bubbling from. With the event left to bubble
+  // naturally, it reaches document's click-outside listener carrying a
+  // now-detached e.target, whose .closest("#playerDetail") can no longer
+  // find its (destroyed) ancestor - so that listener reads it as a click
+  // outside the drawer and closes it right back down, a tick after it
+  // opened. Same reason every other in-drawer trigger already stops
+  // propagation (see the [data-playerid] handlers below).
+  if (shotsToggle) shotsToggle.onclick = (e) => { e.stopPropagation(); shotsExpanded = !shotsExpanded; render(); };
 }
 
 // Wired once, at module load - the panel has no view of its own to run a
