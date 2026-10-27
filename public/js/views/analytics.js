@@ -1,24 +1,30 @@
-import { S, f1, f2, difficultyOf } from "../store.js";
-import { $, $$, esc } from "../ui.js";
+import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
+import { $, $$, esc, th, teamCrest } from "../ui.js";
 import { scatter, radar, lineChart, divergingBars, POS_COLOR } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
 import { api } from "../api.js";
+import { aggregate as aggregateTeams } from "./teams.js";
 
 /* =========================================================
    Analytics tab
 
-   Structural ways to get more out of the stats already computed
-   elsewhere on the site - not new numbers, new lenses on the same ones:
-   a rolling trend instead of one flat figure, a percentile instead of a
-   bare decimal, a head-to-head overlay instead of two separate rows, a
-   goals+assists-vs-xGI leaderboard over a chosen window, and a check on
-   whether the projection engine's own formula actually tracks reality.
-   Everything but the leaderboard reuses data My Team/Player Finder/the
-   Planner already pull; the leaderboard is the one section that needs
-   its own fetch (goals/assists per gameweek aren't in that shared pool),
-   reusing the /points endpoint already built for the My Team report card.
+   Three groups:
+   - Squad triage: pool-wide, form-first sections sharing one position/
+     window filter bar - due/hot, a sortable squad-audit table,
+     differentials, and current set-piece duty.
+   - Player deep dive: the original single/two-player picker sections -
+     trend (now with a raw-vs-fixture-adjusted toggle), percentile,
+     head-to-head.
+   - Fixtures through form: upcoming difficulty next to teams' actual
+     recent output, not just a preseason rating.
+   Closes with the existing model-accountability (calibration) check.
+
+   Everything reuses data already pulled elsewhere on the site - the
+   /points endpoint (My Team report card), /teams-window (Teams page),
+   /form (boot-time per-player form), and the bootstrap set-piece fields.
+   No backend changes.
    ========================================================= */
 
 // A flat 270-minute floor (three full games - the same "meaningful sample"
@@ -34,14 +40,18 @@ function minMinutes() {
 }
 
 export function renderAnalytics(root) {
+  const rerender = () => renderAnalytics(root);
+  loadWindowData(rerender); // shared squad-triage fetch, fire-and-forget
+  const rows = windowRows();
+
   root.innerHTML = `
     <div class="eyebrow">Analytics</div>
     <div class="section-head">
       <h2>Analytics</h2>
     </div>
     <p class="hint" style="margin-top:-6px;max-width:70ch">
-      Ways to look past the raw numbers already on the site - trend, percentile, head-to-head, who's due a goal or
-      assist, and how well the Planner's own projection engine actually tracks what happens.
+      Three ways to dig deeper: triage a whole shortlist by recent form, study one player in full, or read upcoming
+      fixtures through how teams are actually playing right now instead of a preseason rating.
     </p>
 
     <datalist id="anPlayerList">
@@ -50,10 +60,22 @@ export function renderAnalytics(root) {
         .join("")}
     </datalist>
 
+    <div class="eyebrow" style="margin-top:28px">Squad triage</div>
+    ${triageFilterBar()}
+    ${dueSection(rows)}
+    ${auditSection(rows)}
+    ${differentialSection(rows)}
+    ${setPieceSection()}
+
+    <div class="eyebrow" style="margin-top:28px">Player deep dive</div>
     ${trendSection()}
     ${percentileSection()}
     ${headToHeadSection()}
-    ${dueSection(() => renderAnalytics(root))}
+
+    <div class="eyebrow" style="margin-top:28px">Fixtures through form</div>
+    ${fixturesFormSection(rerender)}
+
+    <div class="eyebrow" style="margin-top:28px">Model accountability</div>
     ${calibrationSection()}
   `;
   wire(root);
@@ -79,6 +101,9 @@ function playerPicker(id, label, selected) {
     <input type="text" list="anPlayerList" id="${id}" placeholder="Search a player…" value="${selected ? esc(playerLabel(selected)) : ""}">
   </label>`;
 }
+function playerLink(id, name) {
+  return `<span data-playerid="${id}" class="an-h2h-name" tabindex="0" role="button">${esc(name)}</span>`;
+}
 /** True pre-season edge case only (before literally anyone has minutes) -
  * every other guard in this file has data by GW1. A message here beats a
  * silently blank section. */
@@ -88,31 +113,364 @@ function emptyBox(title) {
   </div>`;
 }
 
-/* ---------------- 1. Trend ---------------- */
+/* =========================================================
+   Squad triage - shared window fetch + filter bar
+   ========================================================= */
+const WINDOW_SPECS = ["3", "5", "8", "season"];
+function windowLabel(spec) {
+  return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
+}
+
+/** Same adaptive-floor idea as minMinutes(), keyed to how many gameweeks
+ * are actually in the chosen window rather than the whole season - a
+ * 3-GW window shouldn't demand the same minutes as a full-season one. */
+function windowMinMinutes(gwCount) {
+  return Math.min(270, Math.max(45, Math.round(gwCount * 60)));
+}
+
+/** Per-player per-GW goals/assists/xG/xA/minutes/points for the window
+ * currently loaded, keyed id -> gw -> value. Shared by every squad-triage
+ * section below so picking a window or position fetches once instead of
+ * once per section. Not part of S: nothing else on the site needs actual
+ * goals/assists/points per gameweek for every player. */
+const WIN = { loading: false, data: null, from: null, to: null };
+
+/** Mirrors fetchReportCardData in reportCard.js - same <=15-GW chunking
+ * around the /points endpoint's own range cap - but for the whole player
+ * pool instead of one squad's 15 (no `elements` filter = every player). */
+async function loadWindowData(rerender) {
+  const gws = gwList(S.ui.anWindow);
+  if (!gws.length || WIN.loading) return;
+  const from = gws[0];
+  const to = gws[gws.length - 1];
+  if (WIN.data && WIN.from === from && WIN.to === to) return;
+
+  WIN.loading = true;
+  const merged = { goals: {}, assists: {}, xg: {}, xa: {}, minutes: {}, points: {} };
+  try {
+    for (let start = from; start <= to; start += 15) {
+      const end = Math.min(start + 14, to);
+      const res = await api.points(start, end).catch(() => null);
+      if (!res) continue;
+      for (const key of Object.keys(merged)) {
+        for (const [id, byGw] of Object.entries(res[key] ?? {})) {
+          merged[key][id] = { ...(merged[key][id] ?? {}), ...byGw };
+        }
+      }
+    }
+    WIN.data = merged;
+    WIN.from = from;
+    WIN.to = to;
+  } finally {
+    WIN.loading = false;
+    rerender();
+  }
+}
+
+/** One row per player passing the shared position filter and this
+ * window's minutes floor, with everything due/hot, the audit table, and
+ * the differential finder need - computed once per render instead of
+ * once per section. Null while the window data hasn't loaded yet. */
+function windowRows() {
+  const gws = gwList(S.ui.anWindow);
+  if (!WIN.data || !gws.length) return null;
+  const floor = windowMinMinutes(gws.length);
+  const half = Math.ceil(gws.length / 2);
+  const firstHalf = gws.slice(0, half);
+  const secondHalf = gws.slice(half);
+
+  const rows = [];
+  S.players.forEach((p) => {
+    if (S.ui.anPos && p.pos !== S.ui.anPos) return;
+
+    let mins = 0, g = 0, a = 0, xg = 0, xa = 0, pts = 0;
+    let minsFirst = 0, minsSecond = 0;
+    const ptsSeries = [];
+    gws.forEach((gw) => {
+      const gwMins = WIN.data.minutes[p.id]?.[gw] ?? 0;
+      mins += gwMins;
+      g += WIN.data.goals[p.id]?.[gw] ?? 0;
+      a += WIN.data.assists[p.id]?.[gw] ?? 0;
+      xg += WIN.data.xg[p.id]?.[gw] ?? 0;
+      xa += WIN.data.xa[p.id]?.[gw] ?? 0;
+      const gwPts = WIN.data.points[p.id]?.[gw];
+      if (gwPts != null) { pts += gwPts; ptsSeries.push(gwPts); }
+      if (firstHalf.includes(gw)) minsFirst += gwMins;
+      else minsSecond += gwMins;
+    });
+    if (mins < floor) return;
+
+    const xgi = xg + xa;
+    const actual = g + a;
+    const formPerGw = pts / (gws.length || 1);
+
+    // Consistency: coefficient of variation of per-GW points - how spread
+    // out the returns are relative to their own average, not an absolute
+    // points threshold, so a nailed-on starter's quiet weeks don't read
+    // the same as a bench player's. Null with fewer than 2 played GWs.
+    let consistency = null;
+    if (ptsSeries.length >= 2) {
+      const mean = ptsSeries.reduce((s, v) => s + v, 0) / ptsSeries.length;
+      const variance = ptsSeries.reduce((s, v) => s + (v - mean) ** 2, 0) / ptsSeries.length;
+      const sd = Math.sqrt(variance);
+      consistency = mean > 0 ? sd / mean : sd > 0 ? Infinity : 0;
+    }
+
+    // Minutes trend: average minutes per GW in the second half of the
+    // window vs the first - not raw totals, so an odd-length window
+    // doesn't bias the comparison.
+    const avgFirst = firstHalf.length ? minsFirst / firstHalf.length : 0;
+    const avgSecond = secondHalf.length ? minsSecond / secondHalf.length : avgFirst;
+
+    rows.push({
+      id: p.id, name: p.name, short: p.short, pos: p.pos, teamId: p.teamId,
+      price: p.price, selected: p.selected,
+      g, a, xgi, actual, delta: actual - xgi,
+      formPerGw, consistency, minutesDelta: secondHalf.length ? avgSecond - avgFirst : 0,
+    });
+  });
+  return rows;
+}
+
+function triageFilterBar() {
+  return `<div class="filters">
+    <select id="anPos" aria-label="Position">
+      <option value="">All positions</option>
+      ${["GKP", "DEF", "MID", "FWD"].map((pos) => `<option ${pos === S.ui.anPos ? "selected" : ""}>${pos}</option>`).join("")}
+    </select>
+    <select id="anWindow" aria-label="Gameweek window">
+      ${WINDOW_SPECS.map((w) => `<option value="${w}" ${S.ui.anWindow === w ? "selected" : ""}>${esc(windowLabel(w))}</option>`).join("")}
+    </select>
+  </div>`;
+}
+
+function consistencyTag(cv) {
+  if (cv == null) return { label: "—", cls: "" };
+  if (!Number.isFinite(cv)) return { label: "Streaky", cls: "neg" };
+  return cv < 0.6 ? { label: "Steady", cls: "pos" } : { label: "Streaky", cls: "neg" };
+}
+// A substitute appearance is worth roughly this many minutes - the bar
+// for calling a real shift in role rather than normal match-to-match noise.
+const MINUTES_TREND_BAR = 15;
+function minutesTrendTag(delta) {
+  if (delta > MINUTES_TREND_BAR) return { label: "▲ Rising", cls: "pos" };
+  if (delta < -MINUTES_TREND_BAR) return { label: "▼ Falling", cls: "neg" };
+  return { label: "● Steady", cls: "" };
+}
+
+/* ---------------- Due a goal or assist ---------------- */
+function dueSection(rows) {
+  const header = `<h3>Who's due a goal or assist?</h3>
+    <p class="cap">Actual goals + assists minus expected (xGI) over the window above - the same idea as the
+      Hub/Teams "finishing hot" and "due a correction" cards, at player level instead of team level. A big negative
+      gap means the chances are there and the finish hasn't arrived yet; a big positive gap means the output is
+      running ahead of the underlying chances.</p>`;
+
+  if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
+  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
+  if (!rows.length) {
+    return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
+  }
+
+  const meta = (r) => `${r.pos} · ${r.short} · ${r.g}G ${r.a}A vs ${r.xgi.toFixed(1)} xGI`;
+  const due = rows
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+  const hot = rows
+    .filter((r) => r.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+
+  return `<div class="chart-box">
+    ${header}
+    <h3 class="compare-sub">Due a goal or assist</h3>
+    ${divergingBars(due, { meta, empty: "Nobody's underperforming their xGI in this window." })}
+    <h3 class="compare-sub">Running hot</h3>
+    ${divergingBars(hot, { meta, empty: "Nobody's outperforming their xGI in this window." })}
+  </div>`;
+}
+
+/* ---------------- Squad-audit table ---------------- */
+const AUDIT_COLS = [
+  { k: "name", l: "Player" },
+  { k: "pos", l: "Pos" },
+  { k: "price", l: "£" },
+  { k: "formPerGw", l: "Form", help: "Average points per gameweek in the selected window" },
+  { k: "delta", l: "Due/Hot Δ", help: "Actual goals+assists minus expected (xGI) in the window" },
+  { k: "consistency", l: "Consistency", help: "How spread out the per-gameweek returns are, relative to their own average" },
+  { k: "minutesDelta", l: "Mins trend", help: "Average minutes in the second half of the window vs the first" },
+  { k: "selected", l: "Own%" },
+];
+
+function auditSection(rows) {
+  const header = `<h3>Squad audit</h3>
+    <p class="cap">Every signal above in one sortable table instead of one player at a time - scan a wildcard
+      shortlist fast. Same position/window filters as the rest of this group.</p>`;
+
+  if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
+  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
+  if (!rows.length) {
+    return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
+  }
+
+  const { k, dir } = S.ui.anAuditSort;
+  const text = k === "name" || k === "pos";
+  const sorted = [...rows].sort((a, b) => (text ? a[k].localeCompare(b[k]) * -dir : (n(a[k]) - n(b[k])) * dir));
+
+  return `<div class="chart-box">
+    ${header}
+    <div class="twrap">
+      <table class="an-audit">
+        <thead><tr>${AUDIT_COLS.map((c) => th(c, k, dir)).join("")}</tr></thead>
+        <tbody>${sorted.map(auditRow).join("")}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function auditRow(r) {
+  const cons = consistencyTag(r.consistency);
+  const mtrend = minutesTrendTag(r.minutesDelta);
+  return `<tr>
+    <td>${playerLink(r.id, r.name)}</td>
+    <td>${esc(r.pos)}</td>
+    <td class="num">£${r.price.toFixed(1)}</td>
+    <td class="num">${r.formPerGw.toFixed(1)}</td>
+    <td class="num ${r.delta >= 0 ? "pos" : "neg"}">${signed(+r.delta.toFixed(1))}</td>
+    <td><span class="tag ${cons.cls}">${cons.label}</span></td>
+    <td><span class="tag ${mtrend.cls}">${mtrend.label}</span></td>
+    <td class="num">${f1(r.selected)}%</td>
+  </tr>`;
+}
+
+/* ---------------- Differential finder ---------------- */
+// FPL convention, not a hard rule - a player under this ownership counts
+// as a differential rather than a template pick most rivals already have.
+const DIFFERENTIAL_OWNERSHIP = 15;
+
+function differentialSection(rows) {
+  const header = `<h3>Differential finder</h3>
+    <p class="cap">In form and still mostly unowned (under ${DIFFERENTIAL_OWNERSHIP}%) - the gap between "good" and
+      "an actual edge." Ranked by form alone, same window and position filters as above.</p>`;
+
+  if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
+  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
+
+  const diffs = rows
+    .filter((r) => r.selected < DIFFERENTIAL_OWNERSHIP)
+    .sort((a, b) => b.formPerGw - a.formPerGw)
+    .slice(0, 8);
+
+  if (!diffs.length) {
+    return `<div class="chart-box">${header}<p class="hint">Nobody both cleared the minutes bar and sits under ${DIFFERENTIAL_OWNERSHIP}% owned in this window.</p></div>`;
+  }
+
+  return `<div class="chart-box">
+    ${header}
+    <div class="twrap">
+      <table>
+        <thead><tr><th>Player</th><th>Pos</th><th>Team</th><th class="num">Form</th><th class="num">Own%</th></tr></thead>
+        <tbody>${diffs
+          .map(
+            (r) => `<tr>
+              <td>${playerLink(r.id, r.name)}</td>
+              <td>${esc(r.pos)}</td>
+              <td>${esc(S.teams[r.teamId]?.short || "")}</td>
+              <td class="num">${r.formPerGw.toFixed(1)}</td>
+              <td class="num">${f1(r.selected)}%</td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+/* ---------------- Set-piece spotlight ---------------- */
+// Pure S.players snapshot - no window/fetch dependency, so this is always
+// available even pre-GW1, unlike the rest of this group.
+function setPieceRows(orderKey) {
+  return S.players
+    .filter((p) => p[orderKey] === 1 || p[orderKey] === 2)
+    .map((p) => ({ id: p.id, name: p.name, short: p.short, selected: p.selected, order: p[orderKey] }))
+    .sort((a, b) => a.order - b.order || a.selected - b.selected);
+}
+
+function setPieceSection() {
+  return `<div class="chart-box">
+    <h3>Set-piece spotlight</h3>
+    <p class="cap">Who's currently on penalties, corners/indirect free-kicks, and direct free-kicks - straight from
+      this week's declared order. This shows who has the duty right now, not when it changed hands: the FPL API
+      doesn't expose that history, so there's no "just inherited this" detection here, only the current roster.</p>
+    ${setPieceGroup("Penalties", setPieceRows("penaltyOrder"))}
+    ${setPieceGroup("Corners / indirect free-kicks", setPieceRows("cornersOrder"))}
+    ${setPieceGroup("Direct free-kicks", setPieceRows("freekickOrder"))}
+  </div>`;
+}
+
+function setPieceGroup(title, list) {
+  return `<h3 class="compare-sub">${esc(title)}</h3>
+    ${
+      !list.length
+        ? `<p class="hint">Nobody currently flagged.</p>`
+        : `<div class="twrap">
+        <table>
+          <thead><tr><th>Player</th><th>Team</th><th>Order</th><th class="num">Own%</th></tr></thead>
+          <tbody>${list
+            .map(
+              (r) => `<tr>
+                <td>${playerLink(r.id, r.name)}${r.selected < 10 ? ` <span class="tag pos">Differential</span>` : ""}</td>
+                <td>${esc(r.short)}</td>
+                <td>${r.order === 1 ? "1st" : "2nd"}</td>
+                <td class="num">${f1(r.selected)}%</td>
+              </tr>`
+            )
+            .join("")}</tbody>
+        </table>
+      </div>`
+    }`;
+}
+
+/* =========================================================
+   Player deep dive
+   ========================================================= */
+
+/* ---------------- Trend ---------------- */
 function trendSection() {
   const p = S.ui.anTrendId ? S.playerById[S.ui.anTrendId] : null;
   const player = p && p.minutes >= minMinutes() ? p : defaultPlayer();
   if (!player) return emptyBox("Is he heating up, or cooling off?");
 
-  const series = trendSeries(player);
+  const raw = !!S.ui.anTrendRaw;
+  const series = trendSeries(player, raw);
   const latest = series.length ? series[series.length - 1].y : null;
-  const rising = series.length >= 2 && series[series.length - 1].y > series[0].y;
+  const trend = trendSlope(series);
 
   return `<div class="chart-box hero">
     <h3>Is he heating up, or cooling off?</h3>
     <p class="cap">Every underlying stat elsewhere on the site is a single number - season total or a flat last-6
-      average. This keeps it per gameweek instead: <b>Adj xGI/90</b>, the same fixture-adjusted figure from Player
-      Finder and the Planner, one point per played gameweek instead of collapsed into one.</p>
+      average. This keeps it per gameweek instead, in two flavours: <b>fixture-adjusted</b> (the same figure Player
+      Finder and the Planner use, weighted by opponent strength) or <b>raw output</b> (what actually happened,
+      regardless of who it came against) - toggle below.</p>
     ${playerPicker("anTrendPicker", "Player", player)}
+    <div class="seg" role="group" aria-label="Trend basis" style="margin-top:10px">
+      <button data-trendraw="0" ${!raw ? 'aria-pressed="true"' : ""}>Fixture-adjusted</button>
+      <button data-trendraw="1" ${raw ? 'aria-pressed="true"' : ""}>Raw output</button>
+    </div>
     <div style="margin-top:14px">
       <div class="an-trend-layout">
         <div class="an-trend-chart">${lineChart(series, { fmt: (v) => v.toFixed(2) })}</div>
         <div class="an-trend-side">
           <div class="an-big">${latest == null ? "—" : latest.toFixed(2)}</div>
-          <div class="an-big-label">Adj xGI/90, most recent GW</div>
+          <div class="an-big-label">${raw ? "xGI/90" : "Adj xGI/90"}, most recent GW</div>
           ${
-            series.length >= 2
-              ? `<span class="tag ${rising ? "pos" : "neg"}">${rising ? "▲ Heating up" : "▼ Cooling off"}</span>`
+            trend && trend.real
+              ? `<span class="tag ${trend.rising ? "pos" : "neg"}">${trend.rising ? "▲ Heating up" : "▼ Cooling off"}</span>`
+              : series.length >= 3
+              ? `<span class="hint" style="margin:0">No clear trend yet - recent output is roughly flat.</span>`
               : `<span class="hint" style="margin:0">Not enough recent minutes to call a direction yet.</span>`
           }
         </div>
@@ -121,10 +479,10 @@ function trendSection() {
   </div>`;
 }
 
-/** Per-gameweek fixture-adjusted xGI/90 - same weighting store.js's season
- * aggregate uses (opponent "attack" difficulty band ÷ 3), kept per week
- * instead of averaged into one figure. */
-function trendSeries(p) {
+/** Per-gameweek xGI/90, either raw or weighted by opponent "attack"
+ * difficulty (same ÷3-banded weighting store.js's season aggregate uses),
+ * kept per week instead of averaged into one figure. */
+function trendSeries(p, raw = false) {
   const gws = S.form.gws || [];
   const xgiSeries = S.form.xgi?.[p.id] || [];
   return gws
@@ -132,16 +490,36 @@ function trendSeries(p) {
       const mins = p.formMins?.[i];
       const xgi = xgiSeries[i];
       if (!mins || mins <= 0 || xgi == null) return null;
+      const rate90 = (xgi * 90) / mins;
+      if (raw) return { x: `GW${gw}`, y: rate90 };
       const fixtures = S.fxByTeamGw[p.teamId]?.[gw];
       if (!fixtures || !fixtures.length) return null;
       const avgDifficulty = fixtures.reduce((s, fx) => s + difficultyOf(fx, "attack"), 0) / fixtures.length;
-      const rate90 = (xgi * 90) / mins;
       return { x: `GW${gw}`, y: rate90 * (avgDifficulty / 3) };
     })
     .filter(Boolean);
 }
 
-/* ---------------- 2. Percentile ---------------- */
+/** Least-squares slope of the series against its own GW index, called a
+ * real trend only once it clears 15% of the series' own mean per
+ * gameweek - a slope that's small relative to the series' own scale is
+ * just noise around a flat line, not a direction worth naming. Returns
+ * null with fewer than 3 points (not enough to fit a line at all). */
+function trendSlope(series) {
+  const len = series.length;
+  if (len < 3) return null;
+  const xs = series.map((_, i) => i);
+  const ys = series.map((pt) => pt.y);
+  const mx = xs.reduce((s, v) => s + v, 0) / len;
+  const my = ys.reduce((s, v) => s + v, 0) / len;
+  let num = 0, den = 0;
+  xs.forEach((x, i) => { num += (x - mx) * (ys[i] - my); den += (x - mx) ** 2; });
+  const slope = den > 0 ? num / den : 0;
+  if (my <= 0 || Math.abs(slope) / my < 0.15) return { slope, real: false };
+  return { slope, real: true, rising: slope > 0 };
+}
+
+/* ---------------- Percentile ---------------- */
 const PCTL_STATS = [
   { k: "xgi90", l: "xGI/90", fmt: f2 },
   { k: "chanceQuality", l: "Chance quality", fmt: f2 },
@@ -191,7 +569,7 @@ function percentileOf(pool, key, value) {
   return Math.round((below / pool.length) * 100);
 }
 
-/* ---------------- 3. Head-to-head ---------------- */
+/* ---------------- Head-to-head ---------------- */
 const H2H_AXES_DEF = [
   { key: "xg90", label: "xG/90" },
   { key: "xa90", label: "xA/90" },
@@ -267,130 +645,83 @@ function h2hFmt(key, v) {
   return f2(v);
 }
 
-/* ---------------- 4. Due a goal or assist ---------------- */
-const LB_WINDOWS = ["3", "5", "8", "season"];
-function lbWindowLabel(spec) {
-  return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
+/* =========================================================
+   Fixtures through form
+   ========================================================= */
+const FIX_SPANS = [3, 5, 8];
+let FIX = { from: 0, to: 0, data: null, loading: false, error: "" };
+
+function fixturesFormRange(span) {
+  const to = S.currentGw || 0;
+  if (!to) return null;
+  return { from: Math.max(1, to - span + 1), to };
 }
 
-/** Same adaptive-floor idea as minMinutes(), keyed to how many gameweeks
- * are actually in the chosen window rather than the whole season - a
- * 3-GW window shouldn't demand the same minutes as a full-season one. */
-function windowMinMinutes(gwCount) {
-  return Math.min(270, Math.max(45, Math.round(gwCount * 60)));
-}
+function fixturesFormSection(rerender) {
+  const span = S.ui.anFixSpan || 5;
+  const range = fixturesFormRange(span);
 
-/** Fetched goals/assists/xG/xA/minutes for the window currently loaded,
- * keyed by player id -> gw -> value. Not part of S: nothing else on the
- * site needs actual goals/assists per gameweek for every player, so this
- * stays a leaderboard-local fetch instead of another S.form field. */
-const LB = { loading: false, data: null, from: null, to: null };
+  const header = `<h3>Fixtures through a form lens</h3>
+    <p class="cap">Static difficulty next to each team's actual recent output - a nominally "easy" fixture against a
+      side that's been leaking chances for weeks should read differently than the same fixture against one that's
+      been solid. Next-5 difficulty is the site's existing FDR (Fixture Ticker's current mode); the form columns are
+      real xG/xGC from the window below, not a preseason rating.</p>
+    <div class="filters">
+      <select id="anFixSpan" aria-label="Recent-form window">
+        ${FIX_SPANS.map((g) => `<option value="${g}" ${g === span ? "selected" : ""}>Last ${g} GWs</option>`).join("")}
+      </select>
+    </div>`;
 
-/** Mirrors fetchReportCardData in reportCard.js - same <=15-GW chunking
- * around the /points endpoint's own range cap - but for the whole player
- * pool instead of one squad's 15 (no `elements` filter = every player). */
-async function loadLeaderboardData(rerender) {
-  const gws = gwList(S.ui.anLbWindow);
-  if (!gws.length || LB.loading) return;
-  const from = gws[0];
-  const to = gws[gws.length - 1];
-  if (LB.data && LB.from === from && LB.to === to) return;
+  if (!range) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
 
-  LB.loading = true;
-  const merged = { goals: {}, assists: {}, xg: {}, xa: {}, minutes: {} };
-  try {
-    for (let start = from; start <= to; start += 15) {
-      const end = Math.min(start + 14, to);
-      const res = await api.points(start, end).catch(() => null);
-      if (!res) continue;
-      for (const key of Object.keys(merged)) {
-        for (const [id, byGw] of Object.entries(res[key] ?? {})) {
-          merged[key][id] = { ...(merged[key][id] ?? {}), ...byGw };
-        }
-      }
-    }
-    LB.data = merged;
-    LB.from = from;
-    LB.to = to;
-  } finally {
-    LB.loading = false;
-    rerender();
-  }
-}
-
-function leaderboardRows() {
-  const gws = gwList(S.ui.anLbWindow);
-  if (!LB.data || !gws.length) return null;
-  const floor = windowMinMinutes(gws.length);
-  const rows = [];
-  S.players.forEach((p) => {
-    if (S.ui.anLbPos && p.pos !== S.ui.anLbPos) return;
-    let mins = 0, g = 0, a = 0, xg = 0, xa = 0;
-    gws.forEach((gw) => {
-      mins += LB.data.minutes[p.id]?.[gw] ?? 0;
-      g += LB.data.goals[p.id]?.[gw] ?? 0;
-      a += LB.data.assists[p.id]?.[gw] ?? 0;
-      xg += LB.data.xg[p.id]?.[gw] ?? 0;
-      xa += LB.data.xa[p.id]?.[gw] ?? 0;
-    });
-    if (mins < floor) return;
-    const xgi = xg + xa;
-    const actual = g + a;
-    rows.push({ id: p.id, name: p.name, short: p.short, pos: p.pos, g, a, xgi, actual, delta: actual - xgi });
-  });
-  return rows;
-}
-
-function dueSection(rerender) {
-  loadLeaderboardData(rerender); // fire-and-forget; rerenders itself once loaded
-
-  const filters = `<div class="filters">
-    <select id="anLbPos" aria-label="Position">
-      <option value="">All positions</option>
-      ${["GKP", "DEF", "MID", "FWD"].map((pos) => `<option ${pos === S.ui.anLbPos ? "selected" : ""}>${pos}</option>`).join("")}
-    </select>
-    <select id="anLbWindow" aria-label="Gameweek window">
-      ${LB_WINDOWS.map((w) => `<option value="${w}" ${S.ui.anLbWindow === w ? "selected" : ""}>${esc(lbWindowLabel(w))}</option>`).join("")}
-    </select>
-  </div>`;
-  const header = `<h3>Who's due a goal or assist?</h3>
-    <p class="cap">Actual goals + assists minus expected (xGI) over the window below - the same idea as the
-      Hub/Teams "finishing hot" and "due a correction" cards, at player level instead of team level. A big negative
-      gap means the chances are there and the finish hasn't arrived yet; a big positive gap means the output is
-      running ahead of the underlying chances.</p>
-    ${filters}`;
-
-  const gws = gwList(S.ui.anLbWindow);
-  if (!gws.length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
-
-  const rows = leaderboardRows();
-  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
-  if (!rows.length) {
-    return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
+  const stale = !FIX.data || FIX.from !== range.from || FIX.to !== range.to;
+  if (stale && !FIX.loading) {
+    FIX = { from: range.from, to: range.to, data: null, loading: true, error: "" };
+    api
+      .teamsWindow(range.from, range.to)
+      .then((res) => {
+        FIX = { from: range.from, to: range.to, data: res.teams, loading: false, error: "" };
+        rerender();
+      })
+      .catch(() => {
+        FIX = { from: range.from, to: range.to, data: null, loading: false, error: "Couldn't load recent form. Try again." };
+        rerender();
+      });
   }
 
-  const meta = (r) => `${r.pos} · ${r.short} · ${r.g}G ${r.a}A vs ${r.xgi.toFixed(1)} xGI`;
-  const due = rows
-    .filter((r) => r.delta < 0)
-    .sort((a, b) => a.delta - b.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
-  const hot = rows
-    .filter((r) => r.delta > 0)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+  if (FIX.loading || !FIX.data) {
+    return `<div class="chart-box">${header}<p class="hint">${esc(FIX.error || "Loading recent form…")}</p></div>`;
+  }
+
+  const rows = aggregateTeams({ from: range.from, to: range.to, teams: FIX.data }).sort((a, b) => a.fdr5 - b.fdr5);
 
   return `<div class="chart-box">
     ${header}
-    <h3 class="compare-sub">Due a goal or assist</h3>
-    ${divergingBars(due, { meta, empty: "Nobody's underperforming their xGI in this window." })}
-    <h3 class="compare-sub">Running hot</h3>
-    ${divergingBars(hot, { meta, empty: "Nobody's outperforming their xGI in this window." })}
+    <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>Team</th><th class="num">Next 5 FDR</th><th class="num">Recent xG</th>
+          <th class="num">Recent xGC</th><th class="num">G−xG</th>
+        </tr></thead>
+        <tbody>${rows
+          .map(
+            (r) => `<tr>
+              <td>${teamCrest(r.id, 16)} ${esc(r.short)}</td>
+              <td class="num">${r.fdr5.toFixed(1)}</td>
+              <td class="num">${r.xg.toFixed(1)}</td>
+              <td class="num">${r.xgc.toFixed(1)}</td>
+              <td class="num ${r.gmxg >= 0 ? "pos" : "neg"}">${signed(+r.gmxg.toFixed(1))}</td>
+            </tr>`
+          )
+          .join("")}</tbody>
+      </table>
+    </div>
   </div>`;
 }
 
-/* ---------------- 5. Model accountability ---------------- */
+/* =========================================================
+   Model accountability
+   ========================================================= */
 function calibrationSection() {
   const points = calibrationPoints();
   const summary = calibrationSummary(points);
@@ -504,8 +835,26 @@ function wire(root) {
   bindPicker("anH2hAPicker", (id) => (S.ui.anH2hA = id));
   bindPicker("anH2hBPicker", (id) => (S.ui.anH2hB = id));
 
-  const lbPos = $("#anLbPos", root);
-  if (lbPos) lbPos.addEventListener("change", () => { S.ui.anLbPos = lbPos.value; re(); });
-  const lbWindow = $("#anLbWindow", root);
-  if (lbWindow) lbWindow.addEventListener("change", () => { S.ui.anLbWindow = lbWindow.value; re(); });
+  const posSel = $("#anPos", root);
+  if (posSel) posSel.addEventListener("change", () => { S.ui.anPos = posSel.value; re(); });
+  const winSel = $("#anWindow", root);
+  if (winSel) winSel.addEventListener("change", () => { S.ui.anWindow = winSel.value; re(); });
+
+  $$("[data-trendraw]", root).forEach((btn) => {
+    btn.onclick = () => { S.ui.anTrendRaw = btn.dataset.trendraw === "1"; re(); };
+  });
+
+  $$(".an-audit thead th[data-k]", root).forEach((el) => {
+    el.onclick = () => {
+      const key = el.dataset.k;
+      const s = S.ui.anAuditSort;
+      const text = key === "name" || key === "pos";
+      s.dir = s.k === key ? -s.dir : text ? 1 : -1;
+      s.k = key;
+      re();
+    };
+  });
+
+  const fixSpan = $("#anFixSpan", root);
+  if (fixSpan) fixSpan.addEventListener("change", () => { S.ui.anFixSpan = +fixSpan.value; re(); });
 }

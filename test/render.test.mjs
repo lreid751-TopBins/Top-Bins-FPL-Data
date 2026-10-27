@@ -3573,21 +3573,25 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
 /* =========================================================
    Analytics tab
    ========================================================= */
-check("Analytics tab renders all five sections with real values, no NaN/undefined", () => {
+check("Analytics tab renders all nine sections with real values, no NaN/undefined", () => {
   renderAnalytics(panel("panel-analytics"));
   const html = panel("panel-analytics").innerHTML;
   if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
   if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
 
   const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
-  if (boxes.length !== 5) throw new Error(`expected 5 chart-box sections, got ${boxes.length}`);
+  if (boxes.length !== 9) throw new Error(`expected 9 chart-box sections, got ${boxes.length}`);
+  if (!panel("panel-analytics").querySelector("#anPos")) throw new Error("no shared squad-triage position filter rendered");
+  if (!panel("panel-analytics").querySelector("#anWindow")) throw new Error("no shared squad-triage window filter rendered");
+  // The squad-audit table itself only appears once the shared window fetch
+  // resolves (loading state until then) - covered by its own dedicated
+  // test below after awaiting that fetch, not this synchronous first render.
   if (!panel("panel-analytics").querySelector(".an-trend-chart svg")) throw new Error("no trend chart rendered");
   if (!panel("panel-analytics").querySelector(".an-pctl-row")) throw new Error("no percentile rows rendered");
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
-  if (!panel("panel-analytics").querySelector("#anLbPos")) throw new Error("no leaderboard position filter rendered");
   if (!panel("panel-analytics").querySelector(".an-calib-chart svg")) throw new Error("no calibration scatter rendered");
 
-  return "5 chart-box sections, trend/percentile/head-to-head/due-a-goal/calibration all present";
+  return "9 chart-box sections: due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, calibration";
 });
 
 check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
@@ -3609,6 +3613,42 @@ check("Analytics trend section: switching players re-renders the chart with that
     return `switched trend player to ${target.name}, chart re-rendered for that player`;
   } finally {
     S.ui.anTrendId = savedId;
+    renderAnalytics(panel("panel-analytics"));
+  }
+});
+
+check("Analytics trend raw/fixture-adjusted toggle actually changes the plotted series", () => {
+  const savedId = S.ui.anTrendId;
+  const savedRaw = S.ui.anTrendRaw;
+  try {
+    const candidates = S.players.filter((p) => p.minutes >= 270);
+    if (!candidates.length) throw new Error("setup: need at least 1 eligible player");
+    S.ui.anTrendId = candidates[0].id;
+
+    S.ui.anTrendRaw = false;
+    renderAnalytics(panel("panel-analytics"));
+    const adjustedLabel = panel("panel-analytics").querySelector(".an-big-label").textContent;
+    const adjustedBtn = panel("panel-analytics").querySelector('[data-trendraw="0"]');
+    if (adjustedBtn.getAttribute("aria-pressed") !== "true") throw new Error("fixture-adjusted button should read pressed by default");
+    if (!adjustedLabel.includes("Adj xGI/90")) throw new Error(`expected the adjusted label, got "${adjustedLabel}"`);
+
+    S.ui.anTrendRaw = true;
+    renderAnalytics(panel("panel-analytics"));
+    const rawLabel = panel("panel-analytics").querySelector(".an-big-label").textContent;
+    const rawBtn = panel("panel-analytics").querySelector('[data-trendraw="1"]');
+    if (rawBtn.getAttribute("aria-pressed") !== "true") throw new Error("raw-output button should read pressed after toggling");
+    if (rawLabel.includes("Adj xGI/90")) throw new Error(`expected the raw label, got "${rawLabel}"`);
+
+    // Clicking the other button (not just setting state directly) should
+    // flip it back - proves the click wiring itself works, not just the
+    // render branch on S.ui.anTrendRaw.
+    panel("panel-analytics").querySelector('[data-trendraw="0"]').dispatchEvent(new window.Event("click", { bubbles: true }));
+    if (S.ui.anTrendRaw !== false) throw new Error("clicking the fixture-adjusted button should set anTrendRaw back to false");
+
+    return `adjusted label "${adjustedLabel}" vs raw label "${rawLabel}" - toggle buttons wired`;
+  } finally {
+    S.ui.anTrendId = savedId;
+    S.ui.anTrendRaw = savedRaw;
     renderAnalytics(panel("panel-analytics"));
   }
 });
@@ -3694,14 +3734,15 @@ check("Analytics calibration section computes sane correlation/error/hit-rate su
 });
 
 await (async () => {
-  // The leaderboard's fetch is fire-and-forget from dueSection() (same
-  // shape as the report card's loadReportCard) - give it a tick to resolve
-  // before checking real content instead of its interim "Loading…" state.
+  // The shared squad-triage fetch is fire-and-forget from renderAnalytics()
+  // (same shape as the report card's loadReportCard) - give it a tick to
+  // resolve before checking real content instead of the interim
+  // "Loading…" state every triage section shows until then.
   renderAnalytics(panel("panel-analytics"));
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics due-a-goal-or-assist leaderboard renders due and hot lists from real per-GW goals/assists vs xGI", () => {
+  check("Analytics due-a-goal-or-assist renders due and hot lists from real per-GW goals/assists vs xGI", () => {
     const html = panel("panel-analytics").innerHTML;
     if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the leaderboard");
     const bars = panel("panel-analytics").querySelectorAll(".dbar");
@@ -3713,31 +3754,85 @@ await (async () => {
     return `${bars.length} leaderboard bars, ${negs.length} due, ${poss.length} hot`;
   });
 
-  const savedPos = S.ui.anLbPos;
-  const savedWindow = S.ui.anLbWindow;
-
-  S.ui.anLbPos = "GKP";
-  renderAnalytics(panel("panel-analytics"));
-
-  check("Analytics leaderboard position filter restricts the pool to that position only", () => {
-    const names = [...panel("panel-analytics").querySelectorAll(".dbar-l")].map((el) => el.textContent);
-    if (!names.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
-    const gkpNames = new Set(S.players.filter((p) => p.pos === "GKP").map((p) => p.name));
-    const leaked = names.filter((n) => !gkpNames.has(n));
-    if (leaked.length) throw new Error(`non-GKP name(s) leaked into the GKP-filtered leaderboard: ${leaked.join(", ")}`);
-    return `${names.length} GKP-only rows, no other position leaked in`;
+  check("Analytics squad-audit table renders one sortable row per eligible player, with consistency/minutes-trend tags", () => {
+    const rowsEl = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr")];
+    if (!rowsEl.length) throw new Error("no squad-audit rows rendered once data loaded");
+    const tags = panel("panel-analytics").querySelectorAll(".an-audit .tag");
+    if (!tags.length) throw new Error("no consistency/minutes-trend tags rendered in the audit table");
+    return `${rowsEl.length} audit rows, ${tags.length} status tags`;
   });
 
-  S.ui.anLbPos = savedPos;
+  check("Analytics squad-audit table sorts by clicking a column header, and flips on a second click", () => {
+    const savedSort = { ...S.ui.anAuditSort };
+    try {
+      const formHeader = [...panel("panel-analytics").querySelectorAll(".an-audit thead th[data-k]")].find((th) => th.dataset.k === "formPerGw");
+      if (!formHeader) throw new Error("no Form column header found");
+      formHeader.dispatchEvent(new window.Event("click", { bubbles: true }));
+      if (S.ui.anAuditSort.k !== "formPerGw") throw new Error("clicking the Form header should sort by formPerGw");
+      const dir1 = S.ui.anAuditSort.dir;
+      const firstPass = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr td:nth-child(4)")].map((td) => parseFloat(td.textContent));
+      const sortedDesc = [...firstPass].sort((a, b) => b - a);
+      const sortedAsc = [...firstPass].sort((a, b) => a - b);
+      const matches = dir1 < 0 ? JSON.stringify(firstPass) === JSON.stringify(sortedDesc) : JSON.stringify(firstPass) === JSON.stringify(sortedAsc);
+      if (!matches) throw new Error("audit rows aren't actually sorted by Form after clicking its header");
+
+      panel("panel-analytics").querySelector('.an-audit thead th[data-k="formPerGw"]').dispatchEvent(new window.Event("click", { bubbles: true }));
+      if (S.ui.anAuditSort.dir === dir1) throw new Error("a second click on the same header should flip sort direction");
+      return `sorted by Form (${dir1 < 0 ? "desc" : "asc"} then flipped)`;
+    } finally {
+      S.ui.anAuditSort = savedSort;
+      renderAnalytics(panel("panel-analytics"));
+    }
+  });
+
+  check("Analytics differential finder only shows players under the ownership bar", () => {
+    const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Differential finder"));
+    if (!box) throw new Error("no Differential finder section rendered");
+    const ownCells = [...box.querySelectorAll("tbody tr td:nth-child(5)")].map((td) => parseFloat(td.textContent));
+    if (!ownCells.length) throw new Error("setup: expected at least one differential in the mock pool (ownership is randomised 0-45%)");
+    const over = ownCells.filter((v) => v >= 15);
+    if (over.length) throw new Error(`a row at/above 15% ownership leaked into the differential list: ${over.join(", ")}`);
+    return `${ownCells.length} differentials, all under 15% owned`;
+  });
+
+  check("Analytics set-piece spotlight lists real penalty/free-kick takers from the bootstrap order fields", () => {
+    const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Set-piece spotlight"));
+    if (!box) throw new Error("no Set-piece spotlight section rendered");
+    const penaltyTaker = S.players.find((p) => p.penaltyOrder === 1);
+    if (!penaltyTaker) throw new Error("setup: mock data should have at least one order-1 penalty taker");
+    if (!box.innerHTML.includes(penaltyTaker.name)) throw new Error(`penalty taker ${penaltyTaker.name} not listed in the set-piece section`);
+    // corners_and_indirect_freekicks_order is always null in the mock data -
+    // that group should say so rather than silently rendering nothing.
+    if (!box.textContent.includes("Nobody currently flagged")) throw new Error('expected the empty corners group to say "Nobody currently flagged"');
+    return `penalty taker ${penaltyTaker.name} listed; empty corners group shows its own hint`;
+  });
+
+  const savedPos = S.ui.anPos;
+  const savedWindow = S.ui.anWindow;
+
+  S.ui.anPos = "GKP";
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics shared position filter restricts due/hot and the audit table to that position only", () => {
+    const dbarNames = [...panel("panel-analytics").querySelectorAll(".dbar-l")].map((el) => el.textContent);
+    const auditNames = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr td:first-child")].map((el) => el.textContent);
+    if (!dbarNames.length && !auditNames.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
+    const gkpNames = new Set(S.players.filter((p) => p.pos === "GKP").map((p) => p.name));
+    const leaked = [...dbarNames, ...auditNames].filter((nm) => !gkpNames.has(nm));
+    if (leaked.length) throw new Error(`non-GKP name(s) leaked into the GKP-filtered triage group: ${leaked.join(", ")}`);
+    return `${dbarNames.length} due/hot rows, ${auditNames.length} audit rows, all GKP`;
+  });
+
+  S.ui.anPos = savedPos;
   renderAnalytics(panel("panel-analytics"));
   const before = panel("panel-analytics").querySelector(".dbar-m")?.textContent;
 
-  S.ui.anLbWindow = "3";
+  S.ui.anWindow = "3";
   renderAnalytics(panel("panel-analytics"));
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics leaderboard gameweek-window control changes what's fetched and summed", () => {
+  check("Analytics shared gameweek-window control changes what's fetched and summed across the triage group", () => {
     const gws5 = gwList(savedWindow);
     const gws3 = gwList("3");
     if (gws3.length >= gws5.length) throw new Error("setup: 3-GW window should be shorter than the default window");
@@ -3748,7 +3843,52 @@ await (async () => {
     return `window narrowed from ${gws5.length} to ${gws3.length} GWs, summed totals changed`;
   });
 
-  S.ui.anLbWindow = savedWindow;
+  S.ui.anWindow = savedWindow;
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+})();
+
+await (async () => {
+  // Fixtures-through-form has its own teams-window fetch, separate from
+  // the squad-triage one above - same fire-and-forget-then-settle pattern.
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics fixtures-through-form table renders real recent xG/xGC next to official FDR for every team", () => {
+    const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Fixtures through a form lens"));
+    if (!box) throw new Error("no fixtures-through-form section rendered");
+    const html = box.innerHTML;
+    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the fixtures-form table");
+    const rows = box.querySelectorAll("tbody tr");
+    if (rows.length !== S.teamList.length) throw new Error(`expected ${S.teamList.length} team rows, got ${rows.length}`);
+    return `${rows.length} team rows with real xG/xGC and FDR`;
+  });
+
+  const savedSpan = S.ui.anFixSpan;
+  const beforeRow = [...panel("panel-analytics").querySelectorAll(".chart-box")]
+    .find((b) => b.querySelector("h3")?.textContent.includes("Fixtures through a form lens"))
+    ?.querySelector("tbody tr")?.textContent;
+
+  S.ui.anFixSpan = 8;
+  renderAnalytics(panel("panel-analytics"));
+  await new Promise((r) => setTimeout(r, 0));
+  renderAnalytics(panel("panel-analytics"));
+
+  check("Analytics fixtures-form recent-window select re-fetches a different range", () => {
+    const afterBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Fixtures through a form lens"));
+    if (!afterBox) throw new Error("no fixtures-through-form section rendered after switching the window");
+    const select = afterBox.querySelector("#anFixSpan");
+    if (!select || select.value !== "8") throw new Error('expected the "Last 8 GWs" option to be selected');
+    const afterRow = afterBox.querySelector("tbody tr")?.textContent;
+    if (!beforeRow) throw new Error("setup: no fixtures-form row before switching the window");
+    if (!afterRow) throw new Error("no fixtures-form row after switching the window");
+    if (afterRow === beforeRow) throw new Error("switching the recent-form window didn't change the first team's row");
+    return `recent-form window switched to Last 8 GWs, table re-rendered with different values`;
+  });
+
+  S.ui.anFixSpan = savedSpan;
   renderAnalytics(panel("panel-analytics"));
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));

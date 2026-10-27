@@ -58,8 +58,11 @@ export const S = {
     anPctlId: null,    // player shown in the percentile breakdown
     anH2hA: null,      // head-to-head comparison, player A
     anH2hB: null,      // head-to-head comparison, player B
-    anLbPos: "",       // due-a-goal-or-assist leaderboard, position filter
-    anLbWindow: "5",   // due-a-goal-or-assist leaderboard, gameweek window
+    anPos: "",         // squad-triage group, shared position filter
+    anWindow: "5",     // squad-triage group, shared gameweek window
+    anTrendRaw: false, // trend chart: false = fixture-adjusted, true = raw output
+    anAuditSort: { k: "formPerGw", dir: -1 }, // squad-audit table sort
+    anFixSpan: 5,      // fixtures-through-form section, recent-form window (GWs)
   },
 };
 
