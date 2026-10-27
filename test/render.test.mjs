@@ -3589,9 +3589,9 @@ check("Analytics tab renders all nine sections with real values, no NaN/undefine
   if (!panel("panel-analytics").querySelector(".an-trend-chart svg")) throw new Error("no trend chart rendered");
   if (!panel("panel-analytics").querySelector(".an-pctl-row")) throw new Error("no percentile rows rendered");
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
-  if (!panel("panel-analytics").querySelector(".an-calib-chart svg")) throw new Error("no calibration scatter rendered");
+  if (!html.includes("Who's outperforming their own projection?")) throw new Error("no projection-check section rendered");
 
-  return "9 chart-box sections: due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, calibration";
+  return "9 chart-box sections: due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
 });
 
 check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
@@ -3715,22 +3715,20 @@ check("Analytics head-to-head compares two distinct players and highlights the h
   }
 });
 
-check("Analytics calibration section computes sane correlation/error/hit-rate summary stats", () => {
+check("Analytics projection check ranks real players by actual-vs-projected points delta, not model-accuracy stats", () => {
   renderAnalytics(panel("panel-analytics"));
-  const chips = [...panel("panel-analytics").querySelectorAll(".an-calib-side .stat-chip .v")].map((el) => el.textContent);
-  if (chips.length !== 3) throw new Error(`expected 3 summary stat chips, got ${chips.length}`);
+  const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("outperforming their own projection"));
+  if (!box) throw new Error("no projection-check section rendered");
+  if (box.querySelector(".stat-chip")) throw new Error("projection check shouldn't show model-accuracy stat chips anymore");
 
-  const corr = parseFloat(chips[0]);
-  const avgErr = parseFloat(chips[1]);
-  const within3 = parseFloat(chips[2]);
-  if (!Number.isFinite(corr) || corr < -1.01 || corr > 1.01) throw new Error(`correlation out of [-1,1]: ${corr}`);
-  if (!Number.isFinite(avgErr) || avgErr < 0) throw new Error(`avg error should be non-negative: ${avgErr}`);
-  if (!Number.isFinite(within3) || within3 < 0 || within3 > 100) throw new Error(`within-3-pts % out of 0-100: ${within3}`);
+  const bars = box.querySelectorAll(".dbar");
+  if (!bars.length) throw new Error("no over/underperforming bars rendered");
+  const over = box.querySelectorAll(".dbar-v.pos");
+  const under = box.querySelectorAll(".dbar-v.neg");
+  if (!over.length) throw new Error("expected at least one player outperforming their own projection");
+  if (!under.length) throw new Error("expected at least one player underperforming their own projection");
 
-  const dots = panel("panel-analytics").querySelectorAll(".an-calib-chart svg .pt circle");
-  if (!dots.length) throw new Error("no calibration points plotted");
-
-  return `correlation ${corr.toFixed(2)}, avg error ${avgErr.toFixed(1)} pts, ${within3.toFixed(0)}% within 3 pts, ${dots.length} players plotted`;
+  return `${bars.length} projection-delta bars, ${over.length} outperforming, ${under.length} underperforming`;
 });
 
 await (async () => {
@@ -3814,7 +3812,13 @@ await (async () => {
   renderAnalytics(panel("panel-analytics"));
 
   check("Analytics shared position filter restricts due/hot and the audit table to that position only", () => {
-    const dbarNames = [...panel("panel-analytics").querySelectorAll(".dbar-l")].map((el) => el.textContent);
+    // Scoped to the due-a-goal-or-assist box specifically - the projection
+    // check at the bottom of the tab also renders .dbar-l bars, but it's a
+    // separate, deliberately position-unfiltered group, not part of this
+    // shared triage filter.
+    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
+    if (!dueBox) throw new Error("no due-a-goal-or-assist section rendered");
+    const dbarNames = [...dueBox.querySelectorAll(".dbar-l")].map((el) => el.textContent);
     const auditNames = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr td:first-child")].map((el) => el.textContent);
     if (!dbarNames.length && !auditNames.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
     const gkpNames = new Set(S.players.filter((p) => p.pos === "GKP").map((p) => p.name));

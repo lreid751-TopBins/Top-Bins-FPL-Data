@@ -1,6 +1,6 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
 import { $, $$, esc, th, teamCrest } from "../ui.js";
-import { scatter, radar, lineChart, divergingBars, POS_COLOR } from "../charts.js";
+import { radar, lineChart, divergingBars } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
@@ -19,7 +19,8 @@ import { aggregate as aggregateTeams } from "./teams.js";
      head-to-head.
    - Fixtures through form: upcoming difficulty next to teams' actual
      recent output, not just a preseason rating.
-   Closes with the existing model-accountability (calibration) check.
+   Closes with the projection check - who's over/underperforming their own
+   projected points right now, not whether the model itself is accurate.
 
    Everything reuses data already pulled elsewhere on the site - the
    /points endpoint (My Team report card), /teams-window (Teams page),
@@ -75,7 +76,7 @@ export function renderAnalytics(root) {
     <div class="eyebrow" style="margin-top:28px">Fixtures through form</div>
     ${fixturesFormSection(rerender)}
 
-    <div class="eyebrow" style="margin-top:28px">Model accountability</div>
+    <div class="eyebrow" style="margin-top:28px">Projection check</div>
     ${calibrationSection()}
   `;
   wire(root);
@@ -720,34 +721,40 @@ function fixturesFormSection(rerender) {
 }
 
 /* =========================================================
-   Model accountability
+   Projection check
    ========================================================= */
 function calibrationSection() {
   const points = calibrationPoints();
-  const summary = calibrationSummary(points);
+
+  const header = `<h3>Who's outperforming their own projection?</h3>
+    <p class="cap">Actual points minus what the Planner projected for that gameweek, averaged over played gameweeks
+      in the last ${(S.form.gws || []).length || 6} - each player's <b>current underlying rates</b> run through the
+      exact same formula against the <b>real fixture they actually faced</b>. Not a check on whether the model is
+      good - a check on the player: who's running hotter or colder right now than their own numbers say they
+      should.</p>`;
+
+  if (!points.length) {
+    return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet - come back after a few more gameweeks.</p></div>`;
+  }
+
+  const meta = (r) => `${r.short} · ${r.y.toFixed(1)} actual vs ${r.x.toFixed(1)} projected, avg of ${r.weight} GWs`;
+  const over = points
+    .filter((r) => r.delta > 0)
+    .sort((a, b) => b.delta - a.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+  const under = points
+    .filter((r) => r.delta < 0)
+    .sort((a, b) => a.delta - b.delta)
+    .slice(0, 6)
+    .map((r) => ({ ...r, label: r.name, value: r.delta }));
 
   return `<div class="chart-box">
-    <h3>How good has the projection engine actually been?</h3>
-    <p class="cap">The Planner shows a projected-points figure every week - this is the check on it. For each player
-      with real minutes recently, their <b>current underlying rates</b> run through the exact same formula against
-      the <b>real fixture they actually faced</b>, averaged over their played gameweeks in the last ${(S.form.gws || []).length || 6}, against what they actually scored.
-      Not a stored forecast from the time - a live check that the formula itself tracks reality.</p>
-    <div class="an-calib-layout">
-      <div class="an-calib-chart">
-        ${scatter(points, {
-          xLabel: "Projected points (avg)",
-          yLabel: "Actual points (avg)",
-          parity: true,
-          fmt: (v) => v.toFixed(1),
-          empty: "Not enough of the season played yet to check the model - come back after a few more gameweeks.",
-        })}
-      </div>
-      <div class="an-calib-side">
-        <div class="stat-chip"><div class="v">${summary.corr.toFixed(2)}</div><div class="l">Correlation</div></div>
-        <div class="stat-chip"><div class="v">${summary.avgErr.toFixed(1)}</div><div class="l">Avg error, pts</div></div>
-        <div class="stat-chip"><div class="v">${Math.round(summary.within3)}%</div><div class="l">Within 3 pts</div></div>
-      </div>
-    </div>
+    ${header}
+    <h3 class="compare-sub">Outperforming</h3>
+    ${divergingBars(over, { meta, empty: "Nobody's beating their own projection right now." })}
+    <h3 class="compare-sub">Underperforming</h3>
+    ${divergingBars(under, { meta, empty: "Nobody's running behind their own projection right now." })}
   </div>`;
 }
 
@@ -776,40 +783,10 @@ function calibrationPoints() {
       if (count > 0) {
         const x = projSum / count;
         const y = actualSum / count;
-        out.push({
-          id: p.id,
-          x,
-          y,
-          label: `${p.name} (${p.short}) — ${y.toFixed(1)} actual vs ${x.toFixed(1)} projected, avg of ${count} GWs`,
-          short: p.name,
-          color: POS_COLOR[p.pos] || "var(--gold)",
-          weight: count,
-        });
+        out.push({ id: p.id, name: p.name, short: p.short, x, y, delta: y - x, weight: count });
       }
     });
   return out.sort((a, b) => b.weight - a.weight).slice(0, 140);
-}
-
-function calibrationSummary(points) {
-  if (!points.length) return { corr: 0, avgErr: 0, within3: 0 };
-  const n = points.length;
-  const mx = points.reduce((s, p) => s + p.x, 0) / n;
-  const my = points.reduce((s, p) => s + p.y, 0) / n;
-  let num = 0;
-  let dx2 = 0;
-  let dy2 = 0;
-  let errSum = 0;
-  let within3 = 0;
-  points.forEach((p) => {
-    num += (p.x - mx) * (p.y - my);
-    dx2 += (p.x - mx) ** 2;
-    dy2 += (p.y - my) ** 2;
-    const err = Math.abs(p.x - p.y);
-    errSum += err;
-    if (err <= 3) within3++;
-  });
-  const corr = dx2 > 0 && dy2 > 0 ? num / Math.sqrt(dx2 * dy2) : 0;
-  return { corr, avgErr: errSum / n, within3: (within3 / n) * 100 };
 }
 
 /* ---------------- Events ---------------- */
