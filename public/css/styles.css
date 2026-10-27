@@ -1777,6 +1777,34 @@ textarea::placeholder { color: var(--muted-2); }
 .pd-row-pts.low { color: var(--neg); }
 .pd-row-pts.blank { color: var(--muted); font-size: 9.5px; }
 
+/* Shot box (charts.js shotBox()) - cropped to the penalty area itself,
+   same painted-turf treatment as the Planner's own pitch so it reads as
+   the same object, not a different chart style bolted on. aspect-ratio
+   matches the real box's own 40.32x16.5m proportions. */
+.shot-box {
+  position: relative; width: 100%; aspect-ratio: 40.32 / 16.5;
+  background:
+    radial-gradient(130% 160% at 50% 0%, rgba(255,255,255,.05), transparent 55%),
+    linear-gradient(180deg, #0b2814, #082010);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+.shot-box-six {
+  position: absolute; border: 1px solid rgba(234,243,236,.16); border-top: none;
+}
+.shot-box-goal {
+  position: absolute; top: 0; height: 5px;
+  border: 1px solid rgba(234,243,236,.28); border-top: none;
+}
+.shot-box-spot {
+  position: absolute; width: 4px; height: 4px; margin: -2px 0 0 -2px;
+  border-radius: 50%; background: rgba(234,243,236,.28);
+}
+.shot-dot {
+  position: absolute; border-radius: 50%; transform: translate(-50%, -50%);
+  background: rgba(116,184,201,.25); border: 1.5px solid var(--cool);
+}
+.shot-dot.goal { background: var(--gold); border-color: var(--gold-deep); }
+
 /* ---------------- Team Rater result ---------------- */
 .tr-score { font-family: "Anton", sans-serif; font-size: 44px; color: var(--gold); line-height: 1; margin-top: 4px; }
 .tr-score-unit { font-size: 24px; margin-left: 2px; }

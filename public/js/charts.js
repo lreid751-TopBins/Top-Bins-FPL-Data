@@ -292,3 +292,93 @@ export function divergingBars(items, opts = {}) {
     })
     .join("")}</div>`;
 }
+
+/* =========================================================
+   Shot box
+
+   Shots inside the penalty area, each a dot positioned by its real
+   location - percentage-positioned divs over a fixed-ratio box, the
+   same convention the Planner's own pitch already uses (not SVG - this
+   needs to reflow the same way). Sized from the real Laws of the Game
+   (a 105x68m pitch, 16.5x40.32m penalty area, 5.5x18.32m six-yard box,
+   11m penalty spot, 7.32m goal) rather than guessed proportions, so the
+   box actually reads as a real penalty area.
+
+   Shot x/y come from understat.com (0-1 normalized, shooting team
+   always attacking toward x=1 - confirmed empirically against real
+   data, not assumed) - not the FPL API, which has no location data at
+   all. Only in-box shots are plotted; anything outside is dropped
+   rather than shown dimmed, since this is specifically "shots in the
+   box", not a full-pitch map.
+   ========================================================= */
+const PITCH_LENGTH = 105;
+const PITCH_WIDTH = 68;
+const BOX_DEPTH = 16.5;
+const BOX_WIDTH = 40.32;
+const SIX_DEPTH = 5.5;
+const SIX_WIDTH = 18.32;
+const SPOT_DEPTH = 11;
+const GOAL_WIDTH = 7.32;
+
+const BOX_X0 = 1 - BOX_DEPTH / PITCH_LENGTH; // edge of the box, farthest from goal
+const BOX_Y0 = (PITCH_WIDTH - BOX_WIDTH) / 2 / PITCH_WIDTH;
+const BOX_Y1 = 1 - BOX_Y0;
+const SIX_DEPTH_PCT = (SIX_DEPTH / PITCH_LENGTH / (BOX_DEPTH / PITCH_LENGTH)) * 100; // relative to the box's own depth
+const SIX_Y0 = (PITCH_WIDTH - SIX_WIDTH) / 2 / PITCH_WIDTH;
+const SIX_Y1 = 1 - SIX_Y0;
+const SPOT_DEPTH_PCT = (SPOT_DEPTH / PITCH_LENGTH / (BOX_DEPTH / PITCH_LENGTH)) * 100;
+const GOAL_Y0 = (PITCH_WIDTH - GOAL_WIDTH) / 2 / PITCH_WIDTH;
+const GOAL_Y1 = 1 - GOAL_Y0;
+
+// Maps a 0-1 pitch-width Y onto 0-100% left-to-right within the box
+// diagram's own (narrower) width.
+function boxPct(y) {
+  return ((y - BOX_Y0) / (BOX_Y1 - BOX_Y0)) * 100;
+}
+
+function shotTitle(s) {
+  return `${s.result === "Goal" ? "Goal" : s.result} · xG ${s.xG.toFixed(2)}`;
+}
+
+/**
+ * shots: raw understat shot rows - { X, Y, xG, result } (strings, as the
+ * API returns them). opts.empty: shown when nobody has a shot in the box
+ * this season (either a genuinely quiet sample, or understat.com being
+ * temporarily unreachable - callers should phrase opts.empty to cover
+ * both without reading like a bug).
+ */
+export function shotBox(shots, opts = {}) {
+  const { empty = "No shots in the box yet this season." } = opts;
+
+  const inBox = shots
+    .map((s) => ({ x: Number(s.X), y: Number(s.Y), xG: Number(s.xG), result: s.result }))
+    .filter(
+      (s) =>
+        Number.isFinite(s.x) &&
+        Number.isFinite(s.y) &&
+        Number.isFinite(s.xG) &&
+        s.x >= BOX_X0 &&
+        s.y >= BOX_Y0 &&
+        s.y <= BOX_Y1
+    );
+
+  if (!inBox.length) return `<p class="hint">${esc(empty)}</p>`;
+
+  const maxXg = Math.max(0.05, ...inBox.map((s) => s.xG));
+  const dots = inBox
+    .map((s) => {
+      const top = ((1 - s.x) / (1 - BOX_X0)) * 100;
+      const left = boxPct(s.y);
+      const d = 10 + (Math.min(s.xG, maxXg) / maxXg) * 18; // 10-28px diameter
+      const goal = s.result === "Goal";
+      return `<span class="shot-dot${goal ? " goal" : ""}" style="top:${top}%;left:${left}%;width:${d}px;height:${d}px" title="${esc(shotTitle(s))}"></span>`;
+    })
+    .join("");
+
+  return `<div class="shot-box">
+    <span class="shot-box-six" style="top:0;height:${SIX_DEPTH_PCT}%;left:${boxPct(SIX_Y0)}%;right:${100 - boxPct(SIX_Y1)}%"></span>
+    <span class="shot-box-goal" style="left:${boxPct(GOAL_Y0)}%;right:${100 - boxPct(GOAL_Y1)}%"></span>
+    <span class="shot-box-spot" style="top:${SPOT_DEPTH_PCT}%;left:50%"></span>
+    ${dots}
+  </div>`;
+}

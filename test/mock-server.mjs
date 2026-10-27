@@ -10,7 +10,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { MOCK, pointsPayload, teamsWindowPayload, seedDecisions, CURRENT_GW } from "./mock-data.mjs";
+import { MOCK, pointsPayload, teamsWindowPayload, shotMapPayload, seedDecisions, CURRENT_GW } from "./mock-data.mjs";
 
 // store.js reads localStorage at module load time (S.ui's default
 // managerId/watchlist/theme) - stub it before importing so the real engine
@@ -82,6 +82,11 @@ const server = http.createServer(async (req, res) => {
     const from = Number(url.searchParams.get("from"));
     const to = Number(url.searchParams.get("to"));
     return send(200, teamsWindowPayload(from, to));
+  }
+
+  if (url.pathname === "/api/shot-map") {
+    const player = Number(url.searchParams.get("player"));
+    return send(200, shotMapPayload(player));
   }
 
   if (url.pathname.startsWith("/api/squads")) {
