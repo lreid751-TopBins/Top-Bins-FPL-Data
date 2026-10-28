@@ -847,8 +847,13 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   display: flex; align-items: center; justify-content: center; font-size: 11px; padding-left: 2px;
 }
 
-.hub-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; align-items: start; }
-.hub-w { margin-bottom: 0; }
+/* minmax(0, 1fr), not plain 1fr: a grid track's default minimum is the
+   content's min-content size, not 0 - so a wide child (the Premier League
+   table, which is meant to scroll inside its own .twrap box like every
+   other table on the site) was stretching this whole track past the
+   viewport and dragging every other Hub card along with it off-screen. */
+.hub-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.hub-w { margin-bottom: 0; min-width: 0; }
 .hub-w-wide { grid-column: 1 / -1; }
 
 .hub-goto {
@@ -1218,7 +1223,15 @@ textarea::placeholder { color: var(--muted-2); }
   transition: gap 0.32s ease;
 }
 .planner-layout.collapsed { gap: 0; }
-@media (max-width: 900px) { .planner-layout { flex-direction: column; } }
+/* .planner-layout's align-items:flex-start (needed so .col-search's sticky
+   sidebar doesn't stretch to match .col-team's height on desktop) has a
+   side effect once the column stacks on mobile: flex-start also turns off
+   the cross-axis stretch that would otherwise force each column to the
+   layout's own width, so .col-team was shrink-wrapping to its widest
+   content instead - the season ticker's un-wrapped gameweek table - and
+   dragging the whole page into horizontal overflow instead of scrolling
+   inside its own .ticker-wrap. */
+@media (max-width: 900px) { .planner-layout { flex-direction: column; } .col-team { width: 100%; } }
 
 .col-search {
   display: flex; flex-direction: column; gap: 16px; position: sticky; top: 16px;
@@ -1226,7 +1239,10 @@ textarea::placeholder { color: var(--muted-2); }
   transition: flex-basis 0.32s ease, max-width 0.32s ease, opacity 0.25s ease;
 }
 .planner-layout.collapsed .col-search { flex-basis: 0; max-width: 0; opacity: 0; pointer-events: none; }
-@media (max-width: 900px) { .col-search { flex-basis: auto; max-width: none; position: static; } }
+/* Same flex-start shrink-to-fit issue as .col-team above - without an
+   explicit width this column shrink-wraps to its widest child (the player
+   browse table) instead of filling the stacked layout. */
+@media (max-width: 900px) { .col-search { flex-basis: auto; max-width: none; width: 100%; position: static; } }
 
 /* Editing (the squad you're building) and analysis (what it projects to)
    are two different mental modes on one screen. No background fill here -
@@ -1269,7 +1285,7 @@ textarea::placeholder { color: var(--muted-2); }
 @media (prefers-reduced-motion: reduce) {
   .planner-layout, .col-search, .panel-toggle { transition: none; }
 }
-@media (max-width: 860px) { .hub-grid { grid-template-columns: 1fr; } }
+@media (max-width: 860px) { .hub-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* Saved-squad tabs - collapsed behind a single toggle by default, so the
    team pitch below sits higher up the page instead of under a permanently-
