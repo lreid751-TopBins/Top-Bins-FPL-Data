@@ -53,33 +53,8 @@ const BOOTSTRAP = {
     { id: 13, is_next: true, finished: false, deadline_time: NEXT_DEADLINE },
   ],
   elements: [
-    { id: 1, now_cost: 145, web_name: "Salah", team: 1, first_name: "Mohamed", second_name: "Salah" },
-    { id: 2, now_cost: 78, web_name: "Gordon", team: 2, first_name: "Anthony", second_name: "Gordon" },
-  ],
-  teams: [
-    { id: 1, name: "Liverpool" },
-    { id: 2, name: "Newcastle" },
-  ],
-};
-
-// shotMapFor() computes the season from deps.now() - tests that care about
-// a specific season set h.clock.t to a date that resolves to this one
-// first (see understatSeason() in handler.ts: month < July = previous
-// calendar year). "2025" matches a clock set to any date Aug 2025-Jun 2026.
-const UNDERSTAT_SEARCH = {
-  response: { players: [{ id: "999", player: "Mohamed Salah", team: "Liverpool" }] },
-};
-const UNDERSTAT_SHOTS = {
-  shots: [
-    // inside the box, this season
-    { X: "0.95", Y: "0.50", xG: "0.45", result: "Goal", situation: "OpenPlay", shotType: "RightFoot",
-      season: "2025", minute: "23", date: "2025-09-01 15:00:00", h_team: "Liverpool", a_team: "Arsenal", h_a: "h" },
-    // outside the box, this season
-    { X: "0.70", Y: "0.50", xG: "0.05", result: "MissedShots", situation: "OpenPlay", shotType: "LeftFoot",
-      season: "2025", minute: "60", date: "2025-09-01 15:00:00", h_team: "Liverpool", a_team: "Arsenal", h_a: "h" },
-    // a previous season - should be filtered out
-    { X: "0.90", Y: "0.50", xG: "0.80", result: "SavedShot", situation: "Penalty", shotType: "RightFoot",
-      season: "2024", minute: "10", date: "2024-09-01 15:00:00", h_team: "Liverpool", a_team: "Chelsea", h_a: "a" },
+    { id: 1, now_cost: 145, web_name: "Salah", team: 1 },
+    { id: 2, now_cost: 78, web_name: "Gordon", team: 2 },
   ],
 };
 
@@ -162,13 +137,6 @@ function harness(overrides: Partial<Deps> = {}): Harness {
     },
     async youtubeFeedGet() {
       return YOUTUBE_FEED;
-    },
-    async understatGet(path: string) {
-      calls.push(path);
-      if (fail.on) throw new Error("understat.com returned 503 for " + path);
-      if (path.startsWith("/main/getPlayersName/")) return JSON.stringify(UNDERSTAT_SEARCH);
-      if (path.startsWith("/getPlayerData/")) return JSON.stringify(UNDERSTAT_SHOTS);
-      throw new Error("understat.com returned 404 for " + path);
     },
     async snapshotPrices(rows) {
       prices.push(...rows);
@@ -410,53 +378,6 @@ Deno.test("latest-video returns null rather than erroring when the feed can't be
   const res = await createHandler(h.deps)(GET("/latest-video"));
   assertEquals(res.status, 200, "a broken feed shouldn't surface as a site error");
   assertEquals(await res.json(), null);
-});
-
-Deno.test("shot-map returns this season's shots for the matched understat player, filtering out other seasons", async () => {
-  const h = harness();
-  h.clock.t = new Date("2026-03-01").getTime(); // resolves to the "2025" season
-
-  const res = await createHandler(h.deps)(GET("/shot-map?player=1"));
-  assertEquals(res.status, 200);
-  const shots = await res.json() as Array<{ season: string; result: string }>;
-  assertEquals(shots.length, 2, "should include both 2025 shots and drop the 2024 one");
-  assert(shots.every((s) => s.season === "2025"), "no other-season shot should leak through");
-  assert(h.calls.includes("/main/getPlayersName/Mohamed%20Salah"), "should search understat by the player's full name");
-  assert(h.calls.includes("/getPlayerData/999"), "should fetch shots for the matched understat id");
-});
-
-Deno.test("shot-map returns an empty array, not an error, when no understat player matches", async () => {
-  const h = harness({
-    async understatGet(path: string) {
-      if (path.startsWith("/main/getPlayersName/")) return JSON.stringify({ response: { players: [] } });
-      throw new Error("shouldn't fetch shots with no matched id");
-    },
-  });
-  const res = await createHandler(h.deps)(GET("/shot-map?player=1"));
-  assertEquals(res.status, 200, "no match shouldn't surface as a site error");
-  assertEquals(await res.json(), []);
-});
-
-Deno.test("shot-map falls back to a stale shot log rather than erroring when understat is unreachable", async () => {
-  const h = harness();
-  h.clock.t = new Date("2026-03-01").getTime();
-
-  await createHandler(h.deps)(GET("/shot-map?player=1"));
-  _resetMemory();
-  h.clock.t += 10 * 3_600_000; // stale everywhere
-  h.fail.on = true;
-
-  const res = await createHandler(h.deps)(GET("/shot-map?player=1"));
-  assertEquals(res.status, 200, "should serve the stale shot log rather than fail");
-  const shots = await res.json() as unknown[];
-  assertEquals(shots.length, 2, "stale payload should be intact");
-});
-
-Deno.test("shot-map rejects a non-numeric player id before calling understat", async () => {
-  const h = harness();
-  const res = await createHandler(h.deps)(GET("/shot-map?player=abc"));
-  assertEquals(res.status, 400);
-  assertEquals(h.calls.length, 0, "nothing should have reached understat.com");
 });
 
 Deno.test("snapshot requires the shared secret", async () => {

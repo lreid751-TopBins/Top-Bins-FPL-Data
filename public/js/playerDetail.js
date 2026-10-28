@@ -9,39 +9,10 @@
    ========================================================= */
 import { S, f1, f2, n, upcoming, difficultyOf } from "./store.js";
 import { $, esc, teamCrest, availabilityFlag, setPieceFlag } from "./ui.js";
-import { api } from "./api.js";
-import { shotBox } from "./charts.js";
 
 export const PD = {
   openId: null,
 };
-
-/** Shots-in-the-box data, keyed by player id - not a single "current"
- * cache like most of this site's other async state, since many
- * different players get opened over one session and an already-viewed
- * one shouldn't re-fetch. Third-party (understat.com), not the FPL API -
- * see api.js/handler.ts - so this must never block or disrupt the rest
- * of the drawer, which renders everything else synchronously today. */
-const SHOTS = { data: {}, loading: {} };
-
-// Collapsed by default - the box diagram is the deepest, most optional
-// layer of this drawer, and always resets closed on open (including
-// re-opening the same player) rather than trying to remember per-player
-// state, so it can never bleed one player's expanded view onto another's.
-let shotsExpanded = false;
-
-function loadShotMap(id) {
-  if (id in SHOTS.data || SHOTS.loading[id]) return;
-  SHOTS.loading[id] = true;
-  api
-    .shotMap(id)
-    .then((shots) => { SHOTS.data[id] = Array.isArray(shots) ? shots : null; })
-    .catch(() => { SHOTS.data[id] = null; })
-    .finally(() => {
-      delete SHOTS.loading[id];
-      if (PD.openId === id) render(); // still looking at this player - refresh in place
-    });
-}
 
 function panelEl() {
   return document.getElementById("playerDetail");
@@ -51,10 +22,8 @@ function backdropEl() {
 }
 
 export function openPlayerDetail(id) {
-  shotsExpanded = false;
   PD.openId = id;
   render();
-  loadShotMap(id); // fire-and-forget; render() runs again when it resolves
   const panel = panelEl();
   const backdrop = backdropEl();
   if (!panel || !backdrop) return;
@@ -196,24 +165,6 @@ function timelineSection(p) {
     <div class="pd-timeline">${pastItems.join("")}${divider}${futureItems.join("")}</div>`;
 }
 
-/* ---------------- Shots in the box (collapsible) ---------------- */
-function shotMapSection(id) {
-  const header = `<h3 class="pd-h3 pd-h3-toggle">
-    <button type="button" id="pdShotsToggle" aria-expanded="${shotsExpanded ? "true" : "false"}">
-      Shots in the box <span class="pd-h3-chevron">${shotsExpanded ? "▲" : "▼"}</span>
-    </button>
-  </h3>`;
-  if (!shotsExpanded) return header;
-
-  const cap = `<p class="pd-cap">Shot locations and xG inside the box this season, from understat.com - not the FPL API, which has no shot data at all. Dot size is xG; gold is a goal.</p>`;
-  if (!(id in SHOTS.data)) return `${header}${cap}<p class="pd-cap">Loading shot data…</p>`;
-  const shots = SHOTS.data[id];
-  if (shots == null) {
-    return `${header}${cap}<p class="pd-cap">Couldn't reach it just now - this third-party source can be temporarily unavailable.</p>`;
-  }
-  return `${header}${cap}${shotBox(shots)}`;
-}
-
 function render() {
   const panel = panelEl();
   if (!panel) return;
@@ -295,22 +246,9 @@ function render() {
     )}
 
     ${timelineSection(p)}
-
-    ${shotMapSection(p.id)}
   `;
 
   $("#pdClose", panel).onclick = closePlayerDetail;
-  const shotsToggle = $("#pdShotsToggle", panel);
-  // stopPropagation matters here, not just tidiness: this handler calls
-  // render(), which replaces panel.innerHTML - including the very button
-  // the click is still bubbling from. With the event left to bubble
-  // naturally, it reaches document's click-outside listener carrying a
-  // now-detached e.target, whose .closest("#playerDetail") can no longer
-  // find its (destroyed) ancestor - so that listener reads it as a click
-  // outside the drawer and closes it right back down, a tick after it
-  // opened. Same reason every other in-drawer trigger already stops
-  // propagation (see the [data-playerid] handlers below).
-  if (shotsToggle) shotsToggle.onclick = (e) => { e.stopPropagation(); shotsExpanded = !shotsExpanded; render(); };
 }
 
 // Wired once, at module load - the panel has no view of its own to run a

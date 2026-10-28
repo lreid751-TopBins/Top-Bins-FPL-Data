@@ -74,9 +74,6 @@ export const api = {
   element: (id) => get(`${BASE}/element/${id}`, { ttl: 300_000 }),
   prices: (days = 14) => get(`${BASE}/prices?days=${days}`, { ttl: 600_000 }),
   latestVideo: () => get(`${BASE}/latest-video`, { ttl: 600_000 }),
-  // Third-party (understat.com), not the FPL API - shots only grow ~weekly,
-  // so this can cache far longer than anything else here.
-  shotMap: (playerId) => get(`${BASE}/shot-map?player=${playerId}`, { ttl: 6 * 3_600_000 }),
 
   points: (from, to, elements = []) => {
     const q = new URLSearchParams({ from, to });

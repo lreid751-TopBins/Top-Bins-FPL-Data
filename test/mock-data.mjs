@@ -333,42 +333,6 @@ export function teamsWindowPayload(from, to) {
   return { from, to: cappedTo, teams };
 }
 
-/** Deterministic per-player shot log shaped like understat.com's real
- * getPlayerData response (strings for the numeric fields, exactly as
- * the real API returns them) - a mix of in-box and out-of-box shots so
- * shotBox()'s own geometric filter has something real to do, and a mix
- * of goals/non-goals so the goal styling isn't always-on or never-on. */
-export function shotMapPayload(elementId) {
-  const shots = [];
-  for (let i = 0; i < 7; i++) {
-    const inBox = statHash(elementId, i, 5003) % 3 !== 0; // ~2/3 in the box
-    const x = inBox
-      ? 0.85 + (statHash(elementId, i, 6007) % 15) / 100 // .85-.99
-      : 0.60 + (statHash(elementId, i, 6007) % 20) / 100; // .60-.79, outside
-    const y = 0.25 + (statHash(elementId, i, 7793) % 50) / 100; // .25-.74, always within the box's width
-    const xg = +(0.03 + (statHash(elementId, i, 1009) % 55) / 100).toFixed(2); // .03-.57
-    const isGoal = statHash(elementId, i, 311) % 6 === 0;
-    shots.push({
-      X: x.toFixed(3),
-      Y: y.toFixed(3),
-      xG: String(xg),
-      result: isGoal ? "Goal" : statHash(elementId, i, 619) % 2 === 0 ? "SavedShot" : "MissedShots",
-      situation: "OpenPlay",
-      shotType: "RightFoot",
-      // Season filtering is real-backend logic (shotMapFor() in handler.ts) -
-      // the mock returns an already-filtered log, same as the real
-      // endpoint's response shape, so this value isn't read by anything.
-      season: "2025",
-      minute: String(10 + i * 11),
-      date: "2025-09-01 15:00:00",
-      h_team: "Mock",
-      a_team: "Mock",
-      h_a: "h",
-    });
-  }
-  return shots;
-}
-
 const pickIds = elements.filter((e) => e.element_type === 3).slice(0, 6).map((e) => e.id);
 const opt = (id) => {
   const e = elements.find((x) => x.id === id);

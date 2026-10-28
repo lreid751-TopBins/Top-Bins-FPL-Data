@@ -80,20 +80,6 @@ const deps: Deps = {
     return await res.text();
   },
 
-  async understatGet(path, referer) {
-    const headers: Record<string, string> = {
-      "User-Agent":
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
-        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    };
-    // Confirmed by hand: /getPlayerData/* 404s without this pointing at an
-    // understat.com player page. Harmless to send everywhere else too.
-    if (referer) headers.Referer = referer;
-    const res = await fetch(`https://understat.com${path}`, { headers });
-    if (!res.ok) throw new Error(`understat.com returned ${res.status} for ${path}`);
-    return await res.text();
-  },
-
   async cacheGet(key) {
     const res = await fetch(
       `${REST}/api_cache?key=eq.${encodeURIComponent(key)}&select=payload,fetched_at`,

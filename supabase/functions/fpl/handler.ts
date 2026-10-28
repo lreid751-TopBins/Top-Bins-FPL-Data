@@ -102,11 +102,6 @@ export interface Deps {
   postDeadlineReminderToDiscord: (message: string) => Promise<void>;
   /** Raw XML of the channel's public upload feed (no API key needed). */
   youtubeFeedGet: () => Promise<string>;
-  /** Raw text from an understat.com path (JSON the caller parses) - a
-   * third-party, unofficial source for shot-location data, not the FPL
-   * API. `referer` is required for /getPlayerData/* (understat 404s
-   * without it) and harmless elsewhere. */
-  understatGet: (path: string, referer?: string) => Promise<string>;
   /** Shared secret guarding the scheduled automation endpoints (snapshot, deadline-reminder). */
   snapshotKey: string;
   /** Allowed browser origins, or ["*"]. */
@@ -277,138 +272,6 @@ export async function latestVideo(deps: Deps): Promise<LatestVideo | null> {
     if (shared) return shared.payload as LatestVideo | null;
     if (local) return local.payload as LatestVideo | null;
     console.error("youtube feed fetch failed:", err);
-    return null;
-  }
-}
-
-/* ---------------------------------------------------------------
-   Shots in the box (Understat)
-   The FPL API has no shot-location data at all - understat.com is the
-   only free source, and it is not an official API: confirmed by hand
-   that both endpoints below 404 without a browser-like User-Agent, and
-   getPlayerData also 404s without a Referer pointing at an understat.com
-   player page - an active check, not just tolerance. Same posture as
-   latest-video above: its own small cache via memory/cacheGet/cacheSet
-   (not cached(), which is wired specifically to deps.fplGet), soft-fails
-   to null/empty rather than a 502. That matters more here than anywhere
-   else this backend touches a third party - this feeds the player
-   profile drawer, which opens on nearly every player-name click
-   sitewide, so a flaky upstream must never be able to break it.
---------------------------------------------------------------- */
-const UNDERSTAT_TTL = 6 * 3_600_000; // shots only grow ~weekly; no need to poll harder
-
-export interface UnderstatShot {
-  X: string;
-  Y: string;
-  xG: string;
-  result: string;
-  situation: string;
-  shotType: string;
-  season: string;
-  minute: string;
-  date: string;
-  h_team: string;
-  a_team: string;
-  h_a: string;
-}
-
-/** PL seasons start in August; understat's own `season` field is the year
- * it started (e.g. "2025" for 2025/26) - a date before July belongs to
- * the season that started the previous calendar year. */
-function understatSeason(now: number): string {
-  const d = new Date(now);
-  const year = d.getUTCFullYear();
-  return String(d.getUTCMonth() >= 6 ? year : year - 1);
-}
-
-interface UnderstatSearchHit {
-  id: string;
-  player: string;
-  team: string;
-}
-
-/** Maps an FPL player to their understat.com id via the site's own
- * search typeahead, confirmed by the team name on the result rather than
- * trusting the top match blindly - two players can share a surname. */
-async function understatPlayerId(deps: Deps, fullName: string, teamName: string): Promise<string | null> {
-  const key = `understat-id:${fullName}`;
-  const now = deps.now();
-
-  const local = memory.get(key);
-  if (local && now - local.fetchedAt < UNDERSTAT_TTL) return local.payload as string | null;
-  const shared = await deps.cacheGet(key).catch(() => null);
-  if (shared && now - shared.fetchedAt < UNDERSTAT_TTL) {
-    memory.set(key, shared);
-    return shared.payload as string | null;
-  }
-
-  try {
-    const text = await deps.understatGet(`/main/getPlayersName/${encodeURIComponent(fullName)}`);
-    const data = JSON.parse(text) as { response?: { players?: UnderstatSearchHit[] } };
-    const candidates = data.response?.players ?? [];
-    const teamLower = teamName.toLowerCase();
-    const match =
-      candidates.find(
-        (c) => c.team.toLowerCase().includes(teamLower) || teamLower.includes(c.team.toLowerCase())
-      ) ?? candidates[0] ?? null;
-    const id = match?.id ?? null;
-    memory.set(key, { payload: id, fetchedAt: now });
-    await deps.cacheSet(key, id).catch(() => {});
-    return id;
-  } catch (err) {
-    if (shared) return shared.payload as string | null;
-    if (local) return local.payload as string | null;
-    console.error("understat player search failed:", err);
-    return null;
-  }
-}
-
-/** This season's shots for one FPL player, or null if understat.com is
- * unreachable and nothing is cached yet (empty array, not null, means
- * "reached understat fine, found zero/no matching player"). */
-export async function shotMapFor(deps: Deps, fplPlayerId: number): Promise<UnderstatShot[] | null> {
-  const boot = (await cached(deps, "bootstrap", TTL.bootstrap, "/bootstrap-static/")) as {
-    elements?: Array<{ id: number; first_name: string; second_name: string; team: number }>;
-    teams?: Array<{ id: number; name: string }>;
-  };
-  const el = boot.elements?.find((e) => e.id === fplPlayerId);
-  if (!el) return [];
-  const teamName = boot.teams?.find((t) => t.id === el.team)?.name ?? "";
-  const fullName = `${el.first_name} ${el.second_name}`.trim();
-
-  const key = `understat-shots:${fplPlayerId}`;
-  const now = deps.now();
-
-  const local = memory.get(key);
-  if (local && now - local.fetchedAt < UNDERSTAT_TTL) return local.payload as UnderstatShot[] | null;
-  const shared = await deps.cacheGet(key).catch(() => null);
-  if (shared && now - shared.fetchedAt < UNDERSTAT_TTL) {
-    memory.set(key, shared);
-    return shared.payload as UnderstatShot[] | null;
-  }
-
-  try {
-    const understatId = await understatPlayerId(deps, fullName, teamName);
-    if (!understatId) {
-      memory.set(key, { payload: [], fetchedAt: now });
-      await deps.cacheSet(key, []).catch(() => {});
-      return [];
-    }
-    const text = await deps.understatGet(
-      `/getPlayerData/${understatId}`,
-      `https://understat.com/player/${understatId}`
-    );
-    const data = JSON.parse(text) as { shots?: UnderstatShot[] };
-    const season = understatSeason(now);
-    const payload = (data.shots ?? []).filter((s) => s.season === season);
-    memory.set(key, { payload, fetchedAt: now });
-    await deps.cacheSet(key, payload).catch(() => {});
-    return payload;
-  } catch (err) {
-    // A stale shot log beats none at all if understat wobbles or blocks us.
-    if (shared) return shared.payload as UnderstatShot[] | null;
-    if (local) return local.payload as UnderstatShot[] | null;
-    console.error("understat shot map fetch failed:", err);
     return null;
   }
 }
@@ -999,12 +862,6 @@ export function createHandler(deps: Deps) {
 
         case "latest-video":
           return json(await latestVideo(deps), 200, cors, 1200);
-
-        case "shot-map": {
-          const player = url.searchParams.get("player") ?? "";
-          if (!isId(player)) return json({ error: "bad_player_id" }, 400, cors);
-          return json(await shotMapFor(deps, Number(player)), 200, cors, 1800);
-        }
 
         default:
           return json({ error: "not_found" }, 404, cors);

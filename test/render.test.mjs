@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, "..");
 
-import { MOCK, CURRENT_GW, squadPicks, seedDecisions, pointsPayload, teamsWindowPayload, shotMapPayload } from "./mock-data.mjs";
+import { MOCK, CURRENT_GW, squadPicks, seedDecisions, pointsPayload, teamsWindowPayload } from "./mock-data.mjs";
 
 /* ---------------- jsdom harness ---------------- */
 const html = fs.readFileSync(path.join(root, "public/index.html"), "utf8");
@@ -52,11 +52,6 @@ global.fetch = async (url, init = {}) => {
   if (p.startsWith("/api/teams-window")) {
     const q = new URLSearchParams(p.split("?")[1] ?? "");
     return ok(teamsWindowPayload(Number(q.get("from")), Number(q.get("to"))));
-  }
-
-  if (p.startsWith("/api/shot-map")) {
-    const q = new URLSearchParams(p.split("?")[1] ?? "");
-    return ok(shotMapPayload(Number(q.get("player"))));
   }
 
   if (p.startsWith("/api/squads")) {
@@ -1355,89 +1350,6 @@ check("player profile drawer shows a photo, a hero stat, grouped stats, and one 
   closePlayerDetail();
   return `photo + hero stat present, 3 stat groups, ${timelineItems.length} timeline items in one strip`;
 });
-
-await (async () => {
-  // Third-party (understat.com), not the FPL API - this fetch must never
-  // block or disrupt the rest of the drawer, which opens on nearly every
-  // player-name click sitewide and renders everything else synchronously.
-  const freshId = S.players.find((p) => p.minutes > 0)?.id ?? S.players[0].id;
-  openPlayerDetail(freshId);
-
-  check("player profile drawer renders its core content immediately, not blocked by the third-party shot-map fetch", () => {
-    const drawer = document.getElementById("playerDetail");
-    if (!drawer.querySelector(".pd-timeline")) {
-      throw new Error("core drawer content should render synchronously regardless of the shots fetch");
-    }
-    if (!drawer.innerHTML.includes("Shots in the box")) {
-      throw new Error("shots section header should render immediately too, even before the fetch resolves");
-    }
-    return "core drawer content (incl. the shots header) renders synchronously on open";
-  });
-
-  check("shots in the box starts collapsed", () => {
-    const drawer = document.getElementById("playerDetail");
-    const toggle = drawer.querySelector("#pdShotsToggle");
-    if (!toggle) throw new Error("no shots-section toggle button rendered");
-    if (toggle.getAttribute("aria-expanded") !== "false") throw new Error("shots section should start collapsed");
-    if (drawer.querySelector(".shot-box")) throw new Error("shot box shouldn't render before the section is expanded");
-    return "collapsed by default, no shot box rendered yet";
-  });
-
-  document.getElementById("playerDetail").querySelector("#pdShotsToggle").click();
-  await new Promise((r) => setTimeout(r, 30));
-
-  check("shot box renders real plotted shots once expanded and understat data resolves", () => {
-    const drawer = document.getElementById("playerDetail");
-    if (drawer.innerHTML.includes("NaN") || drawer.innerHTML.includes("undefined")) {
-      throw new Error("bad value leaked into the shot box");
-    }
-    const toggle = drawer.querySelector("#pdShotsToggle");
-    if (toggle.getAttribute("aria-expanded") !== "true") throw new Error("clicking the toggle should mark it expanded");
-    const box = drawer.querySelector(".shot-box");
-    if (!box) throw new Error("no shot box rendered once the mock fetch resolved");
-    const dots = box.querySelectorAll(".shot-dot");
-    if (!dots.length) throw new Error("setup: mock shot data should include at least one in-box shot");
-    return `${dots.length} shots plotted in the box`;
-  });
-
-  closePlayerDetail();
-})();
-
-await (async () => {
-  const [idA, idB] = S.players.slice(0, 2).map((p) => p.id);
-  if (idA == null || idB == null || idA === idB) throw new Error("setup: need two distinct players");
-
-  openPlayerDetail(idA);
-  await new Promise((r) => setTimeout(r, 30));
-  openPlayerDetail(idB);
-  await new Promise((r) => setTimeout(r, 30));
-
-  check("switching players resets the shots toggle to collapsed, not carrying over the previous player's expanded state", () => {
-    const toggle = document.getElementById("playerDetail").querySelector("#pdShotsToggle");
-    if (!toggle) throw new Error("no shots-section toggle rendered for the newly-opened player");
-    if (toggle.getAttribute("aria-expanded") !== "false") {
-      throw new Error("a fresh openPlayerDetail() call should always start the shots section collapsed");
-    }
-    return "collapsed again after switching players";
-  });
-
-  document.getElementById("playerDetail").querySelector("#pdShotsToggle").click();
-  await new Promise((r) => setTimeout(r, 30));
-
-  check("switching players shows that player's own shot box, not a stale or mixed-up one", () => {
-    const drawer = document.getElementById("playerDetail");
-    if (!drawer.innerHTML.includes(S.playerById[idB].name)) {
-      throw new Error("drawer should reflect the currently-open player");
-    }
-    if (drawer.innerHTML.includes("NaN") || drawer.innerHTML.includes("undefined")) {
-      throw new Error("bad value leaked into the shot box");
-    }
-    if (!drawer.querySelector(".shot-box")) throw new Error("expanding should render player B's own shot box");
-    return `switched to ${S.playerById[idB].name}'s own profile without mixing up shot data`;
-  });
-
-  closePlayerDetail();
-})();
 
 // Regression: loadManager() is also called every 90s by the live-score
 // refresh in app.js while a team is already showing. It used to set the
