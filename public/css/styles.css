@@ -1606,10 +1606,21 @@ textarea::placeholder { color: var(--muted-2); }
 .more-sort > button { background: var(--panel-2); border: 1px solid var(--line); color: var(--muted); border-radius: 6px; padding: 3px 8px; font-size: 10.5px; }
 .more-sort > button:hover { color: var(--chalk); border-color: var(--gold-deep); }
 .more-menu {
-  display: none; position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 160px;
+  position: absolute; right: 0; top: calc(100% + 4px); z-index: 5; min-width: 160px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden;
+  /* visibility, not display:none - needs to stay transitionable, but closed
+     still has to drop out of the tab order (its buttons are real, focusable
+     elements, unlike .tip's inert SVG text) and the a11y tree. The 0.12s
+     visibility delay keeps it focusable/visible for exactly as long as the
+     fade-out is still playing, then drops it the instant the fade ends. */
+  visibility: hidden; opacity: 0; transform: translateY(-4px);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0.12s;
 }
-.more-sort.open .more-menu { display: block; }
+.more-sort.open .more-menu {
+  visibility: visible; opacity: 1; transform: translateY(0);
+  transition: opacity 0.12s ease, transform 0.12s ease, visibility 0s linear 0s;
+}
+@media (prefers-reduced-motion: reduce) { .more-menu { transition: none; } }
 .more-menu button { width: 100%; text-align: left; background: transparent; border: none; color: var(--chalk); font-size: 12px; padding: 8px 10px; display: flex; justify-content: space-between; }
 .more-menu button:hover { background: var(--raise); }
 .more-menu button .cur { color: var(--gold); font-size: 10px; }
