@@ -75,11 +75,12 @@ function playPanelEnter(el) {
   el.classList.add("panel-enter");
 }
 
+const REDUCED_MOTION = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 // How long the outgoing panel's fade (.panel-exit, see styles.css) gets to
 // play before it's actually hidden and the next one renders. 0 under
 // reduced-motion so switching stays instant rather than an unexplained
 // pause with nothing visibly animating.
-const PANEL_EXIT_MS = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 110;
+const PANEL_EXIT_MS = REDUCED_MOTION ? 0 : 110;
 let exitTimer = null;
 
 function wireTabs() {
@@ -89,6 +90,21 @@ function wireTabs() {
       S.ui.tab = nextTab;
       $$(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === t)));
       trackTab(nextTab);
+      // The nav itself scrolls horizontally once it's got more tabs than
+      // fit (mobile, mainly) - clicking Hub right after manually scrolling
+      // to reach Journal left the now-active tab, and its gold pill,
+      // scrolled off-screen with nothing on screen showing what's selected.
+      // behavior must stay "auto" (instant) - a smooth scrollIntoView here
+      // gets cancelled by the window.scrollTo() right below it, so nothing
+      // moves at all.
+      t.scrollIntoView({ inline: "nearest", block: "nearest", behavior: "auto" });
+      // Each panel's own scroll-fade / chart-box content was fine, but the
+      // *page* kept whatever scroll depth the previous tab was left at - so
+      // switching to Analytics from three screens down the Hub dropped you
+      // mid-scroll into Analytics with no heading in view. A tab switch
+      // should read as a new section, not a scroll jump cosmetically
+      // disguised as a different page.
+      window.scrollTo(0, 0);
 
       clearTimeout(exitTimer);
       exitTimer = null;
