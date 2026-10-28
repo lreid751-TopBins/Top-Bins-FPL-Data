@@ -75,14 +75,41 @@ function playPanelEnter(el) {
   el.classList.add("panel-enter");
 }
 
+// How long the outgoing panel's fade (.panel-exit, see styles.css) gets to
+// play before it's actually hidden and the next one renders. 0 under
+// reduced-motion so switching stays instant rather than an unexplained
+// pause with nothing visibly animating.
+const PANEL_EXIT_MS = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? 0 : 110;
+let exitTimer = null;
+
 function wireTabs() {
   $$(".tab").forEach((t) => {
     t.onclick = () => {
-      S.ui.tab = t.dataset.tab;
+      const nextTab = t.dataset.tab;
+      S.ui.tab = nextTab;
       $$(".tab").forEach((x) => x.setAttribute("aria-selected", String(x === t)));
-      renderActive();
-      playPanelEnter(PANELS[t.dataset.tab].el());
-      trackTab(t.dataset.tab);
+      trackTab(nextTab);
+
+      clearTimeout(exitTimer);
+      exitTimer = null;
+      // Found by what's actually visible in the DOM right now, not by the
+      // previous S.ui.tab value - a second click fired while the first
+      // panel is still mid-fade-out needs to find that same still-visible
+      // panel again, not the (not-yet-shown) one the first click targeted.
+      const prevEl = Object.values(PANELS).map((p) => p.el()).find((el) => !el.hidden);
+      const nextEl = PANELS[nextTab].el();
+      if (!prevEl || prevEl === nextEl) {
+        prevEl?.classList.remove("panel-exit");
+        return;
+      }
+      prevEl.classList.add("panel-exit");
+      exitTimer = setTimeout(() => {
+        prevEl.hidden = true;
+        prevEl.classList.remove("panel-exit");
+        exitTimer = null;
+        renderActive();
+        playPanelEnter(nextEl);
+      }, PANEL_EXIT_MS);
     };
   });
 }
