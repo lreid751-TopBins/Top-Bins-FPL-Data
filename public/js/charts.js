@@ -106,6 +106,40 @@ export function scatter(points, opts = {}) {
   const ranked = [...points].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, labelTop);
   const labelled = new Set(ranked.map((p) => p.id));
 
+  // Real player data clusters - several of the highest-weight points often
+  // sit within a few pixels of each other, and a fixed cx+8 offset for
+  // every label just stacks their text on top of itself. Placed greedily
+  // in weight order (most important label claims its spot first) against
+  // a short list of candidate offsets around the point, picking the first
+  // one that doesn't overlap a label already placed; characters-times-a-
+  // constant stands in for real text measurement, same approximation the
+  // tooltip box below already uses.
+  const placedLabels = [];
+  const labelPos = new Map();
+  ranked.forEach((p) => {
+    const cx = px(p.x);
+    const cy = py(p.y);
+    const text = p.short || p.label;
+    const lw = text.length * 6.1 + 6;
+    const lh = 13;
+    const candidates = [
+      { x: cx + 8, y: cy + 3.5 }, // right (the old fixed spot, tried first)
+      { x: cx + 8, y: cy - 9 }, // right, raised
+      { x: cx + 8, y: cy + 16 }, // right, lowered
+      { x: cx - lw - 8, y: cy + 3.5 }, // left
+      { x: cx - lw / 2, y: cy - 13 }, // above, centred
+      { x: cx - lw / 2, y: cy + 19 }, // below, centred
+    ];
+    const clamp = (c) => ({ x: Math.max(2, Math.min(W - lw - 2, c.x)), y: Math.max(PAD.t + lh, Math.min(H - PAD.b, c.y)) });
+    const fits = (c) => {
+      const box = { x0: c.x, y0: c.y - lh + 3, x1: c.x + lw, y1: c.y + 3 };
+      return !placedLabels.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
+    };
+    const chosen = clamp(candidates.find(fits) || candidates[0]);
+    placedLabels.push({ x0: chosen.x, y0: chosen.y - lh + 3, x1: chosen.x + lw, y1: chosen.y + 3 });
+    labelPos.set(p.id, chosen);
+  });
+
   const dots = points
     .map((p) => {
       const cx = px(p.x);
@@ -120,12 +154,13 @@ export function scatter(points, opts = {}) {
       const tx = Math.max(4, Math.min(W - tw - 4, cx - tw / 2));
       const above = cy - 34 >= PAD.t;
       const ty = above ? cy - 34 : cy + 12;
+      const lp = labelPos.get(p.id);
       return `<g class="pt-wrap">
         <g class="pt">
           <circle cx="${cx}" cy="${cy}" r="${show ? 5 : 3.5}" fill="${p.color || "var(--gold)"}"
             fill-opacity="${show ? 0.95 : 0.55}" stroke="var(--pitch)" stroke-width="1"/>
           <title>${esc(p.label)}</title>
-          ${show ? `<text class="pt-lab" x="${cx + 8}" y="${cy + 3.5}">${esc(p.short || p.label)}</text>` : ""}
+          ${show ? `<text class="pt-lab" x="${lp.x}" y="${lp.y}">${esc(p.short || p.label)}</text>` : ""}
         </g>
         <g class="tip">
           <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5"/>
