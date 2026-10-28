@@ -3747,16 +3747,19 @@ await (async () => {
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics due-a-goal-or-assist renders due and hot lists from real per-GW goals/assists vs xGI", () => {
+  check("Analytics due-a-goal-or-assist renders a real actual-vs-expected scatter, coloured hot/due", () => {
     const html = panel("panel-analytics").innerHTML;
-    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the leaderboard");
-    const bars = panel("panel-analytics").querySelectorAll(".dbar");
-    if (!bars.length) throw new Error("no leaderboard bars rendered once data loaded");
-    const negs = panel("panel-analytics").querySelectorAll(".dbar-v.neg");
-    const poss = panel("panel-analytics").querySelectorAll(".dbar-v.pos");
-    if (!negs.length) throw new Error("expected at least one underperforming (due) player");
-    if (!poss.length) throw new Error("expected at least one overperforming (hot) player");
-    return `${bars.length} leaderboard bars, ${negs.length} due, ${poss.length} hot`;
+    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the scatter");
+    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
+    if (!dueBox) throw new Error("no due-a-goal-or-assist section rendered");
+    const dots = dueBox.querySelectorAll(".pt circle");
+    if (!dots.length) throw new Error("no points plotted once data loaded");
+    const hot = dueBox.querySelectorAll('.pt circle[fill="var(--pos)"]');
+    const due = dueBox.querySelectorAll('.pt circle[fill="var(--neg)"]');
+    if (!hot.length) throw new Error("expected at least one overperforming (hot) point");
+    if (!due.length) throw new Error("expected at least one underperforming (due) point");
+    if (!dueBox.querySelector(".paritys")) throw new Error("expected an 'as expected' parity line on the scatter");
+    return `${dots.length} points plotted, ${hot.length} hot, ${due.length} due`;
   });
 
   check("Analytics squad-audit table renders one sortable row per eligible player, with consistency/minutes-trend tags", () => {
@@ -3818,25 +3821,30 @@ await (async () => {
   S.ui.anPos = "GKP";
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics shared position filter restricts due/hot and the audit table to that position only", () => {
+  check("Analytics shared position filter restricts the due scatter and the audit table to that position only", () => {
     // Scoped to the due-a-goal-or-assist box specifically - the projection
-    // check at the bottom of the tab also renders .dbar-l bars, but it's a
+    // check at the bottom of the tab also renders .pt points, but it's a
     // separate, deliberately position-unfiltered group, not part of this
     // shared triage filter.
     const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
     if (!dueBox) throw new Error("no due-a-goal-or-assist section rendered");
-    const dbarNames = [...dueBox.querySelectorAll(".dbar-l")].map((el) => el.textContent);
+    // Every point's label starts with "Name (SHORT) — ..." - pull the bare
+    // name back out rather than fuzzy-matching the full descriptive string.
+    const scatterNames = [...dueBox.querySelectorAll(".pt title")].map((el) => el.textContent.split(" (")[0]);
     const auditNames = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr td:first-child")].map((el) => el.textContent);
-    if (!dbarNames.length && !auditNames.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
+    if (!scatterNames.length && !auditNames.length) throw new Error("setup: no GKPs cleared the minutes bar for this window");
     const gkpNames = new Set(S.players.filter((p) => p.pos === "GKP").map((p) => p.name));
-    const leaked = [...dbarNames, ...auditNames].filter((nm) => !gkpNames.has(nm));
+    const leaked = [...scatterNames, ...auditNames].filter((nm) => !gkpNames.has(nm));
     if (leaked.length) throw new Error(`non-GKP name(s) leaked into the GKP-filtered triage group: ${leaked.join(", ")}`);
-    return `${dbarNames.length} due/hot rows, ${auditNames.length} audit rows, all GKP`;
+    return `${scatterNames.length} scatter points, ${auditNames.length} audit rows, all GKP`;
   });
+
+  const dueBoxFor = () =>
+    [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
 
   S.ui.anPos = savedPos;
   renderAnalytics(panel("panel-analytics"));
-  const before = panel("panel-analytics").querySelector(".dbar-m")?.textContent;
+  const before = dueBoxFor()?.querySelector(".pt title")?.textContent;
 
   S.ui.anWindow = "3";
   renderAnalytics(panel("panel-analytics"));
@@ -3847,9 +3855,9 @@ await (async () => {
     const gws5 = gwList(savedWindow);
     const gws3 = gwList("3");
     if (gws3.length >= gws5.length) throw new Error("setup: 3-GW window should be shorter than the default window");
-    const after = panel("panel-analytics").querySelector(".dbar-m")?.textContent;
-    if (!before) throw new Error("setup: no leaderboard row before switching the window");
-    if (!after) throw new Error("no leaderboard rows after switching the window");
+    const after = dueBoxFor()?.querySelector(".pt title")?.textContent;
+    if (!before) throw new Error("setup: no scatter point before switching the window");
+    if (!after) throw new Error("no scatter points after switching the window");
     if (after === before) throw new Error("switching the GW window didn't change the summed G/A/xGI shown");
     return `window narrowed from ${gws5.length} to ${gws3.length} GWs, summed totals changed`;
   });

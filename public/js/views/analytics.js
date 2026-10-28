@@ -1,6 +1,6 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
 import { $, $$, esc, th, teamCrest } from "../ui.js";
-import { radar, lineChart, divergingBars } from "../charts.js";
+import { scatter, radar, lineChart, divergingBars } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
@@ -262,10 +262,10 @@ function minutesTrendTag(delta) {
 /* ---------------- Due a goal or assist ---------------- */
 function dueSection(rows) {
   const header = `<h3>Who's due a goal or assist?</h3>
-    <p class="cap">Actual goals + assists minus expected (xGI) over the window above - the same idea as the
-      Hub/Teams "finishing hot" and "due a correction" cards, at player level instead of team level. A big negative
-      gap means the chances are there and the finish hasn't arrived yet; a big positive gap means the output is
-      running ahead of the underlying chances.</p>`;
+    <p class="cap">Actual goals + assists against expected (xGI) over the window above, for every player who
+      cleared the minutes bar - not just a top-6 either side. Above the dashed line is outperforming the chances
+      created; below is underperforming. Distance from the line is what matters, not where a name sits in a
+      ranked list.</p>`;
 
   if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
   if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
@@ -273,24 +273,35 @@ function dueSection(rows) {
     return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
   }
 
-  const meta = (r) => `${r.pos} · ${r.short} · ${r.g}G ${r.a}A vs ${r.xgi.toFixed(1)} xGI`;
-  const due = rows
-    .filter((r) => r.delta < 0)
-    .sort((a, b) => a.delta - b.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
-  const hot = rows
-    .filter((r) => r.delta > 0)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
+  // A small, honest dead zone around zero (+/-0.5) rather than colouring
+  // every player strictly hot or due - a 0.1 gap either side of the line
+  // isn't really "due" anything, it's noise.
+  const points = rows.map((r) => ({
+    id: r.id,
+    x: r.xgi,
+    y: r.actual,
+    label: `${r.name} (${r.short}) — ${r.actual}G+A vs ${r.xgi.toFixed(1)} xGI (${signed(+r.delta.toFixed(1))})`,
+    short: r.name,
+    color: r.delta > 0.5 ? "var(--pos)" : r.delta < -0.5 ? "var(--neg)" : "var(--muted-2)",
+    weight: Math.abs(r.delta),
+  }));
 
   return `<div class="chart-box">
     ${header}
-    <h3 class="compare-sub">Due a goal or assist</h3>
-    ${divergingBars(due, { meta, empty: "Nobody's underperforming their xGI in this window." })}
-    <h3 class="compare-sub">Running hot</h3>
-    ${divergingBars(hot, { meta, empty: "Nobody's outperforming their xGI in this window." })}
+    ${scatter(points, {
+      xLabel: "Expected (xGI)",
+      yLabel: "Actual (G+A)",
+      parity: true,
+      fmt: (v) => v.toFixed(1),
+      labelTop: 8,
+      empty: "Nobody's cleared the minutes bar for this window yet.",
+    })}
+    <div class="an-h2h-legend">
+      <span class="an-h2h-dot" style="background:var(--pos)"></span>
+      <span>Running hot</span>
+      <span class="an-h2h-dot" style="background:var(--neg);margin-left:14px"></span>
+      <span>Due a goal or assist</span>
+    </div>
   </div>`;
 }
 
