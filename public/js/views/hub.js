@@ -1,6 +1,7 @@
 import { S, n, f1, f2, signed, teamResults, teamSeasonXG, saveTheme } from "../store.js";
 import { $$, esc, statCard, availabilityFlag, teamCrest, metricFlash } from "../ui.js";
 import { projectPlayer } from "../projection.js";
+import { lineChart } from "../charts.js";
 import { aggregate } from "./teams.js";
 import { fmtRank, isManagerLoading } from "./squad.js";
 
@@ -264,25 +265,6 @@ function captaincyWidget() {
 }
 
 /* ---------------- Your season: overall rank, trend, mini-leagues ---------------- */
-function rankTrendSvg(history) {
-  const pts = (history || []).map((h) => n(h.overall_rank)).filter((v) => v > 0).slice(-8);
-  if (pts.length < 2) return "";
-  const w = 130, h = 32, pad = 3;
-  const max = Math.max(...pts), min = Math.min(...pts);
-  const span = Math.max(1, max - min);
-  const coords = pts
-    .map((v, i) => {
-      const x = pad + (i / (pts.length - 1)) * (w - pad * 2);
-      const y = pad + ((v - min) / span) * (h - pad * 2); // lower rank number sits higher on the chart
-      return `${x.toFixed(1)},${y.toFixed(1)}`;
-    })
-    .join(" ");
-  const improving = pts[pts.length - 1] < pts[0];
-  return `<svg class="hub-trend" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Overall rank trend">
-    <polyline points="${coords}" fill="none" stroke="${improving ? "var(--pos)" : "var(--neg)"}" stroke-width="1.5" />
-  </svg>`;
-}
-
 function rankWidget() {
   if (!S.entry) {
     // Second thing on the page, with a real button rather than a small
@@ -309,6 +291,18 @@ function rankWidget() {
   const prevRank = history.length > 1 ? n(history.at(-2).overall_rank) : null;
   const delta = prevRank != null && rank ? prevRank - rank : null; // positive = improved
 
+  // Negative y, not raw rank: lineChart() plots higher y higher on the
+  // chart, which is correct for "bigger is better" stats but backwards for
+  // rank, where smaller is better - negating once here means an improving
+  // week still reads as the line climbing, the intuitive direction, without
+  // lineChart() itself needing to know anything about rank being inverted.
+  // fmt undoes the negation so the axis/dot tooltips show the real number.
+  const trendPts = history
+    .filter((h) => n(h.overall_rank) > 0)
+    .slice(-8)
+    .map((h) => ({ x: `GW${h.event}`, y: -n(h.overall_rank) }));
+  const trendImproving = trendPts.length > 1 && trendPts.at(-1).y > trendPts[0].y;
+
   const leagues = (S.entry.leagues?.classic || []).slice(0, 6);
 
   return `<div class="chart-box hub-w hero ${isManagerLoading() ? "is-loading" : ""}">
@@ -319,8 +313,15 @@ function rankWidget() {
         <div class="hub-rank-big">${metricFlash("hub-rank", rank, fmtRank(rank))}</div>
         <div class="hint">overall rank${delta != null ? ` · <span class="${delta >= 0 ? "pos" : "neg"}">${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta).toLocaleString()}</span> last GW` : ""}</div>
       </div>
-      ${rankTrendSvg(history)}
     </div>
+    ${
+      trendPts.length > 1
+        ? `<div style="margin:6px 0 10px">${lineChart(trendPts, {
+            color: trendImproving ? "var(--pos)" : "var(--neg)",
+            fmt: (v) => fmtRank(-v),
+          })}</div>`
+        : ""
+    }
     ${
       leagues.length
         ? `<div class="hub-list" style="margin-top:8px">${leagues

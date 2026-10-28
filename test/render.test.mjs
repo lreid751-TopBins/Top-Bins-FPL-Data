@@ -1725,30 +1725,21 @@ check("hub shows crests, rank and mini-leagues once a manager is connected", () 
   const rankBig = panel("panel-hub").querySelector(".hub-rank-big");
   if (!rankBig || rankBig.textContent.trim() === "—") throw new Error("overall rank not shown for a connected manager");
 
-  const trend = panel("panel-hub").querySelector(".hub-trend polyline");
-  if (!trend) throw new Error("no rank trend line rendered");
-
-  {
-    // Regression: .chart-box svg's width:100%/height:auto (for full-bleed
-    // charts elsewhere) also matched this small rank-trend sparkline, since
-    // it lives inside a .chart-box too - stretched it to the full row width
-    // and, via the viewBox aspect ratio, way past its intended 32px height,
-    // spilling out of the "Your season" card into whatever sat beside it.
-    // .hub-trend's own flex:none didn't help, since the SVG's *own* width
-    // was already wrong before flex ever got involved. jsdom doesn't compute
-    // real layout, so this checks the CSS source directly for an override
-    // specific enough to actually beat .chart-box svg (a class+element
-    // selector) - plain .hub-trend (a lone class) is not specific enough.
-    const css = fs.readFileSync(path.join(root, "public/css/styles.css"), "utf8");
-    if (!/\.hub-rank-head\s+svg\.hub-trend\s*\{[^}]*width:\s*130px/.test(css)) {
-      throw new Error("rank-trend sparkline needs a CSS rule specific enough to override .chart-box svg's width:100%");
-    }
-  }
+  // The rank trend uses the shared lineChart() component (real dots per
+  // gameweek, not a bare polyline) so a manager can actually see each
+  // week's rank, not just the overall direction.
+  const rankCard = rankBig.closest(".chart-box");
+  const trendLine = rankCard.querySelector("svg polyline");
+  if (!trendLine) throw new Error("no rank trend line rendered");
+  const trendDots = rankCard.querySelectorAll("svg .pt circle");
+  if (trendDots.length < 2) throw new Error(`expected a real dot per gameweek on the rank trend, got ${trendDots.length}`);
+  const gwLabels = [...rankCard.querySelectorAll("svg .axis text")].map((el) => el.textContent).filter((t) => /^GW\d+$/.test(t));
+  if (!gwLabels.length) throw new Error("rank trend chart has no GW-labelled axis");
 
   const leagueNames = [...panel("panel-hub").querySelectorAll(".hub-rank-head ~ .hub-list .hub-name")].map((el) => el.textContent);
   if (!leagueNames.some((n) => n.includes("Top Bins Listeners"))) throw new Error("mini-league not listed");
 
-  return `${crests.length} crests, rank ${rankBig.textContent.trim()}, ${leagueNames.length} leagues`;
+  return `${crests.length} crests, rank ${rankBig.textContent.trim()}, ${trendDots.length} trend points, ${leagueNames.length} leagues`;
 });
 
 check("a changed rank flashes the number, an unchanged one doesn't", () => {
