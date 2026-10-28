@@ -2,7 +2,7 @@ import { S, runDifficulty, saveWatchlist, n, f1, f2, signed } from "../store.js"
 import {
   $, $$, esc, th, sparkline, fixtureStrip, availabilityFlag, setPieceFlag, profileHint,
 } from "../ui.js";
-import { scatter, POS_COLOR } from "../charts.js";
+import { scatter, POS_COLOR, wireScatterZoom } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 
 function columns(per90) {
@@ -406,4 +406,6 @@ function wire(root) {
       re();
     };
   });
+
+  wireScatterZoom(root);
 }

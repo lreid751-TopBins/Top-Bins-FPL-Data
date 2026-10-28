@@ -3762,6 +3762,20 @@ await (async () => {
     return `${dots.length} points plotted, ${hot.length} hot, ${due.length} due`;
   });
 
+  check("Analytics due scatter is wrapped for drag-to-zoom, with a home viewBox to restore and a reset control", () => {
+    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
+    const wrap = dueBox.querySelector(".scatter-zoom");
+    if (!wrap) throw new Error("scatter not wrapped in .scatter-zoom - drag-to-zoom can't be wired");
+    const homeVb = wrap.dataset.homeVb;
+    if (!homeVb || !/^0 0 \d+ \d+$/.test(homeVb)) throw new Error(`expected a real 'x y w h' home viewBox to restore on reset, got ${JSON.stringify(homeVb)}`);
+    const svg = wrap.querySelector("svg");
+    if (svg.getAttribute("viewBox") !== homeVb) throw new Error("svg's live viewBox should start equal to its own home viewBox");
+    const resetBtn = wrap.querySelector(".scatter-zoom-reset");
+    if (!resetBtn || !resetBtn.hidden) throw new Error("reset-zoom button should exist but stay hidden until the chart is actually zoomed");
+    if (!wrap.querySelector(".scatter-zoom-hint")) throw new Error("expected a hint telling users the chart can be dragged to zoom");
+    return `home viewBox ${homeVb}, reset button present and hidden pre-zoom`;
+  });
+
   check("Analytics squad-audit table renders one sortable row per eligible player, with consistency/minutes-trend tags", () => {
     const rowsEl = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr")];
     if (!rowsEl.length) throw new Error("no squad-audit rows rendered once data loaded");

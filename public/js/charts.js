@@ -170,9 +170,81 @@ export function scatter(points, opts = {}) {
     })
     .join("");
 
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">
-    ${quadTint}${grid}${quad}${parityLine}${axes}${dots}
-  </svg>`;
+  return `<div class="scatter-zoom" data-home-vb="0 0 ${W} ${H}">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">
+      ${quadTint}${grid}${quad}${parityLine}${axes}${dots}
+    </svg>
+    <button type="button" class="scatter-zoom-reset" hidden>Reset zoom</button>
+    <p class="scatter-zoom-hint">Drag on the chart to zoom into a crowded area · double-tap to reset</p>
+  </div>`;
+}
+
+/**
+ * Wires drag-to-zoom on every .scatter-zoom chart under root. Pure viewBox
+ * manipulation - points/labels are already positioned in SVG user-space by
+ * px()/py() above, so zooming the viewBox in is all that's needed for dots,
+ * text and gridlines to scale together; no coordinate math duplicated here.
+ * Pointer Events (not mouse+touch separately) so one code path, with
+ * setPointerCapture, tracks a drag that leaves the SVG's bounds mid-gesture.
+ */
+export function wireScatterZoom(root) {
+  root.querySelectorAll(".scatter-zoom").forEach((wrap) => {
+    const svg = wrap.querySelector("svg");
+    const resetBtn = wrap.querySelector(".scatter-zoom-reset");
+    if (!svg || !resetBtn) return;
+    const home = wrap.dataset.homeVb;
+    const MIN_DRAG = 14; // user-space units below which a drag reads as a stray tap, not a zoom
+
+    const toUser = (clientX, clientY) => {
+      const rect = svg.getBoundingClientRect();
+      const vb = svg.viewBox.baseVal;
+      return {
+        x: vb.x + ((clientX - rect.left) / rect.width) * vb.width,
+        y: vb.y + ((clientY - rect.top) / rect.height) * vb.height,
+      };
+    };
+
+    let start = null;
+    let selEl = null;
+    const updateSel = (a, b) => {
+      if (!selEl) {
+        selEl = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+        selEl.setAttribute("class", "scatter-zoom-sel");
+        svg.appendChild(selEl);
+      }
+      selEl.setAttribute("x", Math.min(a.x, b.x));
+      selEl.setAttribute("y", Math.min(a.y, b.y));
+      selEl.setAttribute("width", Math.abs(a.x - b.x));
+      selEl.setAttribute("height", Math.abs(a.y - b.y));
+    };
+    const clearSel = () => { if (selEl) { selEl.remove(); selEl = null; } };
+    const reset = () => { svg.setAttribute("viewBox", home); resetBtn.hidden = true; };
+
+    svg.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      svg.setPointerCapture(e.pointerId);
+      start = toUser(e.clientX, e.clientY);
+    });
+    svg.addEventListener("pointermove", (e) => {
+      if (!start) return;
+      e.preventDefault();
+      updateSel(start, toUser(e.clientX, e.clientY));
+    });
+    svg.addEventListener("pointerup", (e) => {
+      if (!start) return;
+      const end = toUser(e.clientX, e.clientY);
+      const x0 = Math.min(start.x, end.x), x1 = Math.max(start.x, end.x);
+      const y0 = Math.min(start.y, end.y), y1 = Math.max(start.y, end.y);
+      start = null;
+      clearSel();
+      if (x1 - x0 < MIN_DRAG || y1 - y0 < MIN_DRAG) return;
+      svg.setAttribute("viewBox", `${x0} ${y0} ${x1 - x0} ${y1 - y0}`);
+      resetBtn.hidden = false;
+    });
+    svg.addEventListener("pointercancel", () => { start = null; clearSel(); });
+    svg.addEventListener("dblclick", reset);
+    resetBtn.addEventListener("click", reset);
+  });
 }
 
 /**

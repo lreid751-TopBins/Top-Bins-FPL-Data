@@ -648,6 +648,23 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .tip rect { fill: var(--raise); stroke: var(--line); stroke-width: 1; }
 .tip text { fill: var(--chalk); font-size: 10px; font-family: "Archivo", sans-serif; }
 
+/* Drag-to-zoom (charts.js wireScatterZoom): the svg itself is the drag
+   surface, touch-action:none so a touch-drag doesn't also pan the page. */
+.scatter-zoom { position: relative; }
+/* overflow:hidden overrides .chart-box svg's deliberate overflow:visible
+   (other chart types draw labels just outside their box on purpose) -
+   necessary here because zooming the viewBox in scales gridlines/axis text
+   up with it, and without a clip they bleed into the page past the box. */
+.scatter-zoom svg { touch-action: none; cursor: crosshair; overflow: hidden; border-radius: 6px; }
+.scatter-zoom-sel { fill: var(--gold); fill-opacity: 0.12; stroke: var(--gold); stroke-width: 1; stroke-dasharray: 3 3; pointer-events: none; }
+.scatter-zoom-hint { margin: 6px 0 0; font-size: 10px; color: var(--muted-2); font-family: "JetBrains Mono", monospace; }
+.scatter-zoom-reset {
+  position: absolute; top: 8px; right: 8px; z-index: 2;
+  border: 1px solid var(--line); border-radius: 6px; background: var(--raise); color: var(--chalk);
+  font-family: "JetBrains Mono", monospace; font-size: 10px; padding: 4px 8px; cursor: pointer;
+}
+.scatter-zoom-reset:hover { border-color: var(--gold); color: var(--gold); }
+
 /* ---------------- Transfer scratchpad ---------------- */
 .swap {
   display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: stretch;

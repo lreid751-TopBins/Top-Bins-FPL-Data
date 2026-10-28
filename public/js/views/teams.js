@@ -1,7 +1,7 @@
 import { S, runDifficulty, n, f1, f2, signed } from "../store.js";
 import { api } from "../api.js";
 import { $, $$, esc, th, fixtureStrip, statCard } from "../ui.js";
-import { scatter } from "../charts.js";
+import { scatter, wireScatterZoom } from "../charts.js";
 
 const WINDOW_OPTIONS = [0, 4, 6, 8];
 
@@ -203,6 +203,8 @@ export function renderTeams(root) {
       renderTeams(root);
     };
   });
+
+  wireScatterZoom(root);
 }
 
 function row(t) {

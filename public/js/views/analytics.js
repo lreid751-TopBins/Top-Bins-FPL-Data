@@ -1,6 +1,6 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
 import { $, $$, esc, th, teamCrest } from "../ui.js";
-import { scatter, radar, lineChart, divergingBars } from "../charts.js";
+import { scatter, radar, lineChart, divergingBars, wireScatterZoom } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
@@ -845,4 +845,6 @@ function wire(root) {
 
   const fixSpan = $("#anFixSpan", root);
   if (fixSpan) fixSpan.addEventListener("change", () => { S.ui.anFixSpan = +fixSpan.value; re(); });
+
+  wireScatterZoom(root);
 }
