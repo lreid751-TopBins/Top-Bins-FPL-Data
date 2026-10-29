@@ -634,6 +634,25 @@ export function fmtRank(r) {
   return String(v);
 }
 
+/**
+ * {x, y} points for a lineChart() of overall rank across recent gameweeks,
+ * from a history.current array (Hub and Analytics both plot this). Negated,
+ * not raw: lineChart() plots a higher y higher on the chart, correct for
+ * "bigger is better" stats but backwards for rank, where a smaller number
+ * is the improvement - negating once here means an improving week climbs
+ * the chart as expected, with no inversion awareness needed in lineChart()
+ * itself. Pass fmt: (v) => fmtRank(-v) to lineChart() to undo it for the
+ * axis/dot-tooltip labels.
+ */
+export function rankTrendPoints(history, span = 8) {
+  const points = (history || [])
+    .filter((h) => n(h.overall_rank) > 0)
+    .slice(-span)
+    .map((h) => ({ x: `GW${h.event}`, y: -n(h.overall_rank) }));
+  const improving = points.length > 1 && points.at(-1).y > points[0].y;
+  return { points, improving };
+}
+
 function chipName(code) {
   return (
     {

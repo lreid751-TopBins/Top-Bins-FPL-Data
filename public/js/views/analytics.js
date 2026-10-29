@@ -6,6 +6,8 @@ import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
 import { api } from "../api.js";
 import { aggregate as aggregateTeams } from "./teams.js";
+import { fmtRank, isManagerLoading, rankTrendPoints } from "./squad.js";
+import { goTo } from "./hub.js";
 
 /* =========================================================
    Analytics tab
@@ -61,6 +63,8 @@ export function renderAnalytics(root) {
         .join("")}
     </datalist>
 
+    ${seasonRankSection()}
+
     <div class="eyebrow" style="margin-top:28px">Squad triage</div>
     ${triageFilterBar()}
     ${dueSection(rows)}
@@ -111,6 +115,36 @@ function playerLink(id, name) {
 function emptyBox(title) {
   return `<div class="chart-box"><h3>${esc(title)}</h3>
     <p class="hint">Not enough of the season played yet - check back once a gameweek or two has kicked off.</p>
+  </div>`;
+}
+
+/* =========================================================
+   Your season - overall rank trend, same chart the Hub leads with. A
+   quick personal-context opener before the pool-wide analytics tools
+   below, not one of the "three ways to dig deeper" itself.
+   ========================================================= */
+function seasonRankSection() {
+  if (!S.entry) {
+    return `<div class="chart-box hero">
+      <h3>Your season rank</h3>
+      <p class="cap">Connect your FPL team to chart your overall rank here too.</p>
+      <button class="btn primary" data-goto="squad">Connect your FPL team →</button>
+    </div>`;
+  }
+
+  const history = S.history?.current || [];
+  const { points, improving } = rankTrendPoints(history);
+  if (points.length < 2) {
+    return `<div class="chart-box hero">
+      <h3>Your season rank</h3>
+      <p class="cap">Not enough gameweeks played yet to chart a trend.</p>
+    </div>`;
+  }
+
+  return `<div class="chart-box hero ${isManagerLoading() ? "is-loading" : ""}">
+    <h3>Your season rank</h3>
+    <p class="cap">${esc(S.entry.name || "My Team")} — overall rank by gameweek, most recent ${points.length}.</p>
+    ${lineChart(points, { color: improving ? "var(--pos)" : "var(--neg)", fmt: (v) => fmtRank(-v) })}
   </div>`;
 }
 
@@ -803,6 +837,10 @@ function calibrationPoints() {
 /* ---------------- Events ---------------- */
 function wire(root) {
   const re = () => renderAnalytics(root);
+
+  $$("[data-goto]", root).forEach((el) => {
+    el.onclick = () => goTo(el.dataset.goto);
+  });
 
   $$("[data-playerid]", root).forEach((elx) => {
     const go = (e) => { e.stopPropagation(); openPlayerDetail(+elx.dataset.playerid); };

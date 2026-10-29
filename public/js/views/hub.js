@@ -3,7 +3,7 @@ import { $$, esc, statCard, availabilityFlag, teamCrest, metricFlash } from "../
 import { projectPlayer } from "../projection.js";
 import { lineChart } from "../charts.js";
 import { aggregate } from "./teams.js";
-import { fmtRank, isManagerLoading } from "./squad.js";
+import { fmtRank, isManagerLoading, rankTrendPoints } from "./squad.js";
 
 const MIN_MINS = 270; // same floor Player Finder defaults to, keeps small-sample noise out
 
@@ -11,7 +11,9 @@ function gw() {
   return S.nextGw || S.currentGw || 1;
 }
 
-function goTo(tab) {
+// Exported - Analytics' own season-rank section jumps to My Team the same
+// way, via a real click on the nav tab rather than touching S.ui.tab itself.
+export function goTo(tab) {
   $$(".tab").forEach((t) => t.dataset.tab === tab && t.click());
 }
 
@@ -291,17 +293,7 @@ function rankWidget() {
   const prevRank = history.length > 1 ? n(history.at(-2).overall_rank) : null;
   const delta = prevRank != null && rank ? prevRank - rank : null; // positive = improved
 
-  // Negative y, not raw rank: lineChart() plots higher y higher on the
-  // chart, which is correct for "bigger is better" stats but backwards for
-  // rank, where smaller is better - negating once here means an improving
-  // week still reads as the line climbing, the intuitive direction, without
-  // lineChart() itself needing to know anything about rank being inverted.
-  // fmt undoes the negation so the axis/dot tooltips show the real number.
-  const trendPts = history
-    .filter((h) => n(h.overall_rank) > 0)
-    .slice(-8)
-    .map((h) => ({ x: `GW${h.event}`, y: -n(h.overall_rank) }));
-  const trendImproving = trendPts.length > 1 && trendPts.at(-1).y > trendPts[0].y;
+  const { points: trendPts, improving: trendImproving } = rankTrendPoints(history);
 
   const leagues = (S.entry.leagues?.classic || []).slice(0, 6);
 

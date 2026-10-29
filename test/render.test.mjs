@@ -3571,14 +3571,14 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
 /* =========================================================
    Analytics tab
    ========================================================= */
-check("Analytics tab renders all nine sections with real values, no NaN/undefined", () => {
+check("Analytics tab renders all ten sections with real values, no NaN/undefined", () => {
   renderAnalytics(panel("panel-analytics"));
   const html = panel("panel-analytics").innerHTML;
   if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
   if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
 
   const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
-  if (boxes.length !== 9) throw new Error(`expected 9 chart-box sections, got ${boxes.length}`);
+  if (boxes.length !== 10) throw new Error(`expected 10 chart-box sections, got ${boxes.length}`);
   if (!panel("panel-analytics").querySelector("#anPos")) throw new Error("no shared squad-triage position filter rendered");
   if (!panel("panel-analytics").querySelector("#anWindow")) throw new Error("no shared squad-triage window filter rendered");
   // The squad-audit table itself only appears once the shared window fetch
@@ -3589,7 +3589,7 @@ check("Analytics tab renders all nine sections with real values, no NaN/undefine
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
   if (!html.includes("Who's outperforming their own projection?")) throw new Error("no projection-check section rendered");
 
-  return "9 chart-box sections: due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
+  return "10 chart-box sections: season rank, due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
 });
 
 check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
@@ -3923,6 +3923,34 @@ check("Analytics tab is reachable from the nav and shows only when active", () =
   if (!tab) throw new Error("no Analytics tab button in the nav");
   if (!document.getElementById("panel-analytics")) throw new Error("no #panel-analytics section in the page");
   return "Analytics tab button and panel both present";
+});
+
+await loadManager("1234567", () => renderSquad(panel("panel-squad")));
+check("Analytics also charts the connected manager's season rank trend, same as the Hub", () => {
+  renderAnalytics(panel("panel-analytics"));
+  const heading = [...panel("panel-analytics").querySelectorAll("h3")].find((h) => h.textContent.trim() === "Your season rank");
+  if (!heading) throw new Error("no 'Your season rank' section rendered for a connected manager");
+  const card = heading.closest(".chart-box");
+  const dots = card.querySelectorAll(".pt circle");
+  if (dots.length < 2) throw new Error(`expected a real dot per gameweek, got ${dots.length}`);
+  const gwLabels = [...card.querySelectorAll(".axis text")].map((el) => el.textContent).filter((t) => /^GW\d+$/.test(t));
+  if (!gwLabels.length) throw new Error("rank trend chart has no GW-labelled axis");
+  return `${dots.length} trend points`;
+});
+
+check("Analytics' season rank section prompts to connect instead of charting nothing", () => {
+  const saved = S.entry;
+  S.entry = null;
+  renderAnalytics(panel("panel-analytics"));
+  const heading = [...panel("panel-analytics").querySelectorAll("h3")].find((h) => h.textContent.trim() === "Your season rank");
+  if (!heading) throw new Error("no 'Your season rank' section rendered while disconnected");
+  const card = heading.closest(".chart-box");
+  if (card.querySelector(".pt circle")) throw new Error("shouldn't plot a trend with no manager connected");
+  const btn = card.querySelector('[data-goto="squad"]');
+  if (!btn) throw new Error("expected a connect-your-team button linking to My Team");
+  S.entry = saved;
+  renderAnalytics(panel("panel-analytics")); // restore for later tests
+  return "disconnected state shows a connect prompt, not an empty chart";
 });
 
 /* =========================================================
