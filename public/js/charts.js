@@ -86,6 +86,18 @@ export function scatter(points, opts = {}) {
        <text x="${W - PAD.r - 4}" y="${py(xMax) + 14}" text-anchor="end" style="fill:var(--muted-2);font-size:9px;font-family:'JetBrains Mono',monospace">as expected</text>`
     : "";
 
+  // Same quiet-tint idea as quadTint below, for the parity case: x and y
+  // share one domain under parity:true, so px(xMin)/py(xMin) and
+  // px(xMax)/py(xMax) always land exactly on the plot rectangle's
+  // bottom-left and top-right corners - the parity line always runs
+  // corner-to-corner, whatever the chart's aspect ratio, so the two
+  // triangles it splits the rectangle into are just the rectangle's own
+  // corners, no need to re-derive them from px()/py().
+  const parityTint = parity
+    ? `<polygon points="${PAD.l},${PAD.t} ${W - PAD.r},${PAD.t} ${PAD.l},${H - PAD.b}" fill="var(--pos)" fill-opacity="0.05"/>
+       <polygon points="${W - PAD.r},${PAD.t} ${W - PAD.r},${H - PAD.b} ${PAD.l},${H - PAD.b}" fill="var(--neg)" fill-opacity="0.05"/>`
+    : "";
+
   const midX = (xMin + xMax) / 2;
   const midY = (yMin + yMax) / 2;
   const quad = quadrant
@@ -172,7 +184,7 @@ export function scatter(points, opts = {}) {
 
   return `<div class="scatter-zoom" data-home-vb="0 0 ${W} ${H}">
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">
-      ${quadTint}${grid}${quad}${parityLine}${axes}${dots}
+      ${quadTint}${parityTint}${grid}${quad}${parityLine}${axes}${dots}
     </svg>
     <button type="button" class="scatter-zoom-reset" hidden>Reset zoom</button>
     <p class="scatter-zoom-hint">Drag on the chart to zoom into a crowded area · double-tap to reset</p>

@@ -1,5 +1,5 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
-import { $, $$, esc, th, teamCrest } from "../ui.js";
+import { $, $$, esc, th, teamCrest, statCard } from "../ui.js";
 import { scatter, radar, lineChart, divergingBars, wireScatterZoom } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
@@ -320,8 +320,26 @@ function dueSection(rows) {
     weight: Math.abs(r.delta),
   }));
 
+  // The chart rewards reading it closely; these don't require that. Pulled
+  // straight from the same rows, not a separate query - the two extremes
+  // of the same distribution the scatter is already plotting, named
+  // outright instead of left for someone to go spot themselves.
+  const hottest = [...rows].sort((a, b) => b.delta - a.delta)[0];
+  const duest = [...rows].sort((a, b) => a.delta - b.delta)[0];
+  const takeaway = (label, r, accent) =>
+    statCard(
+      label,
+      `<span style="font-size:20px">${playerLink(r.id, r.name)}</span>`,
+      `${r.actual}G+A vs ${r.xgi.toFixed(1)} xGI expected (${signed(+r.delta.toFixed(1))})`,
+      accent
+    );
+
   return `<div class="chart-box">
     ${header}
+    <div class="cards" style="margin-bottom:14px">
+      ${takeaway("Running hottest", hottest, true)}
+      ${takeaway("Most due", duest, false)}
+    </div>
     ${scatter(points, {
       xLabel: "Expected (xGI)",
       yLabel: "Actual (G+A)",
