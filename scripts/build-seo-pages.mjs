@@ -70,6 +70,7 @@ const PAGES = [
   { path: "/captain-picks/", label: "Captain picks" },
   { path: "/differentials/", label: "Differentials" },
   { path: "/due-a-goal/", label: "Who's due a goal" },
+  { path: "/set-piece-takers/", label: "Set-piece takers" },
   { path: "/price-changes/", label: "Price changes" },
 ];
 
@@ -401,6 +402,62 @@ function buildDuePage(video) {
   });
 }
 
+/* ---------------- Set-piece takers ----------------
+   Deliberately no minutes floor, unlike every other page here: set-piece
+   duty is a role, not a sample. A January signing on penalties from day one
+   belongs on this page with zero minutes behind him. */
+function buildSetPiecePage(video) {
+  const firstChoice = (teamId, key) =>
+    S.players.find((p) => p.teamId === teamId && p[key] === 1) || null;
+  const nameOf = (p) => (p ? `${esc(p.name)}${p.status !== "a" ? ' <span class="neg">(flagged)</span>' : ""}` : "—");
+
+  const teamRows = [...S.teamList]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((t) => {
+      const pen = firstChoice(t.id, "penaltyOrder");
+      return `<tr><td>${esc(t.name)}</td><td>${nameOf(pen)}</td>
+        <td>${nameOf(firstChoice(t.id, "freekickOrder"))}</td>
+        <td>${nameOf(firstChoice(t.id, "cornersOrder"))}</td></tr>`;
+    });
+
+  // The FPL-actionable cut: who's on penalties, what they cost, how owned.
+  const penTakers = S.players
+    .filter((p) => p.penaltyOrder === 1)
+    .sort((a, b) => b.selected - a.selected)
+    .map((p) =>
+      `<tr><td>${esc(p.name)}</td><td>${esc(p.short)}</td><td>${esc(p.pos)}</td>
+        <td class="mono">£${p.price.toFixed(1)}m</td><td class="mono">${p.selected.toFixed(1)}%</td>
+        <td class="mono">${p.goals}</td></tr>`
+    );
+
+  const body = `
+    <h1>FPL penalty and set-piece takers</h1>
+    <p class="hint">Every club's first-choice penalty, direct free-kick and corner taker, straight from the
+      order Fantasy Premier League publishes in its own data. Set-piece duty is one of the few edges you can
+      check rather than guess at - a penalty taker carries extra expected goals every week without needing
+      to be the best player on the pitch.</p>
+
+    <h2>By club</h2>
+    ${dataTable(["Club", "Penalties", "Direct free-kicks", "Corners"], teamRows)}
+
+    <h2>Every first-choice penalty taker</h2>
+    <p class="hint">Sorted by ownership. Goals shown are season totals, penalties included.</p>
+    ${dataTable(["Player", "Team", "Pos", "Price", "Owned", "Goals"], penTakers)}
+
+    <p class="hint"><b>Treat this as FPL's view, not gospel.</b> The order comes from FPL's own data, which
+      can lag what actually happens on the pitch - a new signing, a manager change or one missed spot-kick
+      can rewrite it before the data catches up. A dash means FPL lists nobody for that duty.</p>
+  `;
+
+  return pageShell({
+    title: "FPL Penalty Takers & Set-Piece Takers - Every Club | Top Bins",
+    description: "Every Premier League club's first-choice penalty taker, direct free-kick taker and corner taker for Fantasy Premier League, with price and ownership for each penalty taker.",
+    path: "/set-piece-takers/",
+    body,
+    video,
+  });
+}
+
 /* Written alongside the pages rather than kept by hand - a sitemap that
    silently stops matching what's actually generated is worse than none. */
 async function writeSitemap(paths) {
@@ -430,6 +487,7 @@ async function main() {
     { dir: "captain-picks", html: buildCaptainPicksPage(video), path: "/captain-picks/" },
     { dir: "differentials", html: buildDifferentialsPage(video), path: "/differentials/" },
     { dir: "due-a-goal", html: buildDuePage(video), path: "/due-a-goal/" },
+    { dir: "set-piece-takers", html: buildSetPiecePage(video), path: "/set-piece-takers/" },
   ];
 
   for (const page of pages) {
