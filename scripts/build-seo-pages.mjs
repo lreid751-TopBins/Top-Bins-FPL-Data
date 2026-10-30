@@ -156,6 +156,14 @@ function pageShell({ title, description, path: pagePath, body, video }) {
   ${body}
   ${channelCta(video)}
 </main>
+<!-- Same GoatCounter property as the app, deliberately without the app's
+     no_onload setting: these are real pages with real URLs, so its own
+     automatic pageview is exactly right here. The app only opts out
+     because it's an SPA firing virtual pageviews per tab instead. Without
+     this the pages built specifically to be found were the one part of
+     the site with no traffic data at all. -->
+<script data-goatcounter="https://topbinswithtwins.goatcounter.com/count"
+        async src="//gc.zgo.at/count.js"></script>
 </body>
 </html>
 `;
