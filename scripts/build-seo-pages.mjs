@@ -24,6 +24,36 @@ const API_BASE = `https://${PROJECT_REF}.supabase.co/functions/v1/fpl`;
 const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
+/* The generator runs the app's own store and projection engine rather than
+   re-deriving any of this in Node, so these pages can't drift from what the
+   site itself says - one projection engine, not two. store.js reads
+   localStorage at module init and api.js reads a global for its base URL,
+   so both are shimmed first. The imports have to be dynamic: static ones
+   hoist, which would run store.js before the shims exist. */
+globalThis.localStorage ??= { getItem: () => null, setItem: () => {} };
+globalThis.__FPL_API_BASE__ = API_BASE;
+const { S, load, upcoming } = await import("../public/js/store.js");
+const { projectPlayer } = await import("../public/js/projection.js");
+
+// Same floor the Hub and Player Finder default to - keeps a striker with one
+// lucky cameo out of a page that's meant to read as considered.
+const MIN_MINUTES = 270;
+const playable = (p) => p.status === "a" && p.minutes >= MIN_MINUTES;
+const gwNow = () => S.nextGw || S.currentGw || 1;
+
+/** "BOU (H), ARS (A)" for a team's next gameweek - doubles and blanks included. */
+function opponentsFor(teamId, gw) {
+  const slot = upcoming(teamId, 1, gw)[0];
+  if (!slot?.list.length) return "Blank";
+  return slot.list
+    .map((fx) => `${S.teams[fx.opp]?.short || "?"} (${fx.home ? "H" : "A"})`)
+    .join(", ");
+}
+
+const dataTable = (headers, rows) =>
+  `<div class="twrap"><table><thead><tr>${headers.map((h) => `<th>${esc(h)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.join("")}</tbody></table></div>`;
+
 async function fetchJson(url) {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
@@ -192,13 +222,174 @@ async function buildPriceChangesPage(video) {
   });
 }
 
+/* ---------------- Captain picks ----------------
+   CLAUDE.md's framing rule applies doubly here: on the site the projection
+   sits next to controls that make it obvious it's a comparison tool, but a
+   page titled "captain picks" reaching a stranger via search has no such
+   context, so the caveat is stated outright rather than implied. */
+function buildCaptainPicksPage(video) {
+  const gw = gwNow();
+  // Mirrors the Hub's own captaincy shortlist deliberately, including why it
+  // ranks on .attack and not .total: total folds in appearance and clean-sheet
+  // points, which hands a defender in a soft fixture a floor a captain doesn't
+  // need and buries the goal threats that carry the ceiling you're actually
+  // captaining for. Ranking this page on total put five defenders in the top
+  // five, one of them 0.3% owned. xMin >= 60 keeps rotation risks out.
+  const picks = S.players
+    .filter((p) => p.xMin >= 60 && p.minutes >= MIN_MINUTES && p.status === "a")
+    .map((p) => ({ p, proj: projectPlayer(p, 1, gw).attack }))
+    .sort((a, b) => b.proj - a.proj)
+    .slice(0, 12);
+
+  const rows = picks.map(({ p, proj }, i) =>
+    `<tr><td class="mono">${i + 1}</td><td>${esc(p.name)}</td><td>${esc(p.short)}</td><td>${esc(p.pos)}</td>
+      <td class="mono">${esc(opponentsFor(p.teamId, gw))}</td>
+      <td class="mono">${proj.toFixed(1)}</td><td class="mono">${p.selected.toFixed(1)}%</td></tr>`
+  );
+
+  const body = `
+    <h1>FPL captain picks - Gameweek ${gw}</h1>
+    <p class="hint">The twelve biggest goal threats for Gameweek ${gw}, from the same projection engine the
+      Top Bins data room runs on: expected goals and assists per 90, scaled by expected minutes and adjusted
+      for the opponent. Ranked on <b>attacking returns only</b> - appearance and clean-sheet points are
+      deliberately left out, because a captain is a bet on a haul, not on a safe floor. Limited to players
+      expected to start who have played at least ${MIN_MINUTES} minutes.</p>
+    ${dataTable(["#", "Player", "Team", "Pos", `GW${gw} fixture`, "Attacking xPts", "Owned"], rows)}
+    <p class="hint"><b>Read this as a shortlist, not a forecast.</b> It compares players on the chances they
+      create and the fixture in front of them. It cannot see a press conference, a rotation call, or form
+      turning this week - and it does not try to. Bonus, saves and cards are approximated or left out.</p>
+    <p class="hint">Set your own window, filter by position and check minutes risk in the
+      <a href="/">full data room</a>.</p>
+  `;
+
+  return pageShell({
+    title: `FPL Captain Picks GW${gw} - Who to Captain | Top Bins`,
+    description: `The twelve biggest Fantasy Premier League goal threats for Gameweek ${gw}, ranked by expected goals and assists adjusted for fixture difficulty and expected minutes.`,
+    path: "/captain-picks/",
+    body,
+    video,
+  });
+}
+
+/* ---------------- Differentials ---------------- */
+function buildDifferentialsPage(video) {
+  const gw = gwNow();
+  // Same ownership bar and the same "ranked by form alone" basis as the app's
+  // own differential finder. Ranking these on projected points instead
+  // surfaced a column of sub-£5m defenders - technically a good expected
+  // return, but nobody searching "FPL differentials" means a cheap enabler.
+  const OWNERSHIP_BAR = 15;
+  const picks = S.players
+    .filter((p) => playable(p) && p.selected < OWNERSHIP_BAR)
+    .sort((a, b) => b.form - a.form)
+    .slice(0, 15);
+
+  const rows = picks.map((p) =>
+    `<tr><td>${esc(p.name)}</td><td>${esc(p.short)}</td><td>${esc(p.pos)}</td>
+      <td class="mono">£${p.price.toFixed(1)}m</td><td class="mono">${p.selected.toFixed(1)}%</td>
+      <td class="mono">${p.xgi90.toFixed(2)}</td><td class="mono">${p.form.toFixed(1)}</td></tr>`
+  );
+
+  const body = `
+    <h1>FPL differentials - Gameweek ${gw}</h1>
+    <p class="hint">Players owned by under ${OWNERSHIP_BAR}% of managers, ranked by current form - points per
+      match over the last 30 days. Low ownership on its own is just an unpopular player; the point is finding
+      the ones already returning. Expected goal involvement per 90 is shown alongside so you can see whether
+      the form is backed by the underlying numbers or is a hot streak about to cool.</p>
+    ${dataTable(["Player", "Team", "Pos", "Price", "Owned", "xGI/90", "Form"], rows)}
+    <p class="hint">A differential is a bet on something the market hasn't priced in yet - it's a way to gain
+      rank, not a way to score more points on average. Minimum ${MIN_MINUTES} minutes played.</p>
+    <p class="hint">Filter by price, position and ownership yourself in the
+      <a href="/">Player Finder</a>.</p>
+  `;
+
+  return pageShell({
+    title: `FPL Differentials GW${gw} - Under ${OWNERSHIP_BAR}% Owned | Top Bins`,
+    description: `The best low-ownership Fantasy Premier League picks for Gameweek ${gw} - under ${OWNERSHIP_BAR}% owned, ranked by projected points over the next five gameweeks.`,
+    path: "/differentials/",
+    body,
+    video,
+  });
+}
+
+/* ---------------- Due a goal or assist ---------------- */
+function buildDuePage(video) {
+  const pool = S.players.filter(playable);
+  const due = [...pool].sort((a, b) => a.overperf - b.overperf).slice(0, 15);
+  const hot = [...pool].sort((a, b) => b.overperf - a.overperf).slice(0, 10);
+
+  const row = (p) =>
+    `<tr><td>${esc(p.name)}</td><td>${esc(p.short)}</td><td>${esc(p.pos)}</td>
+      <td class="mono">${p.gi}</td><td class="mono">${p.xgi.toFixed(1)}</td>
+      <td class="mono">${p.overperf > 0 ? "+" : ""}${p.overperf.toFixed(1)}</td></tr>`;
+
+  const body = `
+    <h1>Who's due a goal or assist in FPL?</h1>
+    <p class="hint">Season-to-date goals and assists against expected goal involvement (xGI). A player well
+      below their xGI has been creating the chances without the returns - the gap is the part that tends to
+      close. Minimum ${MIN_MINUTES} minutes played.</p>
+
+    <h2 class="neg">Most due a return</h2>
+    ${dataTable(["Player", "Team", "Pos", "G+A", "xGI", "Gap"], due.map(row))}
+
+    <h2 class="pos">Running hottest</h2>
+    <p class="hint">The other end of the same distribution: outscoring their chances so far, which is the
+      side that historically regresses.</p>
+    ${dataTable(["Player", "Team", "Pos", "G+A", "xGI", "Gap"], hot.map(row))}
+
+    <p class="hint">Underperformance is evidence, not a promise - a player can be due a goal all season and
+      never score it. Weigh it against minutes, fixtures and set-piece duty, all of which are in the
+      <a href="/">full data room</a>.</p>
+  `;
+
+  return pageShell({
+    title: "Who's Due a Goal or Assist in FPL? | Top Bins",
+    description: "Fantasy Premier League players most overdue a goal or assist, measured as actual goals and assists against expected goal involvement (xGI) across the season.",
+    path: "/due-a-goal/",
+    body,
+    video,
+  });
+}
+
+/* Written alongside the pages rather than kept by hand - a sitemap that
+   silently stops matching what's actually generated is worse than none. */
+async function writeSitemap(paths) {
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = paths
+    .map((p) => `  <url><loc>https://fpl.topbinswithtwins.com${p}</loc><lastmod>${today}</lastmod></url>`)
+    .join("\n");
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls}
+</urlset>
+`;
+  await writeFile(path.join(ROOT, "public", "sitemap.xml"), xml);
+  console.log(`Wrote sitemap.xml (${paths.length} urls)`);
+}
+
 async function main() {
   const video = await fetchLatestVideo();
-  const outDir = path.join(ROOT, "public", "price-changes");
-  await mkdir(outDir, { recursive: true });
-  const html = await buildPriceChangesPage(video);
-  await writeFile(path.join(outDir, "index.html"), html);
-  console.log(`Wrote ${path.join(outDir, "index.html")}`);
+
+  // Boots the app's own store once - every page below reads the same
+  // enriched players and fixture index the site itself renders from.
+  await load({ onProgress: () => {} });
+  console.log(`Store loaded: ${S.players.length} players, GW${gwNow()} next`);
+
+  const pages = [
+    { dir: "price-changes", html: await buildPriceChangesPage(video), path: "/price-changes/" },
+    { dir: "captain-picks", html: buildCaptainPicksPage(video), path: "/captain-picks/" },
+    { dir: "differentials", html: buildDifferentialsPage(video), path: "/differentials/" },
+    { dir: "due-a-goal", html: buildDuePage(video), path: "/due-a-goal/" },
+  ];
+
+  for (const page of pages) {
+    const outDir = path.join(ROOT, "public", page.dir);
+    await mkdir(outDir, { recursive: true });
+    await writeFile(path.join(outDir, "index.html"), page.html);
+    console.log(`Wrote ${page.dir}/index.html`);
+  }
+
+  await writeSitemap(["/", ...pages.map((p) => p.path)]);
 }
 
 main().catch((err) => {
