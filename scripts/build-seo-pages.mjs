@@ -30,10 +30,49 @@ async function fetchJson(url) {
   return res.json();
 }
 
+const CHANNEL_URL = "https://www.youtube.com/@TopBinsWithTwins";
+// sub_confirmation=1 opens YouTube's own subscribe dialog straight away -
+// a documented YouTube link param, not a trick.
+const SUBSCRIBE_URL = `${CHANNEL_URL}?sub_confirmation=1`;
+
+/* ---------------- Channel call-to-action ----------------
+   These pages are the only part of the site search engines and AI crawlers
+   can actually read (the app itself is a client-rendered SPA), so they're
+   where strangers arrive - and until this existed, they arrived to a page
+   whose only links pointed back at the SPA. Every generated page carries
+   this, so new pages inherit the funnel instead of re-inventing it.
+
+   Reuses the Hub's own .latest-video markup and classes verbatim: these
+   pages already load the site's stylesheet, so it costs no new CSS and
+   stays visually identical to the in-app banner. Video is optional - if
+   the feed is down at build time we still ship the channel link rather
+   than failing the build or silently dropping the CTA. */
+function channelCta(video) {
+  const card = video
+    ? `<a class="latest-video" href="${esc(video.url)}" target="_blank" rel="noopener noreferrer">
+      <img class="latest-video-thumb" src="${esc(video.thumbnail)}" alt="" loading="lazy" width="96" height="54">
+      <div class="latest-video-body">
+        <div class="latest-video-eyebrow">Latest video</div>
+        <div class="latest-video-title">${esc(video.title)}</div>
+      </div>
+      <span class="latest-video-play" aria-hidden="true">&#9654;</span>
+    </a>`
+    : "";
+
+  return `
+  <section class="seo-cta">
+    <h2>Watch the show behind the data</h2>
+    <p class="hint">This data room is built by <b>Top Bins with Twins</b> - weekly Fantasy Premier League
+      analysis, captain calls and transfer plans on YouTube.</p>
+    ${card}
+    <p><a class="seo-sub" href="${SUBSCRIBE_URL}" target="_blank" rel="noopener noreferrer">Subscribe on YouTube &rarr;</a></p>
+  </section>`;
+}
+
 /* ---------------- Shared page shell ----------------
    Reuses the real site's own header/crest markup and stylesheet so this
    reads as part of the same site, not a bolted-on export. */
-function pageShell({ title, description, path: pagePath, body }) {
+function pageShell({ title, description, path: pagePath, body, video }) {
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -56,6 +95,15 @@ function pageShell({ title, description, path: pagePath, body }) {
   .seo-page { max-width: 900px; margin: 0 auto; padding: 24px 16px 60px; }
   .seo-back { color: var(--muted); font-size: 12.5px; text-decoration: none; }
   .seo-back:hover { color: var(--gold-2); }
+  .seo-cta {
+    margin-top: 34px; padding: 18px; border: 1px solid var(--gold-deep);
+    border-radius: 12px; background: var(--panel-2);
+  }
+  .seo-cta h2 { margin-bottom: 4px; }
+  .seo-cta .latest-video { margin-top: 12px; }
+  .seo-cta p:last-child { margin: 12px 0 0; }
+  .seo-sub { color: var(--gold); font-weight: 700; font-size: 13px; text-decoration: none; }
+  .seo-sub:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -76,14 +124,27 @@ function pageShell({ title, description, path: pagePath, body }) {
 <main class="seo-page">
   <p><a class="seo-back" href="/">&larr; Back to the full data room</a></p>
   ${body}
+  ${channelCta(video)}
 </main>
 </body>
 </html>
 `;
 }
 
+/* The channel CTA is a nice-to-have on a page whose real job is the data -
+   never let a YouTube wobble fail the whole build and leave the site with a
+   stale page. Returns null and the CTA falls back to the plain channel link. */
+async function fetchLatestVideo() {
+  try {
+    return await fetchJson(`${API_BASE}/latest-video`);
+  } catch (err) {
+    console.warn("latest-video fetch failed, CTA falls back to channel link:", err.message);
+    return null;
+  }
+}
+
 /* ---------------- Price changes page ---------------- */
-async function buildPriceChangesPage() {
+async function buildPriceChangesPage(video) {
   const [moves, boot] = await Promise.all([
     fetchJson(`${API_BASE}/prices?days=14`),
     fetchJson("https://fantasy.premierleague.com/api/bootstrap-static/"),
@@ -127,13 +188,15 @@ async function buildPriceChangesPage() {
     description: "Every Fantasy Premier League price rise and fall over the last 14 days, tracked daily since FPL's own API keeps no price history.",
     path: "/price-changes/",
     body,
+    video,
   });
 }
 
 async function main() {
+  const video = await fetchLatestVideo();
   const outDir = path.join(ROOT, "public", "price-changes");
   await mkdir(outDir, { recursive: true });
-  const html = await buildPriceChangesPage();
+  const html = await buildPriceChangesPage(video);
   await writeFile(path.join(outDir, "index.html"), html);
   console.log(`Wrote ${path.join(outDir, "index.html")}`);
 }
