@@ -60,6 +60,29 @@ async function fetchJson(url) {
   return res.json();
 }
 
+const SITE = "https://fpl.topbinswithtwins.com";
+const OG_IMAGE = `${SITE}/og-card.png`;
+
+/* Every page the generator emits, so each one can link to the others. Until
+   this existed each page's only links pointed back at "/" - a dead end for a
+   crawler following them and for a reader who found one page useful. */
+const PAGES = [
+  { path: "/captain-picks/", label: "Captain picks" },
+  { path: "/differentials/", label: "Differentials" },
+  { path: "/due-a-goal/", label: "Who's due a goal" },
+  { path: "/price-changes/", label: "Price changes" },
+];
+
+function relatedLinks(currentPath) {
+  const others = PAGES.filter((p) => p.path !== currentPath);
+  return `
+  <nav class="seo-more" aria-label="More from the data room">
+    <span class="seo-more-lab">More from the data room</span>
+    ${others.map((p) => `<a href="${p.path}">${esc(p.label)}</a>`).join("")}
+    <a href="/">The full app &rarr;</a>
+  </nav>`;
+}
+
 const CHANNEL_URL = "https://www.youtube.com/@TopBinsWithTwins";
 // sub_confirmation=1 opens YouTube's own subscribe dialog straight away -
 // a documented YouTube link param, not a trick.
@@ -116,7 +139,15 @@ function pageShell({ title, description, path: pagePath, body, video }) {
 <meta property="og:site_name" content="Top Bins FPL Data Room" />
 <meta property="og:title" content="${esc(title)}" />
 <meta property="og:description" content="${esc(description)}" />
-<meta property="og:url" content="https://fpl.topbinswithtwins.com${pagePath}" />
+<meta property="og:url" content="${SITE}${pagePath}" />
+<meta property="og:image" content="${OG_IMAGE}" />
+<meta property="og:image:width" content="1200" />
+<meta property="og:image:height" content="630" />
+<meta property="og:image:alt" content="Top Bins with Twins — FPL Data Room" />
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${esc(title)}" />
+<meta name="twitter:description" content="${esc(description)}" />
+<meta name="twitter:image" content="${OG_IMAGE}" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -134,6 +165,16 @@ function pageShell({ title, description, path: pagePath, body, video }) {
   .seo-cta p:last-child { margin: 12px 0 0; }
   .seo-sub { color: var(--gold); font-weight: 700; font-size: 13px; text-decoration: none; }
   .seo-sub:hover { text-decoration: underline; }
+  .seo-more {
+    margin-top: 30px; padding-top: 16px; border-top: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px;
+  }
+  .seo-more-lab {
+    font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--muted); width: 100%;
+  }
+  .seo-more a { color: var(--gold-2); font-size: 13px; font-weight: 600; text-decoration: none; }
+  .seo-more a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -154,6 +195,7 @@ function pageShell({ title, description, path: pagePath, body, video }) {
 <main class="seo-page">
   <p><a class="seo-back" href="/">&larr; Back to the full data room</a></p>
   ${body}
+  ${relatedLinks(pagePath)}
   ${channelCta(video)}
 </main>
 <!-- Same GoatCounter property as the app, deliberately without the app's
