@@ -13,16 +13,16 @@ import { goTo } from "./hub.js";
    Analytics tab
 
    Three groups:
-   - Squad triage: pool-wide, form-first sections sharing one position/
-     window filter bar - due/hot, a sortable squad-audit table,
-     differentials, and current set-piece duty.
+   - Squad triage: pool-wide tools sharing one position/window/ownership
+     filter bar - a free-axis explorer and a sortable squad-audit table.
+     Previously also held separate due-a-goal, differential and set-piece
+     sections; the explorer covers the first as a preset, and the other
+     two became a shared ownership filter and an audit column.
    - Player deep dive: the original single/two-player picker sections -
      trend (now with a raw-vs-fixture-adjusted toggle), percentile,
      head-to-head.
    - Fixtures through form: upcoming difficulty next to teams' actual
      recent output, not just a preseason rating.
-   Closes with the projection check - who's over/underperforming their own
-   projected points right now, not whether the model itself is accurate.
 
    Everything reuses data already pulled elsewhere on the site - the
    /points endpoint (My Team report card), /teams-window (Teams page),
@@ -53,8 +53,9 @@ export function renderAnalytics(root) {
       <h2>Analytics</h2>
     </div>
     <p class="hint" style="margin-top:-6px;max-width:70ch">
-      Three ways to dig deeper: triage a whole shortlist by recent form, study one player in full, or read upcoming
-      fixtures through how teams are actually playing right now instead of a preseason rating.
+      Three ways to dig deeper: plot any two stats against each other and triage a whole shortlist at once,
+      study one player in full, or read upcoming fixtures through how teams are actually playing right now
+      instead of a preseason rating.
     </p>
 
     <datalist id="anPlayerList">
@@ -68,10 +69,7 @@ export function renderAnalytics(root) {
     <div class="eyebrow" style="margin-top:28px">Squad triage</div>
     ${triageFilterBar()}
     ${explorerSection()}
-    ${dueSection(rows)}
     ${auditSection(rows)}
-    ${differentialSection(rows)}
-    ${setPieceSection()}
 
     <div class="eyebrow" style="margin-top:28px">Player deep dive</div>
     ${trendSection()}
@@ -81,8 +79,6 @@ export function renderAnalytics(root) {
     <div class="eyebrow" style="margin-top:28px">Fixtures through form</div>
     ${fixturesFormSection(rerender)}
 
-    <div class="eyebrow" style="margin-top:28px">Projection check</div>
-    ${calibrationSection()}
   `;
   wire(root);
 }
@@ -239,7 +235,9 @@ function explorerSection() {
     <p class="cap">Every player past the minutes bar, plotted on whichever two numbers you want. Season to
       date, coloured by position. Drag on the chart to zoom into a crowded patch.</p>`;
 
-  const pool = eligiblePlayers().filter((p) => !S.ui.anPos || p.pos === S.ui.anPos);
+  const pool = eligiblePlayers().filter(
+    (p) => (!S.ui.anPos || p.pos === S.ui.anPos) && p.selected < S.ui.anMaxOwn
+  );
   if (!pool.length) {
     return `<div class="chart-box hero">${header}<p class="hint">Nobody's cleared the minutes bar yet.</p></div>`;
   }
@@ -302,6 +300,17 @@ function explorerSection() {
    Squad triage - shared window fetch + filter bar
    ========================================================= */
 const WINDOW_SPECS = ["3", "5", "8", "season"];
+// Took over from the differential finder, which was only ever the audit
+// table filtered this way. As a shared filter it applies to the explorer
+// too, so "show me differentials" is now a view of every tool here rather
+// than its own section.
+const OWNERSHIP_BARS = [
+  { v: 100, l: "All ownership" },
+  { v: 25, l: "Under 25% owned" },
+  { v: 15, l: "Under 15% owned" },
+  { v: 10, l: "Under 10% owned" },
+  { v: 5, l: "Under 5% owned" },
+];
 function windowLabel(spec) {
   return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
 }
@@ -367,6 +376,7 @@ function windowRows() {
   const rows = [];
   S.players.forEach((p) => {
     if (S.ui.anPos && p.pos !== S.ui.anPos) return;
+    if (p.selected >= S.ui.anMaxOwn) return;
 
     let mins = 0, g = 0, a = 0, xg = 0, xa = 0, pts = 0;
     let minsFirst = 0, minsSecond = 0;
@@ -410,6 +420,7 @@ function windowRows() {
     rows.push({
       id: p.id, name: p.name, short: p.short, pos: p.pos, teamId: p.teamId,
       price: p.price, selected: p.selected,
+      setPieceScore: p.setPieceScore, penaltyOrder: p.penaltyOrder,
       g, a, xgi, actual, delta: actual - xgi,
       formPerGw, consistency, minutesDelta: secondHalf.length ? avgSecond - avgFirst : 0,
     });
@@ -425,6 +436,11 @@ function triageFilterBar() {
     </select>
     <select id="anWindow" aria-label="Gameweek window">
       ${WINDOW_SPECS.map((w) => `<option value="${w}" ${S.ui.anWindow === w ? "selected" : ""}>${esc(windowLabel(w))}</option>`).join("")}
+    </select>
+    <select id="anMaxOwn" aria-label="Maximum ownership">
+      ${OWNERSHIP_BARS.map(
+        (o) => `<option value="${o.v}" ${S.ui.anMaxOwn === o.v ? "selected" : ""}>${esc(o.l)}</option>`
+      ).join("")}
     </select>
   </div>`;
 }
@@ -443,69 +459,6 @@ function minutesTrendTag(delta) {
   return { label: "● Steady", cls: "" };
 }
 
-/* ---------------- Due a goal or assist ---------------- */
-function dueSection(rows) {
-  const header = `<h3>Who's due a goal or assist?</h3>
-    <p class="cap">Actual goals + assists against expected (xGI) over the window above, for every player who
-      cleared the minutes bar - not just a top-6 either side. Above the dashed line is outperforming the chances
-      created; below is underperforming. Distance from the line is what matters, not where a name sits in a
-      ranked list.</p>`;
-
-  if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
-  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
-  if (!rows.length) {
-    return `<div class="chart-box">${header}<p class="hint">Nobody's cleared the minutes bar for this window yet - try a wider window or "All positions".</p></div>`;
-  }
-
-  // A small, honest dead zone around zero (+/-0.5) rather than colouring
-  // every player strictly hot or due - a 0.1 gap either side of the line
-  // isn't really "due" anything, it's noise.
-  const points = rows.map((r) => ({
-    id: r.id,
-    x: r.xgi,
-    y: r.actual,
-    label: `${r.name} (${r.short}) — ${r.actual}G+A vs ${r.xgi.toFixed(1)} xGI (${signed(+r.delta.toFixed(1))})`,
-    short: r.name,
-    color: r.delta > 0.5 ? "var(--pos)" : r.delta < -0.5 ? "var(--neg)" : "var(--muted-2)",
-    weight: Math.abs(r.delta),
-  }));
-
-  // The chart rewards reading it closely; these don't require that. Pulled
-  // straight from the same rows, not a separate query - the two extremes
-  // of the same distribution the scatter is already plotting, named
-  // outright instead of left for someone to go spot themselves.
-  const hottest = [...rows].sort((a, b) => b.delta - a.delta)[0];
-  const duest = [...rows].sort((a, b) => a.delta - b.delta)[0];
-  const takeaway = (label, r, accent) =>
-    statCard(
-      label,
-      `<span style="font-size:20px">${playerLink(r.id, r.name)}</span>`,
-      `${r.actual}G+A vs ${r.xgi.toFixed(1)} xGI expected (${signed(+r.delta.toFixed(1))})`,
-      accent
-    );
-
-  return `<div class="chart-box">
-    ${header}
-    <div class="cards" style="margin-bottom:14px">
-      ${takeaway("Running hottest", hottest, true)}
-      ${takeaway("Most due", duest, false)}
-    </div>
-    ${scatter(points, {
-      xLabel: "Expected (xGI)",
-      yLabel: "Actual (G+A)",
-      parity: true,
-      fmt: (v) => v.toFixed(1),
-      labelTop: 8,
-      empty: "Nobody's cleared the minutes bar for this window yet.",
-    })}
-    <div class="an-h2h-legend">
-      <span class="an-h2h-dot" style="background:var(--pos)"></span>
-      <span>Running hot</span>
-      <span class="an-h2h-dot" style="background:var(--neg);margin-left:14px"></span>
-      <span>Due a goal or assist</span>
-    </div>
-  </div>`;
-}
 
 /* ---------------- Squad-audit table ---------------- */
 const AUDIT_COLS = [
@@ -516,6 +469,7 @@ const AUDIT_COLS = [
   { k: "delta", l: "Due/Hot Δ", help: "Actual goals+assists minus expected (xGI) in the window" },
   { k: "consistency", l: "Consistency", help: "How spread out the per-gameweek returns are, relative to their own average" },
   { k: "minutesDelta", l: "Mins trend", help: "Average minutes in the second half of the window vs the first" },
+  { k: "setPieceScore", l: "Set pieces", help: "Penalties, corners and direct free-kicks weighted into one number - first choice scores full, second partial" },
   { k: "selected", l: "Own%" },
 ];
 
@@ -545,6 +499,16 @@ function auditSection(rows) {
   </div>`;
 }
 
+/* Replaces the old set-piece spotlight section: the same information, but
+   sortable and sitting next to the form and minutes signals you'd weigh it
+   against, rather than in a separate list further down the page. */
+function setPieceTag(r) {
+  if (r.penaltyOrder === 1) return '<span class="tag pos">Pens</span>';
+  if (r.setPieceScore >= 2) return '<span class="tag">Set pieces</span>';
+  if (r.setPieceScore > 0) return '<span class="tag muted">Backup</span>';
+  return '<span class="sub-t">—</span>';
+}
+
 function auditRow(r) {
   const cons = consistencyTag(r.consistency);
   const mtrend = minutesTrendTag(r.minutesDelta);
@@ -556,6 +520,7 @@ function auditRow(r) {
     <td class="num ${r.delta >= 0 ? "pos" : "neg"}">${signed(+r.delta.toFixed(1))}</td>
     <td><span class="tag ${cons.cls}">${cons.label}</span></td>
     <td><span class="tag ${mtrend.cls}">${mtrend.label}</span></td>
+    <td>${setPieceTag(r)}</td>
     <td class="num">${f1(r.selected)}%</td>
   </tr>`;
 }
@@ -563,45 +528,7 @@ function auditRow(r) {
 /* ---------------- Differential finder ---------------- */
 // FPL convention, not a hard rule - a player under this ownership counts
 // as a differential rather than a template pick most rivals already have.
-const DIFFERENTIAL_OWNERSHIP = 15;
 
-function differentialSection(rows) {
-  const header = `<h3>Differential finder</h3>
-    <p class="cap">In form and still mostly unowned (under ${DIFFERENTIAL_OWNERSHIP}%) - the gap between "good" and
-      "an actual edge." Ranked by form alone, same window and position filters as above.</p>`;
-
-  if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
-  if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
-
-  const diffs = rows
-    .filter((r) => r.selected < DIFFERENTIAL_OWNERSHIP)
-    .sort((a, b) => b.formPerGw - a.formPerGw)
-    .slice(0, 8);
-
-  if (!diffs.length) {
-    return `<div class="chart-box">${header}<p class="hint">Nobody both cleared the minutes bar and sits under ${DIFFERENTIAL_OWNERSHIP}% owned in this window.</p></div>`;
-  }
-
-  return `<div class="chart-box">
-    ${header}
-    <div class="twrap">
-      <table>
-        <thead><tr><th>Player</th><th>Pos</th><th>Team</th><th class="num">Form</th><th class="num">Own%</th></tr></thead>
-        <tbody>${diffs
-          .map(
-            (r) => `<tr>
-              <td>${playerLink(r.id, r.name)}</td>
-              <td>${esc(r.pos)}</td>
-              <td>${esc(S.teams[r.teamId]?.short || "")}</td>
-              <td class="num">${r.formPerGw.toFixed(1)}</td>
-              <td class="num">${f1(r.selected)}%</td>
-            </tr>`
-          )
-          .join("")}</tbody>
-      </table>
-    </div>
-  </div>`;
-}
 
 /* ---------------- Set-piece spotlight ---------------- */
 // Pure S.players snapshot - no window/fetch dependency, so this is always
@@ -613,17 +540,6 @@ function setPieceRows(orderKey) {
     .sort((a, b) => a.order - b.order || a.selected - b.selected);
 }
 
-function setPieceSection() {
-  return `<div class="chart-box">
-    <h3>Set-piece spotlight</h3>
-    <p class="cap">Who's currently on penalties, corners/indirect free-kicks, and direct free-kicks - straight from
-      this week's declared order. This shows who has the duty right now, not when it changed hands: the FPL API
-      doesn't expose that history, so there's no "just inherited this" detection here, only the current roster.</p>
-    ${setPieceGroup("Penalties", setPieceRows("penaltyOrder"))}
-    ${setPieceGroup("Corners / indirect free-kicks", setPieceRows("cornersOrder"))}
-    ${setPieceGroup("Direct free-kicks", setPieceRows("freekickOrder"))}
-  </div>`;
-}
 
 function setPieceGroup(title, list) {
   return `<h3 class="compare-sub">${esc(title)}</h3>
@@ -933,43 +849,6 @@ function fixturesFormSection(rerender) {
   </div>`;
 }
 
-/* =========================================================
-   Projection check
-   ========================================================= */
-function calibrationSection() {
-  const points = calibrationPoints();
-
-  const header = `<h3>Who's outperforming their own projection?</h3>
-    <p class="cap">Actual points minus what the Planner projected for that gameweek, averaged over played gameweeks
-      in the last ${(S.form.gws || []).length || 6} - each player's <b>current underlying rates</b> run through the
-      exact same formula against the <b>real fixture they actually faced</b>. Not a check on whether the model is
-      good - a check on the player: who's running hotter or colder right now than their own numbers say they
-      should.</p>`;
-
-  if (!points.length) {
-    return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet - come back after a few more gameweeks.</p></div>`;
-  }
-
-  const meta = (r) => `${r.short} · ${r.y.toFixed(1)} actual vs ${r.x.toFixed(1)} projected, avg of ${r.weight} GWs`;
-  const over = points
-    .filter((r) => r.delta > 0)
-    .sort((a, b) => b.delta - a.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
-  const under = points
-    .filter((r) => r.delta < 0)
-    .sort((a, b) => a.delta - b.delta)
-    .slice(0, 6)
-    .map((r) => ({ ...r, label: r.name, value: r.delta }));
-
-  return `<div class="chart-box">
-    ${header}
-    <h3 class="compare-sub">Outperforming</h3>
-    ${divergingBars(over, { meta, empty: "Nobody's beating their own projection right now." })}
-    <h3 class="compare-sub">Underperforming</h3>
-    ${divergingBars(under, { meta, empty: "Nobody's running behind their own projection right now." })}
-  </div>`;
-}
 
 function calibrationPoints() {
   const gws = S.form.gws || [];
@@ -1046,6 +925,8 @@ function wire(root) {
 
   const posSel = $("#anPos", root);
   if (posSel) posSel.addEventListener("change", () => { S.ui.anPos = posSel.value; re(); });
+  const ownSel = $("#anMaxOwn", root);
+  if (ownSel) ownSel.addEventListener("change", () => { S.ui.anMaxOwn = +ownSel.value; re(); });
   const winSel = $("#anWindow", root);
   if (winSel) winSel.addEventListener("change", () => { S.ui.anWindow = winSel.value; re(); });
 

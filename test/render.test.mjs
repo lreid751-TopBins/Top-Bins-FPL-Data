@@ -3571,14 +3571,14 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
 /* =========================================================
    Analytics tab
    ========================================================= */
-check("Analytics tab renders all eleven sections with real values, no NaN/undefined", () => {
+check("Analytics tab renders all seven sections with real values, no NaN/undefined", () => {
   renderAnalytics(panel("panel-analytics"));
   const html = panel("panel-analytics").innerHTML;
   if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
   if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
 
   const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
-  if (boxes.length !== 11) throw new Error(`expected 11 chart-box sections, got ${boxes.length}`);
+  if (boxes.length !== 7) throw new Error(`expected 7 chart-box sections, got ${boxes.length}`);
   if (!panel("panel-analytics").querySelector("#anPos")) throw new Error("no shared squad-triage position filter rendered");
   if (!panel("panel-analytics").querySelector("#anWindow")) throw new Error("no shared squad-triage window filter rendered");
   // The squad-audit table itself only appears once the shared window fetch
@@ -3587,9 +3587,8 @@ check("Analytics tab renders all eleven sections with real values, no NaN/undefi
   if (!panel("panel-analytics").querySelector(".an-trend-chart svg")) throw new Error("no trend chart rendered");
   if (!panel("panel-analytics").querySelector(".an-pctl-row")) throw new Error("no percentile rows rendered");
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
-  if (!html.includes("Who's outperforming their own projection?")) throw new Error("no projection-check section rendered");
 
-  return "11 chart-box sections: season rank, explorer, due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
+  return "7 chart-box sections: season rank, explorer, audit, trend/percentile/head-to-head, fixtures-form";
 });
 
 check("Analytics explorer plots two chosen metrics and reflects an axis change", () => {
@@ -3742,22 +3741,6 @@ check("Analytics head-to-head compares two distinct players and highlights the h
   }
 });
 
-check("Analytics projection check ranks real players by actual-vs-projected points delta, not model-accuracy stats", () => {
-  renderAnalytics(panel("panel-analytics"));
-  const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("outperforming their own projection"));
-  if (!box) throw new Error("no projection-check section rendered");
-  if (box.querySelector(".stat-chip")) throw new Error("projection check shouldn't show model-accuracy stat chips anymore");
-
-  const bars = box.querySelectorAll(".dbar");
-  if (!bars.length) throw new Error("no over/underperforming bars rendered");
-  const over = box.querySelectorAll(".dbar-v.pos");
-  const under = box.querySelectorAll(".dbar-v.neg");
-  if (!over.length) throw new Error("expected at least one player outperforming their own projection");
-  if (!under.length) throw new Error("expected at least one player underperforming their own projection");
-
-  return `${bars.length} projection-delta bars, ${over.length} outperforming, ${under.length} underperforming`;
-});
-
 await (async () => {
   // The shared squad-triage fetch is fire-and-forget from renderAnalytics()
   // (same shape as the report card's loadReportCard) - give it a tick to
@@ -3767,24 +3750,9 @@ await (async () => {
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics due-a-goal-or-assist renders a real actual-vs-expected scatter, coloured hot/due", () => {
-    const html = panel("panel-analytics").innerHTML;
-    if (html.includes("NaN") || html.includes("undefined")) throw new Error("bad value leaked into the scatter");
-    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
-    if (!dueBox) throw new Error("no due-a-goal-or-assist section rendered");
-    const dots = dueBox.querySelectorAll(".pt circle");
-    if (!dots.length) throw new Error("no points plotted once data loaded");
-    const hot = dueBox.querySelectorAll('.pt circle[fill="var(--pos)"]');
-    const due = dueBox.querySelectorAll('.pt circle[fill="var(--neg)"]');
-    if (!hot.length) throw new Error("expected at least one overperforming (hot) point");
-    if (!due.length) throw new Error("expected at least one underperforming (due) point");
-    if (!dueBox.querySelector(".paritys")) throw new Error("expected an 'as expected' parity line on the scatter");
-    return `${dots.length} points plotted, ${hot.length} hot, ${due.length} due`;
-  });
-
-  check("Analytics due scatter is wrapped for drag-to-zoom, with a home viewBox to restore and a reset control", () => {
-    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
-    const wrap = dueBox.querySelector(".scatter-zoom");
+  check("Analytics explorer scatter is wrapped for drag-to-zoom, with a home viewBox to restore and a reset control", () => {
+    const expBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"));
+    const wrap = expBox.querySelector(".scatter-zoom");
     if (!wrap) throw new Error("scatter not wrapped in .scatter-zoom - drag-to-zoom can't be wired");
     const homeVb = wrap.dataset.homeVb;
     if (!homeVb || !/^0 0 \d+ \d+$/.test(homeVb)) throw new Error(`expected a real 'x y w h' home viewBox to restore on reset, got ${JSON.stringify(homeVb)}`);
@@ -3827,26 +3795,48 @@ await (async () => {
     }
   });
 
-  check("Analytics differential finder only shows players under the ownership bar", () => {
-    const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Differential finder"));
-    if (!box) throw new Error("no Differential finder section rendered");
-    const ownCells = [...box.querySelectorAll("tbody tr td:nth-child(5)")].map((td) => parseFloat(td.textContent));
-    if (!ownCells.length) throw new Error("setup: expected at least one differential in the mock pool (ownership is randomised 0-45%)");
-    const over = ownCells.filter((v) => v >= 15);
-    if (over.length) throw new Error(`a row at/above 15% ownership leaked into the differential list: ${over.join(", ")}`);
-    return `${ownCells.length} differentials, all under 15% owned`;
+  check("Analytics shared ownership filter caps both the audit table and the explorer", () => {
+    // Replaced the differential finder, which was only ever the audit table
+    // filtered this way. As a shared filter it has to bind both triage
+    // tools, not just the table it came from.
+    const saved = S.ui.anMaxOwn;
+    try {
+      S.ui.anMaxOwn = 10;
+      renderAnalytics(panel("panel-analytics"));
+      const owns = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr")]
+        .map((tr) => parseFloat(tr.lastElementChild.textContent));
+      if (!owns.length) throw new Error("setup: no players under 10% owned in the mock pool");
+      const leaked = owns.filter((v) => v >= 10);
+      if (leaked.length) throw new Error(`ownership filter leaked rows at/above 10%: ${leaked.join(", ")}`);
+
+      const expBox = [...panel("panel-analytics").querySelectorAll(".chart-box")]
+        .find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"));
+      const filtered = expBox.querySelectorAll(".pt circle").length;
+      S.ui.anMaxOwn = 100;
+      renderAnalytics(panel("panel-analytics"));
+      const all = [...panel("panel-analytics").querySelectorAll(".chart-box")]
+        .find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"))
+        .querySelectorAll(".pt circle").length;
+      if (!(filtered < all)) throw new Error(`explorer ignored the ownership filter (${filtered} vs ${all} plotted)`);
+      return `${owns.length} rows under 10%, explorer ${filtered} of ${all} plotted`;
+    } finally {
+      S.ui.anMaxOwn = saved;
+      renderAnalytics(panel("panel-analytics"));
+    }
   });
 
-  check("Analytics set-piece spotlight lists real penalty/free-kick takers from the bootstrap order fields", () => {
-    const box = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Set-piece spotlight"));
-    if (!box) throw new Error("no Set-piece spotlight section rendered");
-    const penaltyTaker = S.players.find((p) => p.penaltyOrder === 1);
-    if (!penaltyTaker) throw new Error("setup: mock data should have at least one order-1 penalty taker");
-    if (!box.innerHTML.includes(penaltyTaker.name)) throw new Error(`penalty taker ${penaltyTaker.name} not listed in the set-piece section`);
-    // corners_and_indirect_freekicks_order is always null in the mock data -
-    // that group should say so rather than silently rendering nothing.
-    if (!box.textContent.includes("Nobody currently flagged")) throw new Error('expected the empty corners group to say "Nobody currently flagged"');
-    return `penalty taker ${penaltyTaker.name} listed; empty corners group shows its own hint`;
+  check("Analytics audit table carries set-piece duty as its own sortable column", () => {
+    // Replaced the set-piece spotlight section - same bootstrap order
+    // fields, now sat beside the form and minutes signals you weigh it with.
+    const heads = [...panel("panel-analytics").querySelectorAll(".an-audit thead th")].map((t) => t.textContent.trim());
+    if (!heads.includes("Set pieces")) throw new Error(`no set-piece column in the audit table: ${heads.join(", ")}`);
+    const taker = S.players.find((p) => p.penaltyOrder === 1);
+    if (!taker) throw new Error("setup: mock data should have at least one order-1 penalty taker");
+    const col = heads.indexOf("Set pieces") + 1;
+    const tags = [...panel("panel-analytics").querySelectorAll(`.an-audit tbody tr td:nth-child(${col})`)]
+      .map((td) => td.textContent.trim());
+    if (!tags.some((t) => t === "Pens")) throw new Error(`expected at least one "Pens" tag, got: ${[...new Set(tags)].join(", ")}`);
+    return `set-piece column present, ${tags.filter((t) => t === "Pens").length} penalty takers tagged`;
   });
 
   const savedPos = S.ui.anPos;
@@ -3855,13 +3845,9 @@ await (async () => {
   S.ui.anPos = "GKP";
   renderAnalytics(panel("panel-analytics"));
 
-  check("Analytics shared position filter restricts the due scatter and the audit table to that position only", () => {
-    // Scoped to the due-a-goal-or-assist box specifically - the projection
-    // check at the bottom of the tab also renders .pt points, but it's a
-    // separate, deliberately position-unfiltered group, not part of this
-    // shared triage filter.
-    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
-    if (!dueBox) throw new Error("no due-a-goal-or-assist section rendered");
+  check("Analytics shared position filter restricts the explorer and the audit table to that position only", () => {
+    const dueBox = [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"));
+    if (!dueBox) throw new Error("no explorer section rendered");
     // Every point's label starts with "Name (SHORT) — ..." - pull the bare
     // name back out rather than fuzzy-matching the full descriptive string.
     const scatterNames = [...dueBox.querySelectorAll(".pt title")].map((el) => el.textContent.split(" (")[0]);
@@ -3873,12 +3859,18 @@ await (async () => {
     return `${scatterNames.length} scatter points, ${auditNames.length} audit rows, all GKP`;
   });
 
-  const dueBoxFor = () =>
-    [...panel("panel-analytics").querySelectorAll(".chart-box")].find((b) => b.querySelector("h3")?.textContent.includes("due a goal or assist"));
+  // Reads the audit table, not the explorer: the explorer is season-to-date
+  // by design, so the gameweek window legitimately doesn't move it. The
+  // audit table is the windowed tool in this group.
+  const auditFormFor = () =>
+    [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr")]
+      .slice(0, 5)
+      .map((tr) => tr.children[3]?.textContent)
+      .join("|");
 
   S.ui.anPos = savedPos;
   renderAnalytics(panel("panel-analytics"));
-  const before = dueBoxFor()?.querySelector(".pt title")?.textContent;
+  const before = auditFormFor();
 
   S.ui.anWindow = "3";
   renderAnalytics(panel("panel-analytics"));
@@ -3889,11 +3881,11 @@ await (async () => {
     const gws5 = gwList(savedWindow);
     const gws3 = gwList("3");
     if (gws3.length >= gws5.length) throw new Error("setup: 3-GW window should be shorter than the default window");
-    const after = dueBoxFor()?.querySelector(".pt title")?.textContent;
-    if (!before) throw new Error("setup: no scatter point before switching the window");
-    if (!after) throw new Error("no scatter points after switching the window");
-    if (after === before) throw new Error("switching the GW window didn't change the summed G/A/xGI shown");
-    return `window narrowed from ${gws5.length} to ${gws3.length} GWs, summed totals changed`;
+    const after = auditFormFor();
+    if (!before) throw new Error("setup: no audit rows before switching the window");
+    if (!after) throw new Error("no audit rows after switching the window");
+    if (after === before) throw new Error("switching the GW window didn't change the windowed form figures");
+    return `window narrowed from ${gws5.length} to ${gws3.length} GWs, windowed form changed`;
   });
 
   S.ui.anWindow = savedWindow;
