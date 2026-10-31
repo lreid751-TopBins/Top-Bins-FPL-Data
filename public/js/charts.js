@@ -139,24 +139,44 @@ export function scatter(points, opts = {}) {
       { x: cx + 8, y: cy - 9 }, // right, raised
       { x: cx + 8, y: cy + 16 }, // right, lowered
       { x: cx - lw - 8, y: cy + 3.5 }, // left
+      { x: cx - lw - 8, y: cy - 9 }, // left, raised
+      { x: cx - lw - 8, y: cy + 16 }, // left, lowered
       { x: cx - lw / 2, y: cy - 13 }, // above, centred
       { x: cx - lw / 2, y: cy + 19 }, // below, centred
+      { x: cx + 8, y: cy - 22 }, // right, further out
+      { x: cx + 8, y: cy + 29 },
+      { x: cx - lw - 8, y: cy - 22 }, // left, further out
+      { x: cx - lw - 8, y: cy + 29 },
     ];
     const clamp = (c) => ({ x: Math.max(2, Math.min(W - lw - 2, c.x)), y: Math.max(PAD.t + lh, Math.min(H - PAD.b, c.y)) });
+    const boxOf = (c) => ({ x0: c.x, y0: c.y - lh + 3, x1: c.x + lw, y1: c.y + 3 });
     const fits = (c) => {
-      const box = { x0: c.x, y0: c.y - lh + 3, x1: c.x + lw, y1: c.y + 3 };
+      const box = boxOf(clamp(c));
       return !placedLabels.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
     };
-    const chosen = clamp(candidates.find(fits) || candidates[0]);
-    placedLabels.push({ x0: chosen.x, y0: chosen.y - lh + 3, x1: chosen.x + lw, y1: chosen.y + 3 });
-    labelPos.set(p.id, chosen);
+    // No fallback to an overlapping position: in a tight cluster several
+    // labels used to exhaust every candidate and pile onto candidates[0],
+    // which is how three of ten ended up overlapping in the explorer. A
+    // dot with no label still has its hover tooltip and reads cleanly; two
+    // names printed over each other read as neither. Clamp before testing
+    // too, or a label pushed back inside the bounds can land on one that
+    // was already checked in its unclamped position.
+    const chosen = candidates.find(fits);
+    if (!chosen) return;
+    const placed = clamp(chosen);
+    placedLabels.push(boxOf(placed));
+    labelPos.set(p.id, placed);
   });
 
   const dots = points
     .map((p) => {
       const cx = px(p.x);
       const cy = py(p.y);
+      // labelled is the shortlist; labelPos is where one actually fit. A
+      // point can be on the shortlist and still go unlabelled if the
+      // placer couldn't find clean space for it.
       const show = labelled.has(p.id);
+      const lp = labelPos.get(p.id);
       // A real styled tooltip, not just the browser's native <title> (which
       // is slow to appear and unstyleable) - a CSS-only reveal via the
       // general sibling combinator, so no JS wiring is needed here. <title>
@@ -166,13 +186,12 @@ export function scatter(points, opts = {}) {
       const tx = Math.max(4, Math.min(W - tw - 4, cx - tw / 2));
       const above = cy - 34 >= PAD.t;
       const ty = above ? cy - 34 : cy + 12;
-      const lp = labelPos.get(p.id);
       return `<g class="pt-wrap">
         <g class="pt">
           <circle cx="${cx}" cy="${cy}" r="${show ? 5 : 3.5}" fill="${p.color || "var(--gold)"}"
             fill-opacity="${show ? 0.95 : 0.55}" stroke="var(--pitch)" stroke-width="1"/>
           <title>${esc(p.label)}</title>
-          ${show ? `<text class="pt-lab" x="${lp.x}" y="${lp.y}">${esc(p.short || p.label)}</text>` : ""}
+          ${show && lp ? `<text class="pt-lab" x="${lp.x}" y="${lp.y}">${esc(p.short || p.label)}</text>` : ""}
         </g>
         <g class="tip">
           <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5"/>

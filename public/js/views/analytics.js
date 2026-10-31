@@ -1,6 +1,6 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
 import { $, $$, esc, th, teamCrest, statCard } from "../ui.js";
-import { scatter, radar, lineChart, divergingBars, wireScatterZoom } from "../charts.js";
+import { scatter, radar, lineChart, divergingBars, wireScatterZoom, POS_COLOR } from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
@@ -67,6 +67,7 @@ export function renderAnalytics(root) {
 
     <div class="eyebrow" style="margin-top:28px">Squad triage</div>
     ${triageFilterBar()}
+    ${explorerSection()}
     ${dueSection(rows)}
     ${auditSection(rows)}
     ${differentialSection(rows)}
@@ -145,6 +146,155 @@ function seasonRankSection() {
     <h3>Your season rank</h3>
     <p class="cap">${esc(S.entry.name || "My Team")} — overall rank by gameweek, most recent ${points.length}.</p>
     ${lineChart(points, { color: improving ? "var(--pos)" : "var(--neg)", fmt: (v) => fmtRank(-v) })}
+  </div>`;
+}
+
+/* =========================================================
+   Explorer - pick your own axes
+
+   Replaces a row of charts that each hardcoded one question. "Who's due
+   a goal" is just x=xGI, y=goals+assists; "value hunt" is x=price,
+   y=points. Rather than a fixed chart per question, this plots any two
+   of the metrics the store already derives, so the questions nobody
+   anticipated are askable too.
+
+   Season-to-date, not windowed: the window data (windowRows) carries
+   about eight fields, the enriched player carries thirty, and an
+   explorer is only worth having if there's something to explore. The
+   per-gameweek view is what the trend chart below is for.
+   ========================================================= */
+const METRICS = [
+  { k: "total_points", l: "Total points", g: "Points", d: 0 },
+  { k: "ppg", l: "Points per match", g: "Points", d: 1 },
+  { k: "form", l: "Form", g: "Points", d: 1 },
+  { k: "pts90", l: "Points per 90", g: "Points", d: 2 },
+  { k: "bonus", l: "Bonus points", g: "Points", d: 0 },
+  { k: "bps", l: "Bonus point system", g: "Points", d: 0 },
+
+  { k: "goals", l: "Goals", g: "Attack", d: 0 },
+  { k: "assists", l: "Assists", g: "Attack", d: 0 },
+  { k: "gi", l: "Goals + assists", g: "Attack", d: 0 },
+  { k: "xg", l: "Expected goals (xG)", g: "Attack", d: 2 },
+  { k: "xa", l: "Expected assists (xA)", g: "Attack", d: 2 },
+  { k: "xgi", l: "Expected involvement (xGI)", g: "Attack", d: 2 },
+  { k: "xg90", l: "xG per 90", g: "Attack", d: 2 },
+  { k: "xa90", l: "xA per 90", g: "Attack", d: 2 },
+  { k: "xgi90", l: "xGI per 90", g: "Attack", d: 2 },
+  { k: "overperf", l: "Goals+assists minus xGI", g: "Attack", d: 2 },
+
+  { k: "cs", l: "Clean sheets", g: "Defence", d: 0 },
+  { k: "defcon", l: "Defensive contributions", g: "Defence", d: 0 },
+  { k: "defcon90", l: "DEFCON per 90", g: "Defence", d: 2 },
+  { k: "xgc90", l: "xG conceded per 90", g: "Defence", d: 2 },
+
+  { k: "threat", l: "Threat", g: "Underlying", d: 0 },
+  { k: "threat90", l: "Threat per 90", g: "Underlying", d: 1 },
+  { k: "creativity", l: "Creativity", g: "Underlying", d: 0 },
+  { k: "ict", l: "ICT index", g: "Underlying", d: 1 },
+  { k: "chanceQuality", l: "Chance quality", g: "Underlying", d: 3 },
+  { k: "setPieceScore", l: "Set-piece duty", g: "Underlying", d: 2 },
+
+  { k: "price", l: "Price (£m)", g: "Market", d: 1 },
+  { k: "selected", l: "Ownership %", g: "Market", d: 1 },
+  { k: "ppm", l: "Points per £m", g: "Market", d: 1 },
+  { k: "netTransfers", l: "Net transfers (GW)", g: "Market", d: 0 },
+  { k: "priceChange", l: "Price change (£m)", g: "Market", d: 1 },
+
+  { k: "minutes", l: "Minutes", g: "Minutes", d: 0 },
+  { k: "starts", l: "Starts", g: "Minutes", d: 0 },
+  { k: "xMin", l: "Expected minutes", g: "Minutes", d: 0 },
+];
+const METRIC_BY_KEY = Object.fromEntries(METRICS.map((m) => [m.k, m]));
+
+// The questions worth a one-click shortcut. Each is just a pair of axes -
+// the point of the presets is discoverability, not special-casing.
+const EXPLORER_PRESETS = [
+  { l: "Due a goal", x: "xgi", y: "gi" },
+  { l: "Value hunt", x: "price", y: "total_points" },
+  { l: "Form vs ownership", x: "selected", y: "form" },
+  { l: "Chance quality", x: "threat90", y: "xg90" },
+  { l: "Minutes risk", x: "xMin", y: "pts90" },
+];
+
+function metricSelect(id, selected) {
+  const groups = [...new Set(METRICS.map((m) => m.g))];
+  return `<select id="${id}">
+    ${groups
+      .map(
+        (g) => `<optgroup label="${esc(g)}">${METRICS.filter((m) => m.g === g)
+          .map((m) => `<option value="${m.k}" ${m.k === selected ? "selected" : ""}>${esc(m.l)}</option>`)
+          .join("")}</optgroup>`
+      )
+      .join("")}
+  </select>`;
+}
+
+function explorerSection() {
+  const xKey = METRIC_BY_KEY[S.ui.anExpX] ? S.ui.anExpX : "xgi";
+  const yKey = METRIC_BY_KEY[S.ui.anExpY] ? S.ui.anExpY : "gi";
+  const mx = METRIC_BY_KEY[xKey];
+  const my = METRIC_BY_KEY[yKey];
+
+  const header = `<h3>Explore any two stats</h3>
+    <p class="cap">Every player past the minutes bar, plotted on whichever two numbers you want. Season to
+      date, coloured by position. Drag on the chart to zoom into a crowded patch.</p>`;
+
+  const pool = eligiblePlayers().filter((p) => !S.ui.anPos || p.pos === S.ui.anPos);
+  if (!pool.length) {
+    return `<div class="chart-box hero">${header}<p class="hint">Nobody's cleared the minutes bar yet.</p></div>`;
+  }
+
+  // Label the genuine outliers rather than the top of one axis: a player
+  // can be the story of a scatter by being extreme in either direction, and
+  // which direction is "good" depends entirely on the metrics picked.
+  const stat = (key) => {
+    const vals = pool.map((p) => n(p[key]));
+    const mean = vals.reduce((a, v) => a + v, 0) / vals.length;
+    const sd = Math.sqrt(vals.reduce((a, v) => a + (v - mean) ** 2, 0) / vals.length) || 1;
+    return { mean, sd };
+  };
+  const sx = stat(xKey);
+  const sy = stat(yKey);
+
+  const points = pool.map((p) => {
+    const xv = n(p[xKey]);
+    const yv = n(p[yKey]);
+    return {
+      id: p.id,
+      x: xv,
+      y: yv,
+      label: `${p.name} (${p.short}) — ${mx.l} ${xv.toFixed(mx.d)}, ${my.l} ${yv.toFixed(my.d)}`,
+      short: p.name,
+      color: POS_COLOR[p.pos] || "var(--gold)",
+      weight: Math.hypot((xv - sx.mean) / sx.sd, (yv - sy.mean) / sy.sd),
+    };
+  });
+
+  const presets = EXPLORER_PRESETS.map(
+    (ps) =>
+      `<button type="button" data-exppreset="${ps.x}|${ps.y}"
+        ${ps.x === xKey && ps.y === yKey ? 'aria-pressed="true"' : ""}>${esc(ps.l)}</button>`
+  ).join("");
+
+  return `<div class="chart-box hero">
+    ${header}
+    <div class="seg an-exp-presets" role="group" aria-label="Preset views">${presets}</div>
+    <div class="an-exp-axes">
+      <label class="an-picker"><span>Y axis</span>${metricSelect("anExpY", yKey)}</label>
+      <label class="an-picker"><span>X axis</span>${metricSelect("anExpX", xKey)}</label>
+    </div>
+    ${scatter(points, {
+      xLabel: mx.l,
+      yLabel: my.l,
+      fmt: (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Math.max(mx.d, my.d) > 2 ? 2 : 1)),
+      labelTop: 10,
+      empty: "Nothing to plot for these two stats yet.",
+    })}
+    <div class="an-h2h-legend">
+      ${["GKP", "DEF", "MID", "FWD"]
+        .map((pos) => `<span class="an-h2h-dot" style="background:${POS_COLOR[pos]}"></span><span style="margin-right:12px">${pos}</span>`)
+        .join("")}
+    </div>
   </div>`;
 }
 
@@ -858,6 +1008,21 @@ function wire(root) {
 
   $$("[data-goto]", root).forEach((el) => {
     el.onclick = () => goTo(el.dataset.goto);
+  });
+
+  const bindAxis = (id, key) => {
+    const sel = $(`#${id}`, root);
+    if (sel) sel.addEventListener("change", () => { S.ui[key] = sel.value; re(); });
+  };
+  bindAxis("anExpX", "anExpX");
+  bindAxis("anExpY", "anExpY");
+  $$("[data-exppreset]", root).forEach((b) => {
+    b.onclick = () => {
+      const [x, y] = b.dataset.exppreset.split("|");
+      S.ui.anExpX = x;
+      S.ui.anExpY = y;
+      re();
+    };
   });
 
   $$("[data-playerid]", root).forEach((elx) => {

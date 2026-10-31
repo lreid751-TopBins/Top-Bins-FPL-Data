@@ -1884,6 +1884,11 @@ textarea::placeholder { color: var(--muted-2); }
 .tag.pos { border-color: var(--pos); color: var(--pos); }
 .tag.neg { border-color: var(--neg); color: var(--neg); }
 
+/* Explorer axis pickers: two side by side on desktop, stacking on narrow
+   screens. Y first, reading like the axis label it controls. */
+.an-exp-axes { display: flex; flex-wrap: wrap; gap: 12px; margin: 12px 0 14px; }
+.an-exp-axes .an-picker { flex: 1 1 220px; max-width: none; }
+.an-exp-presets { flex-wrap: wrap; }
 .an-picker { display: flex; flex-direction: column; gap: 4px; max-width: 320px; }
 .an-picker span { font-size: 10.5px; color: var(--muted); font-family: "JetBrains Mono", monospace; text-transform: uppercase; letter-spacing: 0.05em; }
 .an-picker input {

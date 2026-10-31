@@ -3571,14 +3571,14 @@ check("wide data tables get the same mobile scroll-edge fade as the tab bar", ()
 /* =========================================================
    Analytics tab
    ========================================================= */
-check("Analytics tab renders all ten sections with real values, no NaN/undefined", () => {
+check("Analytics tab renders all eleven sections with real values, no NaN/undefined", () => {
   renderAnalytics(panel("panel-analytics"));
   const html = panel("panel-analytics").innerHTML;
   if (html.includes("NaN")) throw new Error("NaN rendered somewhere in Analytics");
   if (html.includes("undefined")) throw new Error("undefined rendered somewhere in Analytics");
 
   const boxes = panel("panel-analytics").querySelectorAll(".chart-box");
-  if (boxes.length !== 10) throw new Error(`expected 10 chart-box sections, got ${boxes.length}`);
+  if (boxes.length !== 11) throw new Error(`expected 11 chart-box sections, got ${boxes.length}`);
   if (!panel("panel-analytics").querySelector("#anPos")) throw new Error("no shared squad-triage position filter rendered");
   if (!panel("panel-analytics").querySelector("#anWindow")) throw new Error("no shared squad-triage window filter rendered");
   // The squad-audit table itself only appears once the shared window fetch
@@ -3589,7 +3589,36 @@ check("Analytics tab renders all ten sections with real values, no NaN/undefined
   if (!panel("panel-analytics").querySelector(".an-h2h-chart svg")) throw new Error("no head-to-head radar rendered");
   if (!html.includes("Who's outperforming their own projection?")) throw new Error("no projection-check section rendered");
 
-  return "10 chart-box sections: season rank, due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
+  return "11 chart-box sections: season rank, explorer, due/audit/differential/set-piece, trend/percentile/head-to-head, fixtures-form, projection check";
+});
+
+check("Analytics explorer plots two chosen metrics and reflects an axis change", () => {
+  const find = () =>
+    [...panel("panel-analytics").querySelectorAll(".chart-box")]
+      .find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"));
+
+  renderAnalytics(panel("panel-analytics"));
+  const box = find();
+  if (!box) throw new Error("no explorer section rendered");
+  const dots = box.querySelectorAll(".pt circle").length;
+  if (!dots) throw new Error("explorer plotted no players");
+  if (box.querySelectorAll("[data-exppreset]").length < 2) throw new Error("expected preset buttons");
+  const pair = box.querySelector("[data-exppreset]").dataset.exppreset;
+  if (!pair.includes("|")) throw new Error(`preset should carry an x|y pair, got ${pair}`);
+
+  // Changing an axis has to actually re-plot on the new metric, not just
+  // relabel - the tooltip is built from the same values the dots use.
+  const before = find().querySelector(".pt title")?.textContent || "";
+  S.ui.anExpY = "total_points";
+  renderAnalytics(panel("panel-analytics"));
+  const after = find().querySelector(".pt title")?.textContent || "";
+  if (!after.includes("Total points")) throw new Error(`y axis change not reflected, got: ${after}`);
+  if (after === before) throw new Error("tooltip identical after changing the y metric");
+
+  S.ui.anExpX = "xgi";
+  S.ui.anExpY = "gi";
+  renderAnalytics(panel("panel-analytics"));
+  return `${dots} players plotted, axis switch re-plots`;
 });
 
 check("Analytics trend section: switching players re-renders the chart with that player's own series", () => {
