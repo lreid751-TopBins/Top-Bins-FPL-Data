@@ -35,7 +35,14 @@ jobs:
 
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned, not "latest". The CLI went v2 -> v3 between the Oct 2026
+          # deploy and the next one, and "latest" silently carried this
+          # workflow across a major version: the deploy failed in setup-cli
+          # itself, before any project code ran. v2.122.0 is the version the
+          # last successful deploy used. Moving to v3 should be a deliberate
+          # upgrade with the migration notes read, not something an upstream
+          # release does to a Tuesday.
+          version: 2.122.0
 
       - name: Link project
         run: supabase link --project-ref "$PROJECT_REF"
