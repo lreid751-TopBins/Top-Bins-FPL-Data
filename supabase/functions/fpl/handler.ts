@@ -795,6 +795,12 @@ export function createHandler(deps: Deps) {
               200, cors
             );
           }
+          if (rest[1] === "transfers" && rest.length === 2) {
+            return json(
+              await cached(deps, `xfers:${id}`, TTL.history, `/entry/${id}/transfers/`),
+              200, cors
+            );
+          }
           if (rest[1] === "picks" && isGw(rest[2] ?? "")) {
             const gw = rest[2];
             return json(

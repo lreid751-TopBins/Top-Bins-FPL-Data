@@ -71,6 +71,7 @@ export const api = {
   entry: (id) => get(`${BASE}/entry/${id}`, { ttl: 60_000 }),
   picks: (id, gw) => get(`${BASE}/entry/${id}/picks/${gw}`, { ttl: 45_000 }),
   history: (id) => get(`${BASE}/entry/${id}/history`, { ttl: 120_000 }),
+  transfers: (id) => get(`${BASE}/entry/${id}/transfers`, { ttl: 120_000 }),
   element: (id) => get(`${BASE}/element/${id}`, { ttl: 300_000 }),
   prices: (days = 14) => get(`${BASE}/prices?days=${days}`, { ttl: 600_000 }),
   latestVideo: () => get(`${BASE}/latest-video`, { ttl: 600_000 }),

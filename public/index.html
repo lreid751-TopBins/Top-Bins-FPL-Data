@@ -8,7 +8,7 @@
 <meta name="theme-color" content="#08170e" />
 <link rel="canonical" href="https://fpl.topbinswithtwins.com/" />
 
-<!-- Open Graph / Twitter card - text only for now, no share image yet. -->
+<!-- Open Graph / Twitter card. -->
 <meta property="og:type" content="website" />
 <meta property="og:site_name" content="Top Bins FPL Data Room" />
 <meta property="og:title" content="Top Bins — FPL Data Room" />
@@ -133,6 +133,11 @@
      its fixed positioning is never affected by an ancestor's layout. -->
 <div class="player-detail-backdrop" id="pdBackdrop" hidden></div>
 <aside class="player-detail" id="playerDetail" hidden aria-hidden="true" aria-label="Player profile"></aside>
+
+<!-- Post-deadline transfer prompt: a centred modal rather than a side
+     drawer, because it's the one thing on screen when it appears. -->
+<div class="xfer-backdrop" id="xferBackdrop" hidden></div>
+<aside class="xfer-prompt" id="xferPrompt" hidden aria-hidden="true" aria-label="Log your transfers"></aside>
 
 <!-- Team Rater drawer: same shared-panel pattern as the player profile above. -->
 <div class="player-detail-backdrop" id="trBackdrop" hidden></div>

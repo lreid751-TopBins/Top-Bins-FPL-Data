@@ -122,6 +122,7 @@ function harness(overrides: Partial<Deps> = {}): Harness {
       }
       if (path.includes("/event/") && path.includes("/picks/")) return { picks: [] };
       if (path.startsWith("/entry/") && path.endsWith("/history/")) return { current: [] };
+      if (path.startsWith("/entry/") && path.endsWith("/transfers/")) return [];
       if (path.startsWith("/entry/")) return { id: 7, name: "Top Bins XI" };
       if (path.startsWith("/element-summary/")) return { history: [] };
       throw new Error("FPL API returned 404 for " + path);
@@ -241,6 +242,7 @@ Deno.test("routes each resource to the right upstream path", async () => {
     ["/live/12", "/event/12/live/"],
     ["/entry/1234567", "/entry/1234567/"],
     ["/entry/1234567/history", "/entry/1234567/history/"],
+    ["/entry/1234567/transfers", "/entry/1234567/transfers/"],
     ["/entry/1234567/picks/12", "/entry/1234567/event/12/picks/"],
     ["/element/318", "/element-summary/318/"],
   ];

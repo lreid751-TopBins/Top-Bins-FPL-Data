@@ -139,6 +139,7 @@ const {
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
 const { renderHub, goTo } = await import("../public/js/views/hub.js");
+const { maybeShowTransferPrompt } = await import("../public/js/transferPrompt.js");
 const { renderScout } = await import("../public/js/views/scout.js");
 const { renderFixtures } = await import("../public/js/views/fixtures.js");
 const { renderTeams } = await import("../public/js/views/teams.js");
@@ -3985,6 +3986,47 @@ check("Analytics tab is reachable from the nav and shows only when active", () =
 });
 
 await loadManager("1234567", () => renderSquad(panel("panel-squad")));
+await (async () => {
+  // The prompt is async (it fetches the manager's transfers), so it gets its
+  // own settled block rather than running inside a sync check().
+  localStorage.removeItem("tb:xferPromptGw");
+  const shown = await maybeShowTransferPrompt();
+
+  check("post-deadline prompt offers this gameweek's real transfers, and only this gameweek's", () => {
+    if (!shown) throw new Error("setup: expected the prompt to fire for a connected manager with transfers");
+    const panel = document.getElementById("xferPrompt");
+    if (panel.hidden) throw new Error("prompt rendered but left hidden");
+    const rows = panel.querySelectorAll(".xfer-row");
+    // The fixture has two moves in the current gameweek and one older one,
+    // which must not be offered - you'd be journalling a decision from weeks ago.
+    if (rows.length !== 2) throw new Error(`expected 2 transfers for GW${S.currentGw}, got ${rows.length}`);
+    if (!panel.textContent.includes(`Gameweek ${S.currentGw}`)) throw new Error("prompt doesn't name the gameweek it's about");
+    return `${rows.length} transfers offered for GW${S.currentGw}`;
+  });
+
+  check("post-deadline prompt fills in what you did and leaves why to you", () => {
+    const panel = document.getElementById("xferPrompt");
+    panel.querySelector("#xferLog").click();
+    // The whole point: the journal scores by regret, which needs the
+    // confidence and reasoning held at the time. Pre-filling those would
+    // put rows in the journal that can't be scored.
+    if (J.draft.kind !== "transfer") throw new Error(`expected a transfer draft, got ${J.draft.kind}`);
+    if (J.draft.gw !== S.currentGw) throw new Error("draft should be for the gameweek that just locked in");
+    if (J.draft.options.length !== 4) throw new Error(`expected both ends of 2 transfers, got ${J.draft.options.length}`);
+    if (!J.draft.chosen) throw new Error("expected the incoming player pre-selected");
+    if (J.draft.reasons.length) throw new Error("reasoning must be left for the user, not invented");
+    if (J.draft.note) throw new Error("note must be left for the user, not invented");
+    return `${J.draft.options.length} players pre-filled, reasoning left blank`;
+  });
+
+  check("post-deadline prompt only asks once per gameweek", () => {
+    if (localStorage.getItem("tb:xferPromptGw") !== String(S.currentGw)) {
+      throw new Error("acting on the prompt should record the gameweek it was for");
+    }
+    return `marked seen for GW${S.currentGw}`;
+  });
+})();
+
 check("Analytics explorer scope picks who gets plotted, and squad-vs-everyone names only your own", () => {
   const find = () =>
     [...panel("panel-analytics").querySelectorAll(".chart-box")]

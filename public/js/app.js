@@ -11,6 +11,7 @@ import { renderAnalytics } from "./views/analytics.js";
 // No panel of its own - importing it wires up its close interactions
 // (backdrop click, Escape) once, regardless of which tab loads first.
 import "./playerDetail.js";
+import { maybeShowTransferPrompt } from "./transferPrompt.js";
 
 const PANELS = {
   hub: { el: () => $("#panel-hub"), render: renderHub, label: "Hub" },
@@ -161,7 +162,12 @@ async function boot() {
   // Auto-load a previously saved manager ID - the Hub (now the default tab)
   // needs S.entry/S.history for its rank widget just as much as My Team does.
   if (S.ui.managerId) {
-    loadManager(S.ui.managerId, () => renderActive());
+    // Chained rather than fired and forgotten: the prompt needs S.entry and
+    // the squad in place to resolve transfers to real players. Never allowed
+    // to break boot - an offer to journal is a bonus, not part of loading.
+    loadManager(S.ui.managerId, () => renderActive())
+      .then(() => maybeShowTransferPrompt())
+      .catch(() => {});
   }
 
   // Keep live scores fresh while a gameweek is in play, but never redraw

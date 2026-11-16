@@ -239,6 +239,13 @@ const MOCK = {
     })),
     chips: [],
   },
+  // Two moves in the current gameweek so the post-deadline journal prompt
+  // has something real to offer, plus an older one it should ignore.
+  "/api/entry/1234567/transfers": [
+    { element_in: squadPicks[0].element, element_in_cost: 75, element_out: 1, element_out_cost: 70, entry: 1234567, event: CURRENT_GW, time: "2026-10-31T10:00:00Z" },
+    { element_in: squadPicks[1].element, element_in_cost: 55, element_out: 2, element_out_cost: 60, entry: 1234567, event: CURRENT_GW, time: "2026-10-31T10:01:00Z" },
+    { element_in: squadPicks[2].element, element_in_cost: 50, element_out: 3, element_out_cost: 50, entry: 1234567, event: CURRENT_GW - 3, time: "2026-10-10T10:00:00Z" },
+  ],
   [`/api/entry/1234567/picks/${CURRENT_GW}`]: {
     active_chip: null, automatic_subs: [],
     entry_history: {
