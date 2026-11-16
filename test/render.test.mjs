@@ -3947,6 +3947,45 @@ check("Analytics tab is reachable from the nav and shows only when active", () =
 });
 
 await loadManager("1234567", () => renderSquad(panel("panel-squad")));
+check("Analytics explorer scope picks who gets plotted, and squad-vs-everyone names only your own", () => {
+  const find = () =>
+    [...panel("panel-analytics").querySelectorAll(".chart-box")]
+      .find((b) => b.querySelector("h3")?.textContent.includes("Explore any two"));
+  const saved = S.ui.anExpScope;
+  try {
+    S.ui.anExpScope = "all";
+    renderAnalytics(panel("panel-analytics"));
+    const everyone = find().querySelectorAll(".pt circle").length;
+    if (!everyone) throw new Error("setup: nothing plotted for the everyone scope");
+
+    S.ui.anExpScope = "squad";
+    renderAnalytics(panel("panel-analytics"));
+    const squadDots = find().querySelectorAll(".pt circle").length;
+    const squadSize = S.picks?.picks?.length || 0;
+    if (!squadSize) throw new Error("setup: expected a connected squad by this point in the suite");
+    if (squadDots >= everyone) throw new Error(`squad scope should plot fewer than everyone (${squadDots} vs ${everyone})`);
+
+    // The point of squad-vs-everyone: the pool stays as grey context and
+    // only your own players are coloured and named. Labels spilling onto
+    // the background would read as if those were picked out too.
+    S.ui.anExpScope = "squadVsAll";
+    renderAnalytics(panel("panel-analytics"));
+    const box = find();
+    const circles = [...box.querySelectorAll(".pt circle")];
+    const muted = circles.filter((c) => c.getAttribute("fill") === "var(--muted-2)").length;
+    if (!muted) throw new Error("expected the background pool to be muted");
+    const mine = circles.length - muted;
+    if (mine !== squadDots) throw new Error(`expected ${squadDots} highlighted players, got ${mine}`);
+    const labels = box.querySelectorAll(".pt-lab").length;
+    if (labels > mine) throw new Error(`labels spilled onto the background pool: ${labels} labels for ${mine} squad players`);
+    if (!box.textContent.includes("Everyone else")) throw new Error("expected an 'Everyone else' legend entry");
+    return `${everyone} everyone, ${squadDots} squad, ${mine} highlighted over ${muted} muted`;
+  } finally {
+    S.ui.anExpScope = saved;
+    renderAnalytics(panel("panel-analytics"));
+  }
+});
+
 check("Analytics also charts the connected manager's season rank trend, same as the Hub", () => {
   renderAnalytics(panel("panel-analytics"));
   const heading = [...panel("panel-analytics").querySelectorAll("h3")].find((h) => h.textContent.trim() === "Your season rank");

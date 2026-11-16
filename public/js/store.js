@@ -64,6 +64,7 @@ export const S = {
     anAuditSort: { k: "formPerGw", dir: -1 }, // squad-audit table sort
     anFixSpan: 5,      // fixtures-through-form section, recent-form window (GWs)
     anMaxOwn: 100,     // squad-triage group, shared max-ownership filter (100 = off)
+    anExpScope: "all", // explorer: whose dots get plotted (all/squad/watch/squad-vs-all)
     anExpX: "xgi",     // explorer: metric on the x axis
     anExpY: "gi",      // explorer: metric on the y axis (defaults reproduce "due a goal")
   },

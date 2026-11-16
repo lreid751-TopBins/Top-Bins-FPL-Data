@@ -225,21 +225,80 @@ function metricSelect(id, selected) {
   </select>`;
 }
 
+const EXPLORER_SCOPES = [
+  { v: "all", l: "Everyone" },
+  { v: "squad", l: "My squad" },
+  { v: "watch", l: "My watchlist" },
+  { v: "squadVsAll", l: "My squad vs everyone" },
+];
+
+/** Player ids in the connected manager's current squad, or null if there
+ *  isn't one - the squad scopes prompt to connect rather than drawing an
+ *  empty chart, same as the season-rank section above. */
+function squadIds() {
+  const picks = S.picks?.picks;
+  return picks?.length ? new Set(picks.map((pk) => pk.element)) : null;
+}
+
 function explorerSection() {
   const xKey = METRIC_BY_KEY[S.ui.anExpX] ? S.ui.anExpX : "xgi";
   const yKey = METRIC_BY_KEY[S.ui.anExpY] ? S.ui.anExpY : "gi";
   const mx = METRIC_BY_KEY[xKey];
   const my = METRIC_BY_KEY[yKey];
+  const scope = EXPLORER_SCOPES.some((o) => o.v === S.ui.anExpScope) ? S.ui.anExpScope : "all";
 
+  const scopeSelect = `<label class="an-picker"><span>Who</span>
+    <select id="anExpScope">
+      ${EXPLORER_SCOPES.map((o) => `<option value="${o.v}" ${o.v === scope ? "selected" : ""}>${esc(o.l)}</option>`).join("")}
+    </select></label>`;
+  const controls = `<div class="an-exp-axes">
+      ${scopeSelect}
+      <label class="an-picker"><span>Y axis</span>${metricSelect("anExpY", yKey)}</label>
+      <label class="an-picker"><span>X axis</span>${metricSelect("anExpX", xKey)}</label>
+    </div>`;
+
+  const caps = {
+    all: "Every player past the minutes bar, plotted on whichever two numbers you want. Season to date, coloured by position.",
+    squad: "Just your 15, so every one of them is named. Season to date, coloured by position.",
+    watch: "Only the players you've starred in Player Finder.",
+    squadVsAll: "The whole pool in grey with your own squad picked out on top - where your players actually sit in the distribution, not just how they rank.",
+  };
   const header = `<h3>Explore any two stats</h3>
-    <p class="cap">Every player past the minutes bar, plotted on whichever two numbers you want. Season to
-      date, coloured by position. Drag on the chart to zoom into a crowded patch.</p>`;
+    <p class="cap">${esc(caps[scope])} Drag on the chart to zoom into a crowded patch.</p>`;
 
-  const pool = eligiblePlayers().filter(
-    (p) => (!S.ui.anPos || p.pos === S.ui.anPos) && p.selected < S.ui.anMaxOwn
-  );
+  const shell = (inner) => `<div class="chart-box hero">${header}${controls}${inner}</div>`;
+
+  const mine = squadIds();
+  if ((scope === "squad" || scope === "squadVsAll") && !mine) {
+    return shell(`<p class="hint">Connect your FPL team to plot your own squad here.</p>
+      <button class="btn primary" data-goto="squad">Connect your FPL team →</button>`);
+  }
+  if (scope === "watch" && !S.ui.watchlist.size) {
+    return shell(`<p class="hint">Nothing on your watchlist yet - star players in Player Finder and they'll show up here.</p>
+      <button class="btn primary" data-goto="scout">Open Player Finder →</button>`);
+  }
+
+  const passesFilters = (p) => (!S.ui.anPos || p.pos === S.ui.anPos) && p.selected < S.ui.anMaxOwn;
+  // The minutes floor exists to keep noisy rate stats out of a pool nobody
+  // hand-picked. When you've explicitly asked for your own squad or your
+  // own watchlist it would just silently drop players you chose, so those
+  // scopes skip it - a low-minutes player sitting at the origin is a
+  // readable answer in itself.
+  const chosen = (set) => S.players.filter((p) => set.has(p.id) && passesFilters(p));
+  const background = eligiblePlayers().filter(passesFilters);
+
+  let pool;
+  let highlight = null;
+  if (scope === "squad") pool = chosen(mine);
+  else if (scope === "watch") pool = chosen(S.ui.watchlist);
+  else if (scope === "squadVsAll") {
+    highlight = mine;
+    const extra = S.players.filter((p) => mine.has(p.id) && passesFilters(p) && !background.includes(p));
+    pool = [...background, ...extra];
+  } else pool = background;
+
   if (!pool.length) {
-    return `<div class="chart-box hero">${header}<p class="hint">Nobody's cleared the minutes bar yet.</p></div>`;
+    return shell(`<p class="hint">Nobody matches these filters yet - try widening the position or ownership filter.</p>`);
   }
 
   // Label the genuine outliers rather than the top of one axis: a player
@@ -257,14 +316,20 @@ function explorerSection() {
   const points = pool.map((p) => {
     const xv = n(p[xKey]);
     const yv = n(p[yKey]);
+    const outlier = Math.hypot((xv - sx.mean) / sx.sd, (yv - sy.mean) / sy.sd);
+    const isMine = !highlight || highlight.has(p.id);
     return {
       id: p.id,
       x: xv,
       y: yv,
       label: `${p.name} (${p.short}) — ${mx.l} ${xv.toFixed(mx.d)}, ${my.l} ${yv.toFixed(my.d)}`,
       short: p.name,
-      color: POS_COLOR[p.pos] || "var(--gold)",
-      weight: Math.hypot((xv - sx.mean) / sx.sd, (yv - sy.mean) / sy.sd),
+      color: isMine ? POS_COLOR[p.pos] || "var(--gold)" : "var(--muted-2)",
+      // In squad-vs-everyone the background is context, not content: a big
+      // weight offset keeps every one of your own players ahead of all 270
+      // others in the labelling queue, so the names you came for are the
+      // names that get drawn.
+      weight: isMine ? outlier + 1000 : outlier,
     };
   });
 
@@ -274,24 +339,32 @@ function explorerSection() {
         ${ps.x === xKey && ps.y === yKey ? 'aria-pressed="true"' : ""}>${esc(ps.l)}</button>`
   ).join("");
 
+  // Small, hand-picked sets want every name; the full pool would be a mess.
+  // In squad-vs-everyone it's exactly your own players and nobody else -
+  // letting it spill past them put names on grey background dots, which
+  // reads as if those were picked out too.
+  const labelTop = highlight
+    ? [...highlight].length
+    : scope === "all"
+    ? 10
+    : Math.min(18, pool.length);
+
   return `<div class="chart-box hero">
     ${header}
     <div class="seg an-exp-presets" role="group" aria-label="Preset views">${presets}</div>
-    <div class="an-exp-axes">
-      <label class="an-picker"><span>Y axis</span>${metricSelect("anExpY", yKey)}</label>
-      <label class="an-picker"><span>X axis</span>${metricSelect("anExpX", xKey)}</label>
-    </div>
+    ${controls}
     ${scatter(points, {
       xLabel: mx.l,
       yLabel: my.l,
       fmt: (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Math.max(mx.d, my.d) > 2 ? 2 : 1)),
-      labelTop: 10,
+      labelTop,
       empty: "Nothing to plot for these two stats yet.",
     })}
     <div class="an-h2h-legend">
       ${["GKP", "DEF", "MID", "FWD"]
         .map((pos) => `<span class="an-h2h-dot" style="background:${POS_COLOR[pos]}"></span><span style="margin-right:12px">${pos}</span>`)
         .join("")}
+      ${highlight ? `<span class="an-h2h-dot" style="background:var(--muted-2)"></span><span>Everyone else</span>` : ""}
     </div>
   </div>`;
 }
@@ -893,6 +966,7 @@ function wire(root) {
     const sel = $(`#${id}`, root);
     if (sel) sel.addEventListener("change", () => { S.ui[key] = sel.value; re(); });
   };
+  bindAxis("anExpScope", "anExpScope");
   bindAxis("anExpX", "anExpX");
   bindAxis("anExpY", "anExpY");
   $$("[data-exppreset]", root).forEach((b) => {
