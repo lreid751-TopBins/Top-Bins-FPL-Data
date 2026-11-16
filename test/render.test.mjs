@@ -138,7 +138,7 @@ const {
 } = await import("../public/js/store.js");
 const { fixtureStrip } = await import("../public/js/ui.js");
 const { projectPlayer } = await import("../public/js/projection.js");
-const { renderHub } = await import("../public/js/views/hub.js");
+const { renderHub, goTo } = await import("../public/js/views/hub.js");
 const { renderScout } = await import("../public/js/views/scout.js");
 const { renderFixtures } = await import("../public/js/views/fixtures.js");
 const { renderTeams } = await import("../public/js/views/teams.js");
@@ -1700,6 +1700,44 @@ await (async () => {
 
   closeRater();
 })();
+
+check("hub links carry context into the tab they open, not just the tab", () => {
+  renderHub(panel("panel-hub"));
+  const carriers = [...panel("panel-hub").querySelectorAll("[data-goto-state]")];
+  if (carriers.length < 3) throw new Error(`expected several context-carrying hub links, got ${carriers.length}`);
+
+  // Every payload has to be parseable and name real S.ui keys - a typo here
+  // would silently land you on the tab's default view, which is exactly the
+  // dead end these links exist to avoid.
+  for (const el of carriers) {
+    let state;
+    try {
+      state = JSON.parse(el.dataset.gotoState);
+    } catch {
+      throw new Error(`unparseable goto state on "${el.textContent.trim()}"`);
+    }
+    const unknown = Object.keys(state).filter((k) => !(k in S.ui));
+    if (unknown.length) throw new Error(`hub link sets unknown S.ui key(s): ${unknown.join(", ")}`);
+  }
+
+  // The DEFCON column heads to Player Finder already sorted that way.
+  const defcon = carriers.find((el) => el.textContent.includes("DEFCON"));
+  if (!defcon) throw new Error("expected the DEFCON column heading to link through");
+  const saved = { sort: { ...S.ui.scoutSort }, per90: S.ui.per90, tab: S.ui.tab };
+  try {
+    S.ui.scoutSort = { k: "name", dir: 1 };
+    S.ui.per90 = false;
+    goTo(defcon.dataset.goto, JSON.parse(defcon.dataset.gotoState));
+    if (S.ui.scoutSort.k !== "defcon90") throw new Error(`expected a defcon90 sort, got ${S.ui.scoutSort.k}`);
+    if (!S.ui.per90) throw new Error("a per-90 column should land on the per-90 view");
+    return `${carriers.length} context-carrying links, all keys valid`;
+  } finally {
+    S.ui.scoutSort = saved.sort;
+    S.ui.per90 = saved.per90;
+    S.ui.tab = saved.tab;
+    renderHub(panel("panel-hub"));
+  }
+});
 
 check("hub shows crests, rank and mini-leagues once a manager is connected", () => {
   renderHub(panel("panel-hub"));

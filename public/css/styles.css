@@ -926,6 +926,13 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 .hub-trend-tag.neg { color: var(--neg); }
 
 .hub-cols { display: flex; gap: 14px; flex-wrap: wrap; }
+/* A column heading that's also the way through to the full list it's the
+   top five of - styled as the heading it replaces, not as a button. */
+.hub-col-link {
+  background: none; border: none; padding: 0; font: inherit; letter-spacing: inherit;
+  text-transform: inherit; color: inherit; cursor: pointer;
+}
+.hub-col-link:hover, .hub-col-link:focus-visible { color: var(--gold-2); outline: none; }
 .hub-col { flex: 1 1 140px; min-width: 140px; }
 .hub-col-h {
   font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted);

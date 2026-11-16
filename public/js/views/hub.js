@@ -13,8 +13,22 @@ function gw() {
 
 // Exported - Analytics' own season-rank section jumps to My Team the same
 // way, via a real click on the nav tab rather than touching S.ui.tab itself.
-export function goTo(tab) {
+//
+// The optional state argument is what turns a nav jump into a handoff: the
+// Hub's job is "what's worth looking at", and a link that lands you on a
+// tab's default view makes you redo the filtering you just read. Applied
+// before the click so the destination renders pre-filtered rather than
+// flashing its own defaults first.
+export function goTo(tab, state = null) {
+  if (state) Object.assign(S.ui, state);
   $$(".tab").forEach((t) => t.dataset.tab === tab && t.click());
+}
+
+/** A Hub link that carries context: `data-goto` plus the UI state the
+ *  destination should adopt, JSON in a data attribute so the markup stays
+ *  declarative and wire() needs no per-card knowledge. */
+function gotoAttrs(tab, state) {
+  return `data-goto="${esc(tab)}" data-goto-state="${esc(JSON.stringify(state))}"`;
 }
 
 /* ---------------- Latest video ----------------
@@ -59,7 +73,10 @@ export function renderHub(root) {
   `;
 
   $$("[data-goto]", root).forEach((el) => {
-    el.onclick = () => goTo(el.dataset.goto);
+    el.onclick = () => {
+      const raw = el.dataset.gotoState;
+      goTo(el.dataset.goto, raw ? JSON.parse(raw) : null);
+    };
   });
   $$("[data-theme-pick]", root).forEach((el) => {
     el.onclick = () => { saveTheme(el.dataset.themePick); renderHub(root); };
@@ -314,6 +331,9 @@ function rankWidget() {
           })}</div>`
         : ""
     }
+    <button class="hub-goto" ${gotoAttrs("analytics", {
+      anExpScope: "squadVsAll", anExpX: "xgi", anExpY: "gi", anPos: "", anMaxOwn: 100,
+    })} style="margin-top:10px">See your squad against the league &rarr;</button>
     ${
       leagues.length
         ? `<div class="hub-list" style="margin-top:8px">${leagues
@@ -340,8 +360,17 @@ function performersWidget() {
   const pool = S.players.filter((p) => p.minutes >= MIN_MINS);
   const top = (key, n2 = 5) => [...pool].sort((a, b) => b[key] - a[key]).slice(0, n2);
 
-  const col = (title, help, key, fmt, list) => `<div class="hub-col">
-    <div class="hub-col-h" title="${esc(help)}">${esc(title)}</div>
+  // Each column is the top five of a Player Finder sort - so the heading
+  // is a link to that exact view rather than a dead label. Only columns
+  // whose metric Player Finder can actually sort by get one; "Pts / match"
+  // has no equivalent column there, so it stays plain rather than landing
+  // you on an approximation of what you clicked.
+  const col = (title, help, key, fmt, list, goto = null) => `<div class="hub-col">
+    <div class="hub-col-h" title="${esc(help)}">${
+      goto
+        ? `<button class="hub-col-link" ${gotoAttrs("scout", goto)}>${esc(title)} &rarr;</button>`
+        : esc(title)
+    }</div>
     ${list
       .map(
         (p) => `<div class="hub-row">
@@ -356,8 +385,12 @@ function performersWidget() {
     <h3>Best performers</h3>
     <p class="cap">Minimum ${MIN_MINS} minutes played, so small samples don't crowd the list.</p>
     <div class="hub-cols">
-      ${col("DEFCON /90", "Defensive contributions per 90", "defcon90", (v) => f1(v), top("defcon90"))}
-      ${col("xGI /90", "Expected goal involvements per 90", "xgi90", (v) => f2(v), top("xgi90"))}
+      ${col("DEFCON /90", "Defensive contributions per 90", "defcon90", (v) => f1(v), top("defcon90"), {
+        per90: true, scoutSort: { k: "defcon90", dir: -1 }, fPos: "", fWatchOnly: false,
+      })}
+      ${col("xGI /90", "Expected goal involvements per 90", "xgi90", (v) => f2(v), top("xgi90"), {
+        per90: true, scoutSort: { k: "xgi90", dir: -1 }, fPos: "", fWatchOnly: false,
+      })}
       ${col("Pts / match", "FPL's own points-per-game figure", "ppg", (v) => f1(v), top("ppg"))}
     </div>
   </div>`;
@@ -441,5 +474,8 @@ function priceMoversWidget() {
       <div class="hub-col"><div class="hub-col-h">Risers</div>${list(risers)}</div>
       <div class="hub-col"><div class="hub-col-h">Fallers</div>${list(fallers)}</div>
     </div>
+    <button class="hub-goto" ${gotoAttrs("scout", {
+      scoutSort: { k: "priceMove", dir: -1 }, fPos: "", fWatchOnly: false,
+    })} style="margin-top:12px">See every price move &rarr;</button>
   </div>`;
 }
