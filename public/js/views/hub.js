@@ -332,7 +332,10 @@ function rankWidget() {
         : ""
     }
     <button class="hub-goto" ${gotoAttrs("analytics", {
-      anExpScope: "squadVsAll", anExpX: "xgi", anExpY: "gi", anPos: "", anMaxOwn: 100,
+      // fPos, not anPos - the position filter is shared across tabs now, so
+      // this handoff has to clear the shared key or a position left set in
+      // Player Finder would silently narrow "your squad against the league".
+      anExpScope: "squadVsAll", anExpX: "xgi", anExpY: "gi", fPos: "", anMaxOwn: 100,
     })} style="margin-top:10px">See your squad against the league &rarr;</button>
     ${
       leagues.length

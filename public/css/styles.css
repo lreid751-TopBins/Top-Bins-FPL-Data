@@ -284,6 +284,76 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
   margin-top: 6px;
 }
 .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* The shared filter bar. Every browsing tab stacks the same three things
+   in the same order - the always-visible row, an optional "Refine"
+   disclosure, then chips for whatever is currently on - so the controls
+   sit in the same place whichever tab you are on. */
+.filterbar { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.filterbar .filters { margin-bottom: 0; }
+.filterbar .a-filters { margin-top: 0; }
+/* The disclosure body is a grid everywhere else; the numeric filters that
+   live in it here are inline .range spans, so let them flow in a row and
+   wrap rather than stretching one per line. */
+/* The narrow-screen override lives in the existing max-width:720px block
+   further down, not in a second one up here - the mobile rules are read
+   as a group, and a stray early block makes "what applies on mobile?"
+   two places instead of one. */
+.filterbar .a-filters .body { grid-auto-flow: column; grid-auto-columns: max-content; }
+
+/* Two compartments on one line: which players (left), how they're shown
+   (right). The hairline between them is what makes them read as two
+   groups rather than one long row of unrelated controls - it is dropped
+   the moment they wrap, where a rule between stacked groups would just
+   be a stray vertical line. */
+.fb-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.fb-group { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fb-group input[type="search"] { min-width: 170px; }
+.fb-view { margin-left: auto; }
+@media (min-width: 1040px) {
+  .fb-view { border-left: 1px solid var(--line-soft); padding-left: 14px; }
+}
+.fb-count { white-space: nowrap; }
+.fb-count b { color: var(--chalk); }
+/* A control that says what it is. Three bare dropdowns reading "All
+   positions / Last 5 GWs / All ownership" are legible only while they sit
+   at their defaults - once set, nothing on screen says which is which. */
+.fb-field { display: inline-flex; align-items: center; gap: 6px; }
+.fb-field > label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+/* The star carries the state; the word is there for a cold read and goes
+   first when space is tight. */
+.fb-star { display: inline-flex; align-items: center; gap: 5px; }
+.fb-star[aria-pressed="true"] { color: var(--gold); border-color: var(--gold-deep); }
+@media (max-width: 900px) { .fb-star-t { display: none; } }
+
+/* Threshold popover rows: label, slider, value on one line each, so four
+   filters read as a short list instead of a wall of sliders. */
+/* Two classes deep deliberately: .more-menu sets its own min-width further
+   down this file, so a single-class selector here loses the tie on source
+   order and the sliders end up squeezed into 160px. */
+.fb-thresholds .fb-th-menu { min-width: 264px; padding: 6px; }
+.fb-th { display: grid; grid-template-columns: 74px 1fr 36px; gap: 8px; align-items: center; padding: 5px 6px; cursor: pointer; }
+.fb-th:hover { background: var(--raise); border-radius: 6px; }
+.fb-th-l { font-size: 11px; color: var(--muted); }
+.fb-th input[type="range"] { width: 100%; accent-color: var(--gold); }
+.fb-th b { color: var(--gold); font-size: 11px; text-align: right; }
+
+/* Active-filter chips. A filter you set and forgot is the one that makes
+   the numbers look wrong, so what is on is always on screen and one click
+   from off. */
+.fb-chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.fb-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--raise); color: var(--gold); border: 1px solid var(--gold-deep);
+  border-radius: 20px; padding: 3px 9px; font-size: 11px; font-weight: 600;
+  cursor: pointer; line-height: 1.6;
+}
+.fb-chip span[aria-hidden] { color: var(--muted); font-size: 12px; }
+.fb-chip:hover { border-color: var(--gold); }
+.fb-chip:hover span[aria-hidden] { color: var(--gold); }
+.fb-chip-all { background: transparent; color: var(--muted); border-color: var(--line); font-weight: 500; }
+.fb-chip-all:hover { color: var(--gold); border-color: var(--gold-deep); }
+
 .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
 .filters input[type="search"] { min-width: 170px; }
 .range { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
@@ -619,6 +689,12 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   letter-spacing: 0.08em; color: var(--chalk); margin-bottom: 3px;
 }
 .chart-box .cap { font-size: 11px; color: var(--muted); margin-bottom: 12px; }
+/* A box whose heading carries its own control - the control sits with the
+   thing it changes rather than in a filter bar above several boxes it
+   doesn't all apply to. */
+.an-audit-head { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.an-audit-head > div { min-width: 0; flex: 1 1 260px; }
+.an-audit-head .fb-field { flex: none; padding-top: 1px; }
 
 /* Hero widget: reserved for the one or two numbers that should anchor the
    eye on a page of otherwise equally-weighted boxes (Hub's own rank, the
@@ -946,6 +1022,21 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
 @media (max-width: 720px) {
   .brand .wm { font-size: 19px; }
   .section-head h2 { font-size: 22px; }
+  /* The Refine disclosure lays its numeric filters out in a row on desktop;
+     at this width they get one per line instead of being squeezed. */
+  .filterbar .a-filters .body { grid-auto-flow: row; grid-auto-columns: auto; }
+  /* The thresholds popover anchors right-edge-to-button, which runs off the
+     left of a 375px screen once the button sits mid-row. Dropping the
+     button out of the positioning context lets the panel resolve against
+     the whole filter bar instead, so it spans the bar's width and can't
+     hang off either edge whatever the button's position.
+     Selectors are one class deeper than they look like they need to be:
+     .more-sort/.more-menu set position and min-width several hundred lines
+     further down this file, so an equal-specificity override here loses on
+     source order and the panel ends up the width of the button. */
+  .filterbar { position: relative; }
+  .filterbar .fb-thresholds { position: static; }
+  .filterbar .fb-thresholds .fb-th-menu { left: 0; right: 0; width: auto; min-width: 0; }
   .tab { padding: 10px 12px; font-size: 12px; }
   /* The tab bar has always scrolled sideways past this width - it just never
      hinted that. Fading the last stretch signals there's more without a

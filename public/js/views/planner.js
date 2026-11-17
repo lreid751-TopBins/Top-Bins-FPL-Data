@@ -593,7 +593,7 @@ function browseCandidates() {
       (query
         ? p.name.toLowerCase().includes(query) || p.fullName.toLowerCase().includes(query)
         : p.pos === PL.browsePos) &&
-      (!PL.browseTeam || String(p.teamId) === String(PL.browseTeam)) &&
+      (!S.ui.fTeam || String(p.teamId) === String(S.ui.fTeam)) &&
       (!PL.browseMinPrice || p.price >= PL.browseMinPrice) &&
       (PL.browseMaxPrice == null || p.price <= PL.browseMaxPrice) &&
       p.total_points >= PL.browseMinPoints &&
@@ -621,7 +621,7 @@ function addRow() {
   const topResult = searching ? sortedBrowseCandidates()[0] : null;
 
   const chips = [];
-  if (PL.browseTeam) chips.push({ k: "team", l: `Team: ${esc(S.teams[PL.browseTeam]?.short || "?")}` });
+  if (S.ui.fTeam) chips.push({ k: "team", l: `Team: ${esc(S.teams[S.ui.fTeam]?.short || "?")}` });
   if (PL.browseMinPrice > 0 || PL.browseMaxPrice != null) chips.push({ k: "price", l: priceChipLabel() });
   if (PL.browseMinPoints > 0) chips.push({ k: "pts", l: `Min pts: ${PL.browseMinPoints}` });
   if (PL.browseMinDefcon90 > 0) chips.push({ k: "dc", l: `Min DC/90: ${f1(PL.browseMinDefcon90)}` });
@@ -663,7 +663,7 @@ function addRow() {
             ${S.teamList
               .slice()
               .sort((a, b) => a.name.localeCompare(b.name))
-              .map((t) => `<option value="${t.id}" ${String(t.id) === String(PL.browseTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
+              .map((t) => `<option value="${t.id}" ${String(t.id) === String(S.ui.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
               .join("")}
           </select>
         </div>
@@ -1108,7 +1108,7 @@ function wire(root, rerender) {
 
   // Browse list filters
   bind("#plBrowseTeam", "onchange", (e) => {
-    PL.browseTeam = e.target.value;
+    S.ui.fTeam = e.target.value;
     rerender();
   });
   // onchange (fires on blur/Enter), not oninput - a rerender per keystroke
@@ -1149,7 +1149,7 @@ function wire(root, rerender) {
   $$("[data-chip-clear]", root).forEach((b) => {
     b.onclick = () => {
       const key = b.dataset.chipClear;
-      if (key === "team") PL.browseTeam = "";
+      if (key === "team") S.ui.fTeam = "";
       if (key === "price") { PL.browseMinPrice = 0; PL.browseMaxPrice = null; }
       if (key === "pts") PL.browseMinPoints = 0;
       if (key === "dc") PL.browseMinDefcon90 = 0;

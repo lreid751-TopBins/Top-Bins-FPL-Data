@@ -148,6 +148,7 @@ const { renderJournal } = await import("../public/js/views/journal.js");
 const { J, loadJournal, scoreDecision, patterns, calibration } = await import("../public/js/journal.js");
 const { renderPlanner } = await import("../public/js/views/planner.js");
 const { renderAnalytics } = await import("../public/js/views/analytics.js");
+const { windowLabel } = await import("../public/js/filters.js");
 const {
   PL, loadSquads, addPlayer, removePlayer, canAdd, budgetLeft, budgetCap, isComplete, countByPosition, squadTotals, saveDraft, newDraft,
   startingPlayers, benchPlayers, isValidLineup, formationLabel, swapLineup, STARTING_XI_SIZE,
@@ -2923,12 +2924,12 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   newDraft();
   PL.browsePos = "MID";
   const liverpool = S.teamList.find((t) => t.name === "Liverpool") || S.teamList[0];
-  PL.browseTeam = String(liverpool.id);
+  S.ui.fTeam = String(liverpool.id);
   renderPlanner(panel("panel-planner"));
 
   const sel = panel("panel-planner").querySelector("#plBrowseTeam");
   if (!sel) throw new Error("no team filter dropdown rendered in the Planner browse list");
-  if (sel.value !== String(liverpool.id)) throw new Error("team dropdown doesn't reflect PL.browseTeam");
+  if (sel.value !== String(liverpool.id)) throw new Error("team dropdown doesn't reflect the shared S.ui.fTeam");
 
   const rows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
   const expected = S.players.filter((p) => p.pos === "MID" && p.teamId === liverpool.id).length;
@@ -2939,7 +2940,7 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   const teams = rows.map((r) => r.querySelector(".sub-t").textContent.trim());
   if (!teams.every((t) => t.startsWith(liverpool.short))) throw new Error("a player from another team leaked into the team-filtered list");
 
-  PL.browseTeam = "";
+  S.ui.fTeam = "";
   PL.browsePos = null;
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
@@ -3292,7 +3293,7 @@ check("active browse filters show as removable chips even with Filters collapsed
   PL.browsePos = "MID";
   PL.browseMinPoints = 40;
   const someTeam = S.teamList[0];
-  PL.browseTeam = String(someTeam.id);
+  S.ui.fTeam = String(someTeam.id);
   renderPlanner(panel("panel-planner"));
 
   const details = panel("panel-planner").querySelector("#plFilters");
@@ -3304,11 +3305,11 @@ check("active browse filters show as removable chips even with Filters collapsed
 
   const teamChip = [...panel("panel-planner").querySelectorAll(".chips .chip")].find((c) => c.textContent.includes(someTeam.short));
   teamChip.querySelector("button").click();
-  if (PL.browseTeam !== "") throw new Error("clicking a chip's ✕ should clear just that filter");
+  if (S.ui.fTeam !== "") throw new Error("clicking a chip's ✕ should clear just that filter");
   if (PL.browseMinPoints !== 40) throw new Error("clearing one chip shouldn't clear other active filters");
 
   PL.browseMinPoints = 0;
-  PL.browseTeam = "";
+  S.ui.fTeam = "";
   PL.browsePos = null;
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
@@ -3878,10 +3879,10 @@ await (async () => {
     return `set-piece column present, ${tags.filter((t) => t === "Pens").length} penalty takers tagged`;
   });
 
-  const savedPos = S.ui.anPos;
+  const savedPos = S.ui.fPos;
   const savedWindow = S.ui.anWindow;
 
-  S.ui.anPos = "GKP";
+  S.ui.fPos = "GKP";
   renderAnalytics(panel("panel-analytics"));
 
   check("Analytics shared position filter restricts the explorer and the audit table to that position only", () => {
@@ -3907,11 +3908,11 @@ await (async () => {
       .map((tr) => tr.children[3]?.textContent)
       .join("|");
 
-  S.ui.anPos = savedPos;
+  S.ui.fPos = savedPos;
   renderAnalytics(panel("panel-analytics"));
   const before = auditFormFor();
 
-  S.ui.anWindow = "3";
+  S.ui.anWindow = 3;
   renderAnalytics(panel("panel-analytics"));
   await new Promise((r) => setTimeout(r, 0));
   renderAnalytics(panel("panel-analytics"));
@@ -4213,6 +4214,180 @@ check("scoreSquad throws rather than silently scoring an illegal squad", () => {
   }
   if (!threw) throw new Error("scoreSquad should throw on an illegal squad, not return a bogus percentage");
   return `rejected with: "${(() => { try { scoreSquad(tooFew, 5); } catch (e) { return e.message; } })()}"`;
+});
+
+/* ---------------- Shared filter layer ----------------
+   The point of filters.js is that identity filters stop being per-tab.
+   These drive the real controls rather than setting S.ui directly, so a
+   view that renders the shared markup but forgets to wire it still
+   fails. */
+check("a position chosen in Player Finder is already applied when you reach Analytics", () => {
+  const savedPos = S.ui.fPos;
+  S.ui.fPos = "";
+  renderScout(panel("panel-scout"));
+
+  const sel = panel("panel-scout").querySelector("#sPos");
+  if (!sel) throw new Error("Player Finder rendered no position select");
+  sel.value = "DEF";
+  sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+
+  renderAnalytics(panel("panel-analytics"));
+  const anSel = panel("panel-analytics").querySelector("#anPos");
+  if (!anSel) throw new Error("Analytics rendered no position select");
+  const carried = anSel.value;
+
+  S.ui.fPos = savedPos;
+  if (carried !== "DEF") throw new Error(`Analytics showed "${carried}" after Player Finder was set to DEF`);
+  return "DEF set in Player Finder, DEF already selected in Analytics";
+});
+
+check("a team chosen in Player Finder carries into the Planner's browse list", () => {
+  const savedTeam = S.ui.fTeam;
+  const teamId = String(S.teamList[0].id);
+  S.ui.fTeam = "";
+  renderScout(panel("panel-scout"));
+
+  const sel = panel("panel-scout").querySelector("#sTeam");
+  sel.value = teamId;
+  sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+
+  renderPlanner(panel("panel-planner"));
+  const plSel = panel("panel-planner").querySelector("#plBrowseTeam");
+  const carried = plSel ? plSel.value : null;
+
+  S.ui.fTeam = savedTeam;
+  if (carried !== teamId) throw new Error(`Planner browse showed team "${carried}", expected "${teamId}"`);
+  return `team ${teamId} set in Player Finder, same team pre-selected in the Planner`;
+});
+
+check("price and minutes filters stay private to Player Finder, by design", () => {
+  // The flip side of sharing: a 6.0 ceiling set while planning a transfer
+  // must not silently reshape another tab. If someone later moves these
+  // onto the shared object, this is the test that should stop them.
+  const saved = S.ui.fMaxPrice;
+  S.ui.fMaxPrice = 6;
+  renderAnalytics(panel("panel-analytics"));
+  const leaked = [...panel("panel-analytics").querySelectorAll("select")].some((el) =>
+    (el.id || "").toLowerCase().includes("price")
+  );
+  S.ui.fMaxPrice = saved;
+  if (leaked) throw new Error("Analytics grew a price control from the shared filter object");
+  return "price ceiling stayed in Player Finder";
+});
+
+check("only the filters you can't see get a chip, and clearing one clears just that filter", () => {
+  // The rule this encodes: a chip exists to reveal a filter whose control
+  // is hidden. Position has a dropdown sitting right there showing "MID",
+  // so chipping it too said the same thing twice - that duplication is
+  // what made the bar feel cluttered. The numeric filters live behind the
+  // Filters popover, so a chip is the only on-screen trace of them.
+  const savedPos = S.ui.fPos;
+  const savedMins = S.ui.fMinMins;
+  S.ui.fPos = "MID";
+  S.ui.fMinMins = 900;
+  renderScout(panel("panel-scout"));
+
+  const chips = [...panel("panel-scout").querySelectorAll(".fb-chip[data-chip-clear]")];
+  const keys = chips.map((c) => c.dataset.chipClear);
+  if (keys.includes("pos")) {
+    throw new Error("position is a visible dropdown - it should not also be chipped");
+  }
+  if (!keys.includes("mins")) throw new Error(`no minutes chip rendered; got ${keys.join(",") || "none"}`);
+
+  chips.find((c) => c.dataset.chipClear === "mins").click();
+  const clearedMins = S.ui.fMinMins;
+  const posUntouched = S.ui.fPos;
+
+  S.ui.fPos = savedPos;
+  S.ui.fMinMins = savedMins;
+  if (clearedMins !== 270) throw new Error(`clearing the minutes chip left fMinMins as ${clearedMins}`);
+  if (posUntouched !== "MID") throw new Error("clearing one chip also cleared an unrelated filter");
+  return "hidden filter chipped, visible one not, clearing stayed surgical";
+});
+
+check("the numeric filters sit in a popover that doesn't shove the table down", () => {
+  // Regression: as an inline <details> this was a full-width bordered
+  // strip that was almost entirely empty when shut, and opening it pushed
+  // the whole table down the page.
+  S.ui.scoutRefineOpen = false;
+  renderScout(panel("panel-scout"));
+  const btn = panel("panel-scout").querySelector("#scoutThresholdsBtn");
+  if (!btn) throw new Error("no Filters button rendered");
+  if (panel("panel-scout").querySelector("#sRefine")) {
+    throw new Error("the old inline Refine disclosure is still being rendered");
+  }
+  const sliders = () => panel("panel-scout").querySelectorAll("#scoutThresholdsMenu input[type=\"range\"]").length;
+  if (sliders() !== 4) throw new Error(`expected 4 threshold sliders in the popover, got ${sliders()}`);
+
+  btn.click();
+  if (!S.ui.scoutRefineOpen) throw new Error("clicking Filters didn't open the popover");
+  const openEl = panel("panel-scout").querySelector(".fb-thresholds.open");
+  if (!openEl) throw new Error("popover didn't get its open class after a rerender");
+
+  S.ui.scoutRefineOpen = false;
+  renderScout(panel("panel-scout"));
+  return "4 sliders in an anchored popover, toggled by its own button";
+});
+
+check("every gameweek window speaks the same encoding, 0 meaning season to date", () => {
+  // Three tabs used to spell this three ways ("season", 0, and a bare
+  // number), which is how a window ends up meaning different things in
+  // two places. One label function now answers for all of them.
+  if (windowLabel(0) === windowLabel(5)) throw new Error("season and last-5 produced the same label");
+  if (!/season/i.test(windowLabel(0))) throw new Error(`0 should read as the season, got "${windowLabel(0)}"`);
+  if (!windowLabel(5).includes("5")) throw new Error(`5 should name 5 gameweeks, got "${windowLabel(5)}"`);
+  if (gwList(0).length !== gwList("season").length) {
+    throw new Error("gwList disagrees about 0 vs the legacy \"season\" spelling");
+  }
+  return `0 -> "${windowLabel(0)}", 5 -> "${windowLabel(5)}", both spellings of season agree`;
+});
+
+check("the Analytics window control sits with the table it actually drives", () => {
+  // It used to live in the Squad triage filter bar, above both the explorer
+  // and the audit table - but it only ever fed windowRows(), so changing it
+  // left the explorer directly beneath it completely unmoved. A filter bar
+  // should only hold filters that apply to everything under it.
+  renderAnalytics(panel("panel-analytics"));
+  const bar = panel("panel-analytics").querySelector(".filterbar");
+  if (!bar) throw new Error("no triage filter bar rendered");
+  if (bar.querySelector("#anWindow")) {
+    throw new Error("the window select is back in the shared bar, above a section it doesn't filter");
+  }
+  if (!panel("panel-analytics").querySelector(".an-audit-head #anWindow")) {
+    throw new Error("the window select isn't in the audit table's own header");
+  }
+  // Position and ownership DO apply to everything in the group, so they stay.
+  if (!bar.querySelector("#anPos") || !bar.querySelector("#anMaxOwn")) {
+    throw new Error("position and ownership should still be in the shared bar");
+  }
+  return "window moved to the audit header, pool filters stayed in the bar";
+});
+
+check("every Analytics filter says what it is, and the bar reports the pool size", () => {
+  const savedPos = S.ui.fPos;
+  S.ui.fPos = "";
+  renderAnalytics(panel("panel-analytics"));
+  const bar = panel("panel-analytics").querySelector(".filterbar");
+
+  const labels = [...bar.querySelectorAll(".fb-field > label")].map((l) => l.textContent.trim());
+  if (!labels.includes("Position") || !labels.includes("Ownership")) {
+    throw new Error(`bare dropdowns with no labels; got ${labels.join(",") || "none"}`);
+  }
+  // Chips here duplicated controls that are all visible - the Player
+  // Finder rule is chip only what's hidden, and nothing here is.
+  if (bar.querySelector(".fb-chip")) throw new Error("chips are duplicating visible controls again");
+
+  const readCount = () =>
+    Number((panel("panel-analytics").querySelector(".fb-count")?.textContent || "").replace(/[^0-9]/g, ""));
+  const all = readCount();
+  if (!all) throw new Error("no pool count rendered in the bar");
+
+  S.ui.fPos = "MID";
+  renderAnalytics(panel("panel-analytics"));
+  const mids = readCount();
+  S.ui.fPos = savedPos;
+  if (!(mids > 0 && mids < all)) throw new Error(`count didn't track the filter: ${all} -> ${mids}`);
+  return `labelled controls, no duplicate chips, count ${all} -> ${mids} on MID`;
 });
 
 /* ---------------- Report ---------------- */

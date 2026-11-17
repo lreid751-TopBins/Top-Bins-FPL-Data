@@ -4,6 +4,10 @@ import {
 } from "../ui.js";
 import { scatter, POS_COLOR, wireScatterZoom } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
+import {
+  positionSelect, teamSelect, wireIdentityFilters,
+  filterChips, wireFilterChips, identityChips, clearIdentity,
+} from "../filters.js";
 
 function columns(per90) {
   return [
@@ -87,6 +91,66 @@ function moreColumnsMenu(u) {
   </div>`;
 }
 
+/* The numeric thresholds, in a popover rather than an always-present
+   panel. As an inline <details> this was a full-width bordered strip
+   holding a label and a badge at opposite ends of 700px of nothing, and
+   opening it shoved the table down the page. Anchored to its own button it
+   costs one control's width when shut and overlays when open, so the table
+   never moves. Same .more-sort/.more-menu machinery the "More columns"
+   button next to it already uses - one popover pattern in this view, not
+   two. */
+function thresholdMenu(u, activeCount) {
+  const row = (label, id, attrs, value) =>
+    `<label class="fb-th" for="${id}">
+      <span class="fb-th-l">${esc(label)}</span>
+      <input type="range" id="${id}" ${attrs} value="${value}">
+      <b class="mono" id="${id}V">${value}</b>
+    </label>`;
+  return `<div class="more-sort fb-thresholds${u.scoutRefineOpen ? " open" : ""}" id="scoutThresholds">
+    <button type="button" id="scoutThresholdsBtn" aria-haspopup="true" aria-expanded="${u.scoutRefineOpen}">
+      Filters${activeCount ? ` <span class="badge">${activeCount}</span>` : ""} ▾
+    </button>
+    <div class="more-menu fb-th-menu" id="scoutThresholdsMenu" role="group" aria-label="Numeric filters">
+      ${row("Max £", "sPrice", 'min="3.8" max="17" step="0.1"', f1(u.fMaxPrice))}
+      ${row("Min mins", "sMins", 'min="0" max="2500" step="90"', u.fMinMins)}
+      ${row("Min points", "sPoints", 'min="0" max="250" step="5"', u.fMinPoints)}
+      ${row("Min DC/90", "sDefcon90", 'min="0" max="20" step="0.5"', f1(u.fMinDefcon90))}
+    </div>
+  </div>`;
+}
+
+/* Player Finder's own job-specific filters, layered on the shared identity
+   ones. The defaults live here rather than being repeated at each call
+   site so "is this filter on?" and "clear it" can never drift apart - the
+   bug where a chip says a filter is active but clearing it changes
+   nothing. */
+const SCOUT_DEFAULTS = { fMaxPrice: 17, fMinMins: 270, fMinPoints: 0, fMinDefcon90: 0, fWatchOnly: false };
+const REFINE_KEYS = ["price", "mins", "points", "dc"];
+
+function scoutChips(u) {
+  return [
+    ...identityChips(),
+    { key: "price", active: u.fMaxPrice < SCOUT_DEFAULTS.fMaxPrice, label: `Max £${f1(u.fMaxPrice)}` },
+    { key: "mins", active: u.fMinMins !== SCOUT_DEFAULTS.fMinMins, label: `Min mins: ${u.fMinMins}` },
+    { key: "points", active: u.fMinPoints > SCOUT_DEFAULTS.fMinPoints, label: `Min points: ${u.fMinPoints}` },
+    { key: "dc", active: u.fMinDefcon90 > SCOUT_DEFAULTS.fMinDefcon90, label: `Min DC/90: ${f1(u.fMinDefcon90)}` },
+    { key: "watch", active: u.fWatchOnly, label: "Watchlist only" },
+  ];
+}
+
+function clearScoutFilter(key) {
+  const u = S.ui;
+  // Identity filters are shared, so they are cleared by filters.js itself.
+  // "__all" deliberately falls through to reset this tab's filters too.
+  if (clearIdentity(key)) return;
+  const all = key === "__all";
+  if (all || key === "price") u.fMaxPrice = SCOUT_DEFAULTS.fMaxPrice;
+  if (all || key === "mins") u.fMinMins = SCOUT_DEFAULTS.fMinMins;
+  if (all || key === "points") u.fMinPoints = SCOUT_DEFAULTS.fMinPoints;
+  if (all || key === "dc") u.fMinDefcon90 = SCOUT_DEFAULTS.fMinDefcon90;
+  if (all || key === "watch") u.fWatchOnly = SCOUT_DEFAULTS.fWatchOnly;
+}
+
 function viewData() {
   const u = S.ui;
   const q = u.fQuery.toLowerCase().trim();
@@ -111,6 +175,9 @@ export function renderScout(root) {
   const extraCols = EXTRA_SCOUT_COLS.filter((c) => u.scoutExtraCols.has(c.k));
   const cols = [...columns(u.per90), ...extraCols];
   const { k, dir } = u.scoutSort;
+  // Shown on the collapsed Refine summary so a filter you set and forgot
+  // is still visible without opening the disclosure.
+  const refineCount = scoutChips(u).filter((c) => c.active && REFINE_KEYS.includes(c.key)).length;
   const isText = k === "name" || k === "short" || k === "pos";
 
   data.sort((a, b) =>
@@ -125,44 +192,47 @@ export function renderScout(root) {
     <div class="eyebrow">Scouting</div>
     <div class="section-head">
       <h2>Player Finder</h2>
-      <div class="controls">
-        <div class="seg" role="group" aria-label="Rate basis">
-          <button data-p90="0" ${!u.per90 ? 'aria-pressed="true"' : ""}>Season totals</button>
-          <button data-p90="1" ${u.per90 ? 'aria-pressed="true"' : ""}>Per 90</button>
-        </div>
-        ${moreColumnsMenu(u)}
-      </div>
     </div>
 
-    <div class="filters">
-      <input type="search" id="sQuery" placeholder="Search a player…" value="${esc(u.fQuery)}" aria-label="Search players">
-      <select id="sPos" aria-label="Position">
-        <option value="">All positions</option>
-        ${["GKP", "DEF", "MID", "FWD"].map((p) => `<option ${p === u.fPos ? "selected" : ""}>${p}</option>`).join("")}
-      </select>
-      <select id="sTeam" aria-label="Team">
-        <option value="">All teams</option>
-        ${S.teamList
-          .slice()
-          .sort((a, b) => a.name.localeCompare(b.name))
-          .map((t) => `<option value="${t.id}" ${String(t.id) === String(u.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
-          .join("")}
-      </select>
-      <span class="range">Max £<input type="range" id="sPrice" min="3.8" max="17" step="0.1" value="${u.fMaxPrice}"><b class="mono" id="sPriceV">${f1(u.fMaxPrice)}</b></span>
-      <span class="range">Min mins<input type="range" id="sMins" min="0" max="2500" step="90" value="${u.fMinMins}"><b class="mono" id="sMinsV">${u.fMinMins}</b></span>
-      <span class="range">Min points<input type="range" id="sPoints" min="0" max="250" step="5" value="${u.fMinPoints}"><b class="mono" id="sPointsV">${u.fMinPoints}</b></span>
-      <span class="range">Min DC/90<input type="range" id="sDefcon90" min="0" max="20" step="0.5" value="${u.fMinDefcon90}"><b class="mono" id="sDefcon90V">${f1(u.fMinDefcon90)}</b></span>
-      <button class="btn ghost" id="sWatch" aria-pressed="${u.fWatchOnly}">
-        ${u.fWatchOnly ? "★ Watchlist only" : "☆ Watchlist only"}
-      </button>
-      <span class="sort-by">
-        <label for="sSortKey">Sort by</label>
-        <select id="sSortKey" aria-label="Sort by">
-          ${cols.map((c) => `<option value="${c.k}" ${c.k === k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
-        </select>
-        <button class="btn ghost" id="sSortDir" aria-label="Reverse sort direction" title="${dir === 1 ? "Ascending — click to reverse" : "Descending — click to reverse"}">${dir === 1 ? "▲" : "▼"}</button>
-      </span>
-      <span class="hint">${data.length} players</span>
+    <!-- One bar, two compartments: the left group decides WHICH players are
+         in the table, the right group decides HOW they are shown. They used
+         to be interleaved in one undifferentiated row, with the display
+         toggles stranded up in the heading, which is what made this feel
+         like four separate control strips stacked on top of each other. -->
+    <div class="filterbar">
+      <div class="fb-row">
+        <div class="fb-group" role="group" aria-label="Which players">
+          <input type="search" id="sQuery" placeholder="Search a player…" value="${esc(u.fQuery)}" aria-label="Search players">
+          ${positionSelect("s")}
+          ${teamSelect("s")}
+          <button class="btn ghost fb-star" id="sWatch" aria-pressed="${u.fWatchOnly}" title="Show only players on your watchlist">
+            ${u.fWatchOnly ? "★" : "☆"}<span class="fb-star-t">Watchlist</span>
+          </button>
+          ${thresholdMenu(u, refineCount)}
+        </div>
+
+        <div class="fb-group fb-view" role="group" aria-label="How they're shown">
+          <span class="hint fb-count"><b class="mono">${data.length}</b> players</span>
+          <div class="seg" role="group" aria-label="Rate basis">
+            <button data-p90="0" ${!u.per90 ? 'aria-pressed="true"' : ""}>Season totals</button>
+            <button data-p90="1" ${u.per90 ? 'aria-pressed="true"' : ""}>Per 90</button>
+          </div>
+          ${moreColumnsMenu(u)}
+          <span class="sort-by">
+            <select id="sSortKey" aria-label="Sort by">
+              ${cols.map((c) => `<option value="${c.k}" ${c.k === k ? "selected" : ""}>${esc(c.l)}</option>`).join("")}
+            </select>
+            <button class="btn ghost" id="sSortDir" aria-label="Reverse sort direction" title="${dir === 1 ? "Ascending — click to reverse" : "Descending — click to reverse"}">${dir === 1 ? "▲" : "▼"}</button>
+          </span>
+        </div>
+      </div>
+
+      <!-- Only the filters you CAN'T see get a chip. Position, team and
+           watchlist each have a control right there showing their own
+           value, so chipping them too just said the same thing twice. The
+           numeric ones live behind the Filters button, so a chip is the
+           only thing that tells you they are on. -->
+      ${filterChips(scoutChips(u).filter((c) => REFINE_KEYS.includes(c.key)))}
     </div>
 
     <div class="twrap">
@@ -329,11 +399,26 @@ function wire(root) {
       el.setSelectionRange(el.value.length, el.value.length);
     };
 
-  const pos = $("#sPos", root);
-  if (pos) pos.onchange = () => { u.fPos = pos.value; re(); };
+  // Position and team are shared across tabs now, so filters.js owns both
+  // the markup and the handler - this view just says where they live.
+  wireIdentityFilters(root, "s", re);
+  wireFilterChips(root, clearScoutFilter, re);
 
-  const team = $("#sTeam", root);
-  if (team) team.onchange = () => { u.fTeam = team.value; re(); };
+  // Thresholds popover. Real state (u.scoutRefineOpen), not a DOM class,
+  // for the same reason as More columns: every slider drag re-renders the
+  // whole panel, so "stay open" has to survive the node being destroyed
+  // and rebuilt mid-interaction.
+  const thBtn = $("#scoutThresholdsBtn", root);
+  if (thBtn) thBtn.onclick = () => { u.scoutRefineOpen = !u.scoutRefineOpen; re(); };
+  if (u.scoutRefineOpen) {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (!e.target.closest("#scoutThresholds")) { u.scoutRefineOpen = false; re(); }
+      },
+      { once: true, capture: true }
+    );
+  }
 
   const price = $("#sPrice", root);
   if (price)

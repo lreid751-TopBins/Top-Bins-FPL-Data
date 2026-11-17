@@ -2,8 +2,9 @@ import { S, runDifficulty, n, f1, f2, signed } from "../store.js";
 import { api } from "../api.js";
 import { $, $$, esc, th, fixtureStrip, statCard } from "../ui.js";
 import { scatter, wireScatterZoom } from "../charts.js";
+import { SEASON, windowSelect } from "../filters.js";
 
-const WINDOW_OPTIONS = [0, 4, 6, 8];
+const WINDOW_OPTIONS = [SEASON, 4, 6, 8];
 
 const COLS = [
   { k: "name", l: "Team" },
@@ -96,8 +97,6 @@ export function aggregate(range) {
 
 export function renderTeams(root) {
   const rerender = () => renderTeams(root);
-  if (!S.ui.teamSort) S.ui.teamSort = { k: "xg", dir: -1 };
-  if (!S.ui.teamsWindowGws) S.ui.teamsWindowGws = 0;
 
   const range = windowRange();
   const stale = range && (win.from !== range.from || win.to !== range.to);
@@ -136,11 +135,7 @@ export function renderTeams(root) {
     <div class="section-head">
       <h2>Team Data Room</h2>
       <div class="controls">
-        <select id="teamsWindow" aria-label="Gameweek window">
-          ${WINDOW_OPTIONS.map((g) =>
-            `<option value="${g}" ${g === S.ui.teamsWindowGws ? "selected" : ""}>${g === 0 ? "Season to date" : `Last ${g} GWs`}</option>`
-          ).join("")}
-        </select>
+        ${windowSelect("teamsWindow", WINDOW_OPTIONS, S.ui.teamsWindowGws)}
       </div>
     </div>
     <p class="hint" style="margin:-6px 0 14px">${esc(windowHint)}</p>

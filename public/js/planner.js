@@ -53,7 +53,10 @@ export const PL = {
   browseSort: { k: "total_points", dir: -1 }, // sort applied to the browse list
   browseMinPoints: 0,   // browse list filter: minimum total points
   browseMinDefcon90: 0, // browse list filter: minimum DEFCON per 90
-  browseTeam: "",        // browse list filter: team id, "" = all teams
+  // Team filter moved to S.ui.fTeam - it is shared with Player Finder and
+  // Analytics now, so narrowing to one club carries across tabs. The
+  // position tab below is NOT shared: here it defaults to a position the
+  // squad still needs, which is a different job from "filter the league".
   browseMinPrice: 0,     // browse list filter: minimum price, 0 = no floor
   browseMaxPrice: null,  // browse list filter: maximum price, null = no ceiling
   browseQuery: "",        // live search text; non-empty searches all positions, overriding browsePos

@@ -22,11 +22,14 @@ const ASSIST_POINTS = 3;
 const round1 = (v) => Math.round(v * 10) / 10;
 const range = (a, b) => { const out = []; for (let i = a; i <= b; i++) out.push(i); return out; };
 
-/** A window spec ("3"/"5"/"8"/"season") into the actual GW numbers it
- * covers, ending at the current gameweek. */
+/** A window spec into the actual GW numbers it covers, ending at the
+ * current gameweek. Accepts either spelling of "the whole season": the
+ * legacy "season" string this file and the squad report card still use,
+ * or the shared 0 that filters.js standardised on. Both are honoured so
+ * tabs can move onto the numeric encoding one at a time. */
 export function gwList(spec, currentGw = S.currentGw) {
   if (!currentGw) return [];
-  if (spec === "season") return range(1, currentGw);
+  if (spec === "season" || Number(spec) === 0) return range(1, currentGw);
   const count = Number(spec);
   return range(Math.max(1, currentGw - count + 1), currentGw);
 }

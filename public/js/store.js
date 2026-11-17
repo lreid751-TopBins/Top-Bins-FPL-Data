@@ -30,13 +30,18 @@ export const S = {
     managerId: localStorage.getItem("tb:managerId") || "",
     watchlist: new Set(JSON.parse(localStorage.getItem("tb:watchlist") || "[]")),
     theme: localStorage.getItem("tb:theme") || "", // "" = classic Top Bins gold
+    // Shared identity filters - "who am I looking at". Owned by filters.js
+    // and read by Player Finder, Analytics and the Planner's browse list
+    // alike, so setting a position in one tab means the next tab is
+    // already filtered. See filters.js for what is deliberately NOT shared.
+    fPos: "",
+    fTeam: "",
     // Scout
     scoutSort: { k: "total_points", dir: -1 },
     per90: false,
     scoutExtraCols: new Set(), // opt-in derived stats (chance quality, boom rate, set pieces) - not permanent columns, the table's already dense
     scoutExtraOpen: false,
-    fPos: "",
-    fTeam: "",
+    scoutRefineOpen: false, // the "Refine" disclosure holding the numeric filters
     fMaxPrice: 17,
     fMinMins: 270,
     fMinPoints: 0,
@@ -58,8 +63,7 @@ export const S = {
     anPctlId: null,    // player shown in the percentile breakdown
     anH2hA: null,      // head-to-head comparison, player A
     anH2hB: null,      // head-to-head comparison, player B
-    anPos: "",         // squad-triage group, shared position filter
-    anWindow: "5",     // squad-triage group, shared gameweek window
+    anWindow: 5,       // squad-triage group, gameweek window (0 = season to date)
     anTrendRaw: false, // trend chart: false = fixture-adjusted, true = raw output
     anAuditSort: { k: "formPerGw", dir: -1 }, // squad-audit table sort
     anFixSpan: 5,      // fixtures-through-form section, recent-form window (GWs)
@@ -67,6 +71,11 @@ export const S = {
     anExpScope: "all", // explorer: whose dots get plotted (all/squad/watch/squad-vs-all)
     anExpX: "xgi",     // explorer: metric on the x axis
     anExpY: "gi",      // explorer: metric on the y axis (defaults reproduce "due a goal")
+    // Teams. Declared here like every other key rather than lazily bolted
+    // onto S.ui by the view on first render, which made them invisible to
+    // anyone reading this object to find out what state exists.
+    teamSort: { k: "xg", dir: -1 },
+    teamsWindowGws: 0, // 0 = season to date, same encoding as every other window
   },
 };
 

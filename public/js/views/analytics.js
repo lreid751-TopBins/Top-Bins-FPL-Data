@@ -6,6 +6,7 @@ import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
 import { api } from "../api.js";
 import { aggregate as aggregateTeams } from "./teams.js";
+import { SEASON, windowSelect, positionSelect, wireIdentityFilters } from "../filters.js";
 import { fmtRank, isManagerLoading, rankTrendPoints } from "./squad.js";
 import { goTo } from "./hub.js";
 
@@ -240,6 +241,20 @@ function squadIds() {
   return picks?.length ? new Set(picks.map((pk) => pk.element)) : null;
 }
 
+/* The one rule for "is this player in the triage group?" - used by the
+   explorer, the audit table and the bar's own result count. It lived
+   inside explorerSection as a local, which meant the count in the filter
+   bar would have been a second copy free to drift from the thing it
+   claims to be counting. */
+function passesTriage(p) {
+  return (!S.ui.fPos || p.pos === S.ui.fPos) && p.selected < S.ui.anMaxOwn;
+}
+
+/** The players the triage filters currently leave standing. */
+function triagePool() {
+  return eligiblePlayers().filter(passesTriage);
+}
+
 function explorerSection() {
   const xKey = METRIC_BY_KEY[S.ui.anExpX] ? S.ui.anExpX : "xgi";
   const yKey = METRIC_BY_KEY[S.ui.anExpY] ? S.ui.anExpY : "gi";
@@ -278,14 +293,13 @@ function explorerSection() {
       <button class="btn primary" data-goto="scout">Open Player Finder →</button>`);
   }
 
-  const passesFilters = (p) => (!S.ui.anPos || p.pos === S.ui.anPos) && p.selected < S.ui.anMaxOwn;
   // The minutes floor exists to keep noisy rate stats out of a pool nobody
   // hand-picked. When you've explicitly asked for your own squad or your
   // own watchlist it would just silently drop players you chose, so those
   // scopes skip it - a low-minutes player sitting at the origin is a
   // readable answer in itself.
-  const chosen = (set) => S.players.filter((p) => set.has(p.id) && passesFilters(p));
-  const background = eligiblePlayers().filter(passesFilters);
+  const chosen = (set) => S.players.filter((p) => set.has(p.id) && passesTriage(p));
+  const background = eligiblePlayers().filter(passesTriage);
 
   let pool;
   let highlight = null;
@@ -293,7 +307,7 @@ function explorerSection() {
   else if (scope === "watch") pool = chosen(S.ui.watchlist);
   else if (scope === "squadVsAll") {
     highlight = mine;
-    const extra = S.players.filter((p) => mine.has(p.id) && passesFilters(p) && !background.includes(p));
+    const extra = S.players.filter((p) => mine.has(p.id) && passesTriage(p) && !background.includes(p));
     pool = [...background, ...extra];
   } else pool = background;
 
@@ -372,7 +386,7 @@ function explorerSection() {
 /* =========================================================
    Squad triage - shared window fetch + filter bar
    ========================================================= */
-const WINDOW_SPECS = ["3", "5", "8", "season"];
+const WINDOW_SPECS = [3, 5, 8, SEASON];
 // Took over from the differential finder, which was only ever the audit
 // table filtered this way. As a shared filter it applies to the explorer
 // too, so "show me differentials" is now a view of every tool here rather
@@ -384,9 +398,6 @@ const OWNERSHIP_BARS = [
   { v: 10, l: "Under 10% owned" },
   { v: 5, l: "Under 5% owned" },
 ];
-function windowLabel(spec) {
-  return spec === "season" ? `Season (GW1–${S.currentGw})` : `Last ${spec} GWs`;
-}
 
 /** Same adaptive-floor idea as minMinutes(), keyed to how many gameweeks
  * are actually in the chosen window rather than the whole season - a
@@ -448,7 +459,7 @@ function windowRows() {
 
   const rows = [];
   S.players.forEach((p) => {
-    if (S.ui.anPos && p.pos !== S.ui.anPos) return;
+    if (S.ui.fPos && p.pos !== S.ui.fPos) return;
     if (p.selected >= S.ui.anMaxOwn) return;
 
     let mins = 0, g = 0, a = 0, xg = 0, xa = 0, pts = 0;
@@ -501,20 +512,37 @@ function windowRows() {
   return rows;
 }
 
+/* Only the filters that genuinely apply to everything below this bar.
+   The gameweek window used to sit here too, which was quietly misleading:
+   it feeds windowRows() and therefore the audit table alone, so changing
+   it left the explorer directly underneath completely unmoved. It now
+   lives in the audit table's own header, next to the thing it changes.
+
+   No chips either. Every control here is visible and reads out its own
+   value, so a chip underneath saying "Position: MID" was the same fact
+   twice - the Player Finder's rule: chip what you can't see. */
 function triageFilterBar() {
-  return `<div class="filters">
-    <select id="anPos" aria-label="Position">
-      <option value="">All positions</option>
-      ${["GKP", "DEF", "MID", "FWD"].map((pos) => `<option ${pos === S.ui.anPos ? "selected" : ""}>${pos}</option>`).join("")}
-    </select>
-    <select id="anWindow" aria-label="Gameweek window">
-      ${WINDOW_SPECS.map((w) => `<option value="${w}" ${S.ui.anWindow === w ? "selected" : ""}>${esc(windowLabel(w))}</option>`).join("")}
-    </select>
-    <select id="anMaxOwn" aria-label="Maximum ownership">
-      ${OWNERSHIP_BARS.map(
-        (o) => `<option value="${o.v}" ${S.ui.anMaxOwn === o.v ? "selected" : ""}>${esc(o.l)}</option>`
-      ).join("")}
-    </select>
+  const pool = triagePool().length;
+  return `<div class="filterbar">
+    <div class="fb-row">
+      <div class="fb-group" role="group" aria-label="Which players">
+        <span class="fb-field">
+          <label for="anPos">Position</label>
+          ${positionSelect("an")}
+        </span>
+        <span class="fb-field">
+          <label for="anMaxOwn">Ownership</label>
+          <select id="anMaxOwn" aria-label="Maximum ownership">
+            ${OWNERSHIP_BARS.map(
+              (o) => `<option value="${o.v}" ${S.ui.anMaxOwn === o.v ? "selected" : ""}>${esc(o.l)}</option>`
+            ).join("")}
+          </select>
+        </span>
+      </div>
+      <div class="fb-group fb-view">
+        <span class="hint fb-count"><b class="mono">${pool}</b> players in this group</span>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -547,9 +575,21 @@ const AUDIT_COLS = [
 ];
 
 function auditSection(rows) {
-  const header = `<h3>Squad audit</h3>
-    <p class="cap">Every signal above in one sortable table instead of one player at a time - scan a wildcard
-      shortlist fast. Same position/window filters as the rest of this group.</p>`;
+  // The window select lives here, not in the group's filter bar. It only
+  // ever drove this table (via windowRows), so sitting above the explorer
+  // too implied it moved that as well - it never did.
+  const header = `<div class="an-audit-head">
+      <div>
+        <h3>Squad audit</h3>
+        <p class="cap">Every signal above in one sortable table instead of one player at a time - scan a
+          wildcard shortlist fast. Uses the group's position and ownership filters, over the window you
+          pick here.</p>
+      </div>
+      <span class="fb-field">
+        <label for="anWindow">Window</label>
+        ${windowSelect("anWindow", WINDOW_SPECS, S.ui.anWindow)}
+      </span>
+    </div>`;
 
   if (!gwList(S.ui.anWindow).length) return `<div class="chart-box">${header}<p class="hint">Not enough of the season played yet.</p></div>`;
   if (!rows) return `<div class="chart-box">${header}<p class="hint">Loading…</p></div>`;
@@ -997,12 +1037,12 @@ function wire(root) {
   bindPicker("anH2hAPicker", (id) => (S.ui.anH2hA = id));
   bindPicker("anH2hBPicker", (id) => (S.ui.anH2hB = id));
 
-  const posSel = $("#anPos", root);
-  if (posSel) posSel.addEventListener("change", () => { S.ui.anPos = posSel.value; re(); });
+  // Position is shared with Player Finder now - filters.js owns the handler.
+  wireIdentityFilters(root, "an", re);
   const ownSel = $("#anMaxOwn", root);
   if (ownSel) ownSel.addEventListener("change", () => { S.ui.anMaxOwn = +ownSel.value; re(); });
   const winSel = $("#anWindow", root);
-  if (winSel) winSel.addEventListener("change", () => { S.ui.anWindow = winSel.value; re(); });
+  if (winSel) winSel.addEventListener("change", () => { S.ui.anWindow = +winSel.value; re(); });
 
   $$("[data-trendraw]", root).forEach((btn) => {
     btn.onclick = () => { S.ui.anTrendRaw = btn.dataset.trendraw === "1"; re(); };
