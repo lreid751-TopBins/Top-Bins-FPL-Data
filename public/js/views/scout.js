@@ -243,7 +243,7 @@ export function renderScout(root) {
     </div>
     ${data.length > 300 ? `<p class="hint" style="margin-top:8px">Showing the top 300 by this sort. Narrow the filters to see the rest.</p>` : ""}
 
-    <div class="chart-box" style="margin-top:20px">
+    <div class="chart-box paper" style="margin-top:20px">
       <h3>Finishing against expectation</h3>
       <p class="cap">Everyone above the dashed line is scoring more than their chances deserve, which usually corrects. Below it is where the underpriced buys hide.</p>
       ${scatter(finishingPoints(data), {
@@ -254,7 +254,7 @@ export function renderScout(root) {
       })}
     </div>
 
-    <div class="chart-box">
+    <div class="chart-box paper">
       <h3>Form against fixtures</h3>
       <p class="cap">Top-right is the buy zone: scoring now, and the run stays kind. Top-left is form about to hit a wall.</p>
       ${scatter(buyZonePoints(data), {

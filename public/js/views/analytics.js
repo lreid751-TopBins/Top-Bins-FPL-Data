@@ -128,7 +128,7 @@ function emptyBox(title) {
    ========================================================= */
 function seasonRankSection() {
   if (!S.entry) {
-    return `<div class="chart-box hero">
+    return `<div class="chart-box hero paper">
       <h3>Your season rank</h3>
       <p class="cap">Connect your FPL team to chart your overall rank here too.</p>
       <button class="btn primary" data-goto="squad">Connect your FPL team →</button>
@@ -138,13 +138,13 @@ function seasonRankSection() {
   const history = S.history?.current || [];
   const { points, improving } = rankTrendPoints(history);
   if (points.length < 2) {
-    return `<div class="chart-box hero">
+    return `<div class="chart-box hero paper">
       <h3>Your season rank</h3>
       <p class="cap">Not enough gameweeks played yet to chart a trend.</p>
     </div>`;
   }
 
-  return `<div class="chart-box hero ${isManagerLoading() ? "is-loading" : ""}">
+  return `<div class="chart-box hero paper ${isManagerLoading() ? "is-loading" : ""}">
     <h3>Your season rank</h3>
     <p class="cap">${esc(S.entry.name || "My Team")} — overall rank by gameweek, most recent ${points.length}.</p>
     ${lineChart(points, { color: improving ? "var(--pos)" : "var(--neg)", fmt: (v) => fmtRank(-v) })}
@@ -393,7 +393,7 @@ function explorerSection() {
   const header = `<h3>Explore any two stats</h3>
     <p class="cap">${esc(caps[scope])} Drag on the chart to zoom into a crowded patch.</p>`;
 
-  const shell = (inner) => `<div class="chart-box hero">${header}${viewSwitch}${controls}${inner}</div>`;
+  const shell = (inner) => `<div class="chart-box hero paper">${header}${viewSwitch}${controls}${inner}</div>`;
 
   const mine = squadIds();
   if ((scope === "squad" || scope === "squadVsAll") && !mine) {
@@ -558,7 +558,7 @@ function explorerSection() {
     legend = colorLegend(colorDim);
   }
 
-  return `<div class="chart-box hero">
+  return `<div class="chart-box hero paper">
     ${header}
     ${viewSwitch}
     ${view === "scatter" ? `<div class="seg an-exp-presets" role="group" aria-label="Preset views">${presets}</div>` : ""}
@@ -889,7 +889,7 @@ function trendSection() {
   const latest = series.length ? series[series.length - 1].y : null;
   const trend = trendSlope(series);
 
-  return `<div class="chart-box hero">
+  return `<div class="chart-box hero paper">
     <h3>Is he heating up, or cooling off?</h3>
     <p class="cap">Every underlying stat elsewhere on the site is a single number - season total or a flat last-6
       average. This keeps it per gameweek instead, in two flavours: <b>fixture-adjusted</b> (the same figure Player
@@ -974,7 +974,7 @@ function percentileSection() {
 
   const posPool = S.players.filter((x) => x.pos === player.pos && x.minutes >= minMinutes());
 
-  return `<div class="chart-box">
+  return `<div class="chart-box paper">
     <h3>What the raw number doesn't tell you</h3>
     <p class="cap">Ranked against every other <b>${esc(player.pos)}</b> with at least ${minMinutes()} minutes this
       season (${posPool.length} players) - the same stats already on Player Finder and the Planner, just placed
@@ -1040,7 +1040,7 @@ function headToHeadSection() {
     { label: b.name, color: "var(--cool)", values: b },
   ];
 
-  return `<div class="chart-box">
+  return `<div class="chart-box paper">
     <h3>Weighing two transfer targets directly</h3>
     <p class="cap">A radar overlay of the underlying profile, not just points and price side by side - where each
       player actually creates their value, and where the real gap is.</p>

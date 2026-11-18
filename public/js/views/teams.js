@@ -159,7 +159,7 @@ export function renderTeams(root) {
       on the pitch, so this scales that total back down by team minutes played. Treat it as a ranking, not a precise number.
     </p>
 
-    <div class="chart-box ${windowLoading ? "is-loading" : ""}" style="margin-top:20px">
+    <div class="chart-box paper ${windowLoading ? "is-loading" : ""}" style="margin-top:20px">
       <h3>Attack vs defence</h3>
       <p class="cap">
         Underlying output${range ? ` over GW${range.from}–${range.to}` : " this season"}, not results — xG created going

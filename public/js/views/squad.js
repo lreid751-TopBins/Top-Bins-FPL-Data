@@ -362,7 +362,7 @@ function reportCardSection(squadPlayers) {
       </select>
     </div>
 
-    <div class="chart-box rc-box">
+    <div class="chart-box rc-box paper">
       <div class="rc-headline">
         <div class="rc-stat"><span class="lbl">Actual</span><span class="val">${summary.actual}<small>pts</small></span></div>
         <div class="rc-stat"><span class="lbl">Deserved</span><span class="val gold">${f1(summary.deserved)}<small>pts</small></span></div>
@@ -374,7 +374,7 @@ function reportCardSection(squadPlayers) {
       </p>
     </div>
 
-    <div class="chart-box rc-box">
+    <div class="chart-box rc-box paper">
       <div class="twrap">
         <table>
           <thead><tr>${RC_COLS.map((c) => th(c, RC.sortKey, RC.sortDir)).join("")}</tr></thead>

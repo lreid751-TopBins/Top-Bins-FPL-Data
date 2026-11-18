@@ -722,6 +722,46 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2);
   padding: 14px; margin-bottom: 16px;
 }
+
+/* ---------------- Paper: the matchday-programme chart surface ----------------
+   A chart card printed on warm off-white with ink-black type, the way a
+   matchday programme or a team sheet reads, rather than another dark
+   dashboard panel. Opt-in per card (.chart-box.paper), NOT applied to
+   every .chart-box: the Hub's widgets share that class while holding
+   league tables and player lists, and flipping those would redesign the
+   homepage rather than the charts.
+
+   It is purely a token override. Everything inside - headings, captions,
+   selects, segmented controls, buttons, chips, the plot frame itself -
+   already draws from these variables, so nothing needed its own light
+   variant. That is the chart-system refactor paying for itself. */
+.chart-box.paper {
+  --panel: #f4f0e6;
+  --panel-2: #fbf8f1;
+  --raise: #ffffff;
+  --line: #ded5c2;
+  --line-soft: #e7e0d0;
+  --chalk: #231d14;
+  --muted: #6b6150;
+  --muted-2: #8e8470;
+  /* Gold deepens on a pale ground: the floodlit #c9a227 is a glow colour
+     and sits at about 2.3:1 on cream, too faint to carry text. Same hue,
+     enough contrast to be read rather than just seen. */
+  --gold: #8a6d10;
+  --gold-2: #a4871f;
+  --gold-deep: #6b530a;
+  --gold-rgb: 138, 109, 16;
+  /* --ink sits on a solid --gold fill, so it has to flip with it. */
+  --ink: #fdfaf2;
+  --pos: #2f7a4f;
+  --neg: #b4412e;
+  background: var(--panel-2);
+  border-color: var(--line);
+}
+/* The plot area is a shade lighter than the card, so the data still sits
+   on its own surface rather than dissolving into the page. */
+.chart-box.paper .cf-canvas { fill: #ffffff; }
+
 .chart-box h3 {
   /* Sized and spaced to read as a label, not a headline - the widget's own
      numbers should be the loudest thing in the box, not its title. */
