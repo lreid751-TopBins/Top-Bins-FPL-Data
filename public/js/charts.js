@@ -430,3 +430,190 @@ export function divergingBars(items, opts = {}) {
     })
     .join("")}</div>`;
 }
+
+/* =========================================================
+   Alternative views of the same two metrics
+
+   A scatter answers "how do these two relate". It is the wrong shape for
+   three other questions people actually bring to this data, so the
+   explorer can draw them instead of forcing every question through dots:
+
+   - rankedBars: "who is top on X" - a scatter wastes a whole axis on it.
+   - distribution: "is 0.45 xGI/90 any good?" - a scatter can't say,
+     because it never shows you the league's spread.
+   - multiLine: "what has this looked like week to week" - the one thing
+     a season-to-date dot genuinely cannot show.
+   ========================================================= */
+
+/** Top-N horizontal bars, anchored at zero rather than centred like
+ *  divergingBars - these are magnitudes, not deltas either side of a
+ *  baseline, so a centre line would waste half the width. */
+export function rankedBars(items, opts = {}) {
+  const { fmt = (v) => v.toFixed(2), empty = "Nothing to rank yet." } = opts;
+  if (!items.length) return `<p class="hint">${esc(empty)}</p>`;
+
+  const max = Math.max(...items.map((i) => Math.abs(i.value))) || 1;
+  return `<div class="rbars">${items
+    .map(
+      (i) => `<div class="rbar">
+        <div class="rbar-l" title="${esc(i.label)}">${esc(i.label)}</div>
+        <div class="rbar-track">
+          <span class="rbar-fill" style="width:${(Math.abs(i.value) / max) * 100}%;background:${i.color || "var(--gold)"}"></span>
+        </div>
+        <div class="rbar-v mono">${esc(fmt(i.value))}</div>
+      </div>`
+    )
+    .join("")}</div>`;
+}
+
+/** The league's spread on one metric, with chosen players pinned onto it.
+ *  Bars are how many players fall in each bucket; the pins say where the
+ *  people you care about sit in that shape. */
+export function distribution(values, opts = {}) {
+  const {
+    marks = [],            // [{ value, label, color }]
+    buckets = 24,
+    xLabel = "",
+    fmt = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
+    empty = "Not enough players match these filters to show a spread.",
+  } = opts;
+  if (values.length < 2) return `<p class="hint">${esc(empty)}</p>`;
+
+  const W = 560, H = 220;
+  const PAD = { t: 14, r: 14, b: 42, l: 34 };
+  const lo = Math.min(...values);
+  const hi = Math.max(...values);
+  const span = hi - lo || 1;
+  const step = span / buckets;
+
+  const counts = new Array(buckets).fill(0);
+  for (const v of values) {
+    // The maximum value would land in bucket[buckets], one past the end.
+    const idx = Math.min(buckets - 1, Math.floor((v - lo) / step));
+    counts[idx] += 1;
+  }
+  const peak = Math.max(...counts) || 1;
+
+  const px = (v) => PAD.l + ((v - lo) / span) * (W - PAD.l - PAD.r);
+  const barW = (W - PAD.l - PAD.r) / buckets;
+
+  const bars = counts
+    .map((c, i) => {
+      const h = (c / peak) * (H - PAD.t - PAD.b);
+      const x = PAD.l + i * barW;
+      // 1px of breathing room so adjacent buckets read as separate bars.
+      return `<rect x="${x.toFixed(1)}" y="${(H - PAD.b - h).toFixed(1)}" width="${Math.max(1, barW - 1).toFixed(1)}"
+        height="${h.toFixed(1)}" fill="var(--line)" rx="1"><title>${c} player${c === 1 ? "" : "s"}</title></rect>`;
+    })
+    .join("");
+
+  // Quartiles give the shape a readable spine without a y axis nobody
+  // needs - "how many players" is context here, not the answer.
+  const sorted = [...values].sort((a, b) => a - b);
+  const at = (q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
+  const median = at(0.5);
+  const guides = [
+    { v: at(0.25), l: "25th" },
+    { v: median, l: "median" },
+    { v: at(0.75), l: "75th" },
+  ]
+    .map(
+      (g) => `<line x1="${px(g.v).toFixed(1)}" y1="${PAD.t}" x2="${px(g.v).toFixed(1)}" y2="${H - PAD.b}"
+        stroke="var(--muted-2)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+        <text x="${px(g.v).toFixed(1)}" y="${PAD.t - 3}" fill="var(--muted-2)" font-size="8" text-anchor="middle">${g.l}</text>`
+    )
+    .join("");
+
+  const pins = marks
+    .map((m, i) => {
+      const x = px(Math.max(lo, Math.min(hi, m.value)));
+      // Stagger the flags so two nearby players don't print on top of
+      // each other - same drop-rather-than-overlap spirit as the scatter.
+      const y = PAD.t + 10 + (i % 4) * 13;
+      return `<g>
+        <line x1="${x.toFixed(1)}" y1="${y}" x2="${x.toFixed(1)}" y2="${H - PAD.b}" stroke="${m.color || "var(--gold)"}" stroke-width="1.5"/>
+        <circle cx="${x.toFixed(1)}" cy="${H - PAD.b}" r="3.5" fill="${m.color || "var(--gold)"}"/>
+        <text x="${x.toFixed(1)}" y="${y - 2}" fill="${m.color || "var(--gold)"}" font-size="9" text-anchor="middle">${esc(m.label)}</text>
+        <title>${esc(m.label)} - ${esc(fmt(m.value))}</title>
+      </g>`;
+    })
+    .join("");
+
+  return `<div class="chart-box-svg"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribution${xLabel ? " of " + esc(xLabel) : ""}">
+    ${bars}${guides}${pins}
+    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="var(--line)"/>
+    <text x="${PAD.l}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="9">${esc(fmt(lo))}</text>
+    <text x="${W - PAD.r}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="9" text-anchor="end">${esc(fmt(hi))}</text>
+    ${xLabel ? `<text x="${W / 2}" y="${H - 6}" fill="var(--muted)" font-size="10" text-anchor="middle">${esc(xLabel)}</text>` : ""}
+  </svg></div>`;
+}
+
+/** Several named series over the same x steps - one line per player.
+ *  Deliberately not a generalisation of lineChart: that one owns the
+ *  single-series look the Hub and squad rank trend already use, and
+ *  bending it to take N series would change those by accident. */
+export function multiLine(series, opts = {}) {
+  const {
+    xs = [],
+    fmt = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
+    yLabel = "",
+    empty = "Not enough gameweeks in this window to chart a trend.",
+  } = opts;
+  if (!series.length || xs.length < 2) return `<p class="hint">${esc(empty)}</p>`;
+
+  const W = 560, H = 230;
+  const PAD = { t: 14, r: 14, b: 34, l: 38 };
+  const all = series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
+  if (!all.length) return `<p class="hint">${esc(empty)}</p>`;
+  const yMin = Math.min(0, ...all);
+  const yMax = Math.max(...all) || 1;
+  const spanY = yMax - yMin || 1;
+
+  const px = (i) => PAD.l + (i / (xs.length - 1)) * (W - PAD.l - PAD.r);
+  const py = (v) => H - PAD.b - ((v - yMin) / spanY) * (H - PAD.t - PAD.b);
+
+  const gridY = [0, 0.5, 1]
+    .map((f) => {
+      const v = yMin + spanY * f;
+      return `<line x1="${PAD.l}" y1="${py(v).toFixed(1)}" x2="${W - PAD.r}" y2="${py(v).toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity="0.5"/>
+        <text x="${PAD.l - 4}" y="${(py(v) + 3).toFixed(1)}" fill="var(--muted-2)" font-size="8" text-anchor="end">${esc(fmt(v))}</text>`;
+    })
+    .join("");
+
+  const lines = series
+    .map((s) => {
+      const pts = s.values
+        .map((v, i) => (Number.isFinite(v) ? `${px(i).toFixed(1)},${py(v).toFixed(1)}` : null))
+        .filter(Boolean)
+        .join(" ");
+      if (!pts) return "";
+      const dots = s.values
+        .map((v, i) =>
+          Number.isFinite(v)
+            ? `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="2.6" fill="${s.color}"><title>${esc(s.label)} ${esc(String(xs[i]))}: ${esc(fmt(v))}</title></circle>`
+            : ""
+        )
+        .join("");
+      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+    })
+    .join("");
+
+  const xTicks = xs
+    .map((x, i) => `<text x="${px(i).toFixed(1)}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="8.5" text-anchor="middle">${esc(String(x))}</text>`)
+    .join("");
+
+  const legend = series
+    .map(
+      (s) => `<span class="ml-key"><i style="background:${s.color}"></i>${esc(s.label)}</span>`
+    )
+    .join("");
+
+  return `<div class="chart-box-svg">
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel || "Trend")} by gameweek">
+      ${gridY}${lines}
+      <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="var(--line)"/>
+      ${xTicks}
+    </svg>
+    <div class="ml-legend">${legend}</div>
+  </div>`;
+}

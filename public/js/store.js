@@ -35,7 +35,8 @@ export const S = {
     // alike, so setting a position in one tab means the next tab is
     // already filtered. See filters.js for what is deliberately NOT shared.
     fPos: "",
-    fTeam: "",
+    fTeams: new Set(), // club ids as strings; empty = every team
+    teamPickerOpen: false,
     // Scout
     scoutSort: { k: "total_points", dir: -1 },
     per90: false,
@@ -71,6 +72,9 @@ export const S = {
     anExpScope: "all", // explorer: whose dots get plotted (all/squad/watch/squad-vs-all)
     anExpX: "xgi",     // explorer: metric on the x axis
     anExpY: "gi",      // explorer: metric on the y axis (defaults reproduce "due a goal")
+    anExpView: "scatter", // explorer: scatter / ranked / spread / trend
+    anExpColor: "pos",    // explorer: what a dot's colour encodes
+    anExpTrend: "xgi",    // explorer: which per-gameweek metric the trend view plots
     // Teams. Declared here like every other key rather than lazily bolted
     // onto S.ui by the view on first render, which made them invisible to
     // anyone reading this object to find out what state exists.

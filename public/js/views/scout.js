@@ -5,7 +5,7 @@ import {
 import { scatter, POS_COLOR, wireScatterZoom } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import {
-  positionSelect, teamSelect, wireIdentityFilters,
+  positionSelect, teamFilter, teamAllows, wireIdentityFilters,
   filterChips, wireFilterChips, identityChips, clearIdentity,
 } from "../filters.js";
 
@@ -162,7 +162,7 @@ function viewData() {
         p.total_points >= u.fMinPoints &&
         p.defcon90 >= u.fMinDefcon90 &&
         (!u.fPos || p.pos === u.fPos) &&
-        (!u.fTeam || String(p.teamId) === String(u.fTeam)) &&
+        teamAllows(p) &&
         (!u.fWatchOnly || u.watchlist.has(p.id)) &&
         (!q || p.name.toLowerCase().includes(q) || p.fullName.toLowerCase().includes(q))
     )
@@ -204,7 +204,7 @@ export function renderScout(root) {
         <div class="fb-group" role="group" aria-label="Which players">
           <input type="search" id="sQuery" placeholder="Search a player…" value="${esc(u.fQuery)}" aria-label="Search players">
           ${positionSelect("s")}
-          ${teamSelect("s")}
+          ${teamFilter("s")}
           <button class="btn ghost fb-star" id="sWatch" aria-pressed="${u.fWatchOnly}" title="Show only players on your watchlist">
             ${u.fWatchOnly ? "★" : "☆"}<span class="fb-star-t">Watchlist</span>
           </button>

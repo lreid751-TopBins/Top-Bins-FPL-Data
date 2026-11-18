@@ -13,7 +13,7 @@
 
    1. IDENTITY filters - position and team. These describe *who you are
       looking at*, so they are genuinely the same question on every tab and
-      live in one place (S.ui.fPos / S.ui.fTeam). Set the position in
+      live in one place (S.ui.fPos / S.ui.fTeams). Set the position in
       Player Finder and Analytics is already filtered when you get there.
 
       Deliberately NOT shared: price ceilings, minimum minutes/points, and
@@ -27,7 +27,7 @@
       gameweeks, with 0 meaning season to date.
    ========================================================= */
 import { S } from "./store.js";
-import { esc, $, $$ } from "./ui.js";
+import { esc, $, $$, teamCrest } from "./ui.js";
 
 export const POSITIONS = ["GKP", "DEF", "MID", "FWD"];
 
@@ -63,18 +63,48 @@ export function positionSelect(prefix) {
   </select>`;
 }
 
-export function teamSelect(prefix) {
-  return `<select id="${prefix}Team" aria-label="Team">
-    <option value="">All teams</option>
-    ${S.teamList
-      .slice()
-      .sort((a, b) => a.name.localeCompare(b.name))
-      .map(
-        (t) =>
-          `<option value="${t.id}" ${String(t.id) === String(S.ui.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`
-      )
-      .join("")}
-  </select>`;
+/* Teams are multi-select, which rules out a <select>: picking three clubs
+   from a native multiple-select means ctrl-clicking a 20-row list, and it
+   can't show a crest. This is the same .more-sort/.more-menu popover the
+   Player Finder's "More columns" and "Filters" buttons use, so it is a
+   pattern people have already met rather than a third kind of control. */
+export function teamFilter(prefix) {
+  const picked = S.ui.fTeams;
+  return `<div class="more-sort fb-teams${S.ui.teamPickerOpen ? " open" : ""}" id="${prefix}TeamWrap">
+    <button type="button" id="${prefix}TeamBtn" aria-haspopup="true" aria-expanded="${S.ui.teamPickerOpen}">
+      ${picked.size ? `Teams <span class="badge">${picked.size}</span>` : "All teams"} &#9662;
+    </button>
+    <div class="more-menu fb-team-menu" id="${prefix}TeamMenu" role="group" aria-label="Filter by team">
+      ${
+        picked.size
+          ? `<button type="button" class="fb-team-clear" data-team-clear="1">Clear team filter</button>`
+          : ""
+      }
+      ${S.teamList
+        .slice()
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .map((t) => {
+          const on = picked.has(String(t.id));
+          return `<button type="button" role="menuitemcheckbox" aria-checked="${on}" data-team="${t.id}">
+            <span class="fb-team-n">${teamCrest(t.id, 16)}${esc(t.name)}</span>
+            <span class="cur">${on ? "&#10003;" : ""}</span>
+          </button>`;
+        })
+        .join("")}
+    </div>
+  </div>`;
+}
+
+/** True if this player's club passes the shared team filter. Empty set
+ *  means "all teams" rather than "no teams" - the filter is off until you
+ *  pick something, which is what an empty selection reads as. */
+export function teamAllows(p) {
+  return !S.ui.fTeams.size || S.ui.fTeams.has(String(p.teamId));
+}
+
+/** Short names of the picked clubs, for chips and captions. */
+export function pickedTeamNames() {
+  return [...S.ui.fTeams].map((id) => S.teams[id]?.short || id);
 }
 
 /** Wires whichever of the shared identity controls this tab rendered.
@@ -83,8 +113,32 @@ export function wireIdentityFilters(root, prefix, re) {
   const pos = $(`#${prefix}Pos`, root);
   if (pos) pos.onchange = () => { S.ui.fPos = pos.value; re(); };
 
-  const team = $(`#${prefix}Team`, root);
-  if (team) team.onchange = () => { S.ui.fTeam = team.value; re(); };
+  const teamBtn = $(`#${prefix}TeamBtn`, root);
+  if (teamBtn) teamBtn.onclick = () => { S.ui.teamPickerOpen = !S.ui.teamPickerOpen; re(); };
+
+  // Multi-select, so the menu deliberately stays open across picks - the
+  // whole point is comparing two or three clubs, and closing on the first
+  // tick would make that four round trips.
+  $$(`#${prefix}TeamMenu [data-team]`, root).forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const id = b.dataset.team;
+      S.ui.fTeams.has(id) ? S.ui.fTeams.delete(id) : S.ui.fTeams.add(id);
+      re();
+    };
+  });
+  const clearBtn = $(`#${prefix}TeamMenu [data-team-clear]`, root);
+  if (clearBtn) clearBtn.onclick = (e) => { e.stopPropagation(); S.ui.fTeams.clear(); re(); };
+
+  if (S.ui.teamPickerOpen) {
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (!e.target.closest(`#${prefix}TeamWrap`)) { S.ui.teamPickerOpen = false; re(); }
+      },
+      { once: true, capture: true }
+    );
+  }
 }
 
 /* ---------------- Active filter chips ----------------
@@ -124,8 +178,8 @@ export function identityChips() {
     { key: "pos", active: !!S.ui.fPos, label: `Position: ${S.ui.fPos}` },
     {
       key: "team",
-      active: !!S.ui.fTeam,
-      label: `Team: ${S.teams[S.ui.fTeam]?.name || S.ui.fTeam}`,
+      active: S.ui.fTeams.size > 0,
+      label: `Teams: ${pickedTeamNames().join(", ")}`,
     },
   ];
 }
@@ -134,6 +188,6 @@ export function identityChips() {
  *  callers can fall through to their own filters for anything else. */
 export function clearIdentity(key) {
   if (key === "pos" || key === "__all") S.ui.fPos = "";
-  if (key === "team" || key === "__all") S.ui.fTeam = "";
+  if (key === "team" || key === "__all") S.ui.fTeams.clear();
   return key === "pos" || key === "team";
 }

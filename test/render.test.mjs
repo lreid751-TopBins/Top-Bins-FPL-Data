@@ -2924,12 +2924,14 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   newDraft();
   PL.browsePos = "MID";
   const liverpool = S.teamList.find((t) => t.name === "Liverpool") || S.teamList[0];
-  S.ui.fTeam = String(liverpool.id);
+  S.ui.fTeams = new Set([String(liverpool.id)]);
   renderPlanner(panel("panel-planner"));
 
-  const sel = panel("panel-planner").querySelector("#plBrowseTeam");
-  if (!sel) throw new Error("no team filter dropdown rendered in the Planner browse list");
-  if (sel.value !== String(liverpool.id)) throw new Error("team dropdown doesn't reflect the shared S.ui.fTeam");
+  const picker = panel("panel-planner").querySelector("#plTeamBtn");
+  if (!picker) throw new Error("no team picker rendered in the Planner browse filters");
+  if (!/\b1\b/.test(picker.textContent)) {
+    throw new Error(`team picker should show one club selected, read "${picker.textContent.trim()}"`);
+  }
 
   const rows = [...panel("panel-planner").querySelectorAll(".browse-wrap tbody tr")];
   const expected = S.players.filter((p) => p.pos === "MID" && p.teamId === liverpool.id).length;
@@ -2940,7 +2942,7 @@ check("Planner browse list filters by team - e.g. all Liverpool midfielders", ()
   const teams = rows.map((r) => r.querySelector(".sub-t").textContent.trim());
   if (!teams.every((t) => t.startsWith(liverpool.short))) throw new Error("a player from another team leaked into the team-filtered list");
 
-  S.ui.fTeam = "";
+  S.ui.fTeams.clear();
   PL.browsePos = null;
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
@@ -3293,7 +3295,7 @@ check("active browse filters show as removable chips even with Filters collapsed
   PL.browsePos = "MID";
   PL.browseMinPoints = 40;
   const someTeam = S.teamList[0];
-  S.ui.fTeam = String(someTeam.id);
+  S.ui.fTeams = new Set([String(someTeam.id)]);
   renderPlanner(panel("panel-planner"));
 
   const details = panel("panel-planner").querySelector("#plFilters");
@@ -3305,11 +3307,11 @@ check("active browse filters show as removable chips even with Filters collapsed
 
   const teamChip = [...panel("panel-planner").querySelectorAll(".chips .chip")].find((c) => c.textContent.includes(someTeam.short));
   teamChip.querySelector("button").click();
-  if (S.ui.fTeam !== "") throw new Error("clicking a chip's ✕ should clear just that filter");
+  if (S.ui.fTeams.size !== 0) throw new Error("clicking a chip's ✕ should clear just that filter");
   if (PL.browseMinPoints !== 40) throw new Error("clearing one chip shouldn't clear other active filters");
 
   PL.browseMinPoints = 0;
-  S.ui.fTeam = "";
+  S.ui.fTeams.clear();
   PL.browsePos = null;
   PL.draft = savedDraft;
   renderPlanner(panel("panel-planner"));
@@ -4242,22 +4244,45 @@ check("a position chosen in Player Finder is already applied when you reach Anal
 });
 
 check("a team chosen in Player Finder carries into the Planner's browse list", () => {
-  const savedTeam = S.ui.fTeam;
+  const savedTeam = new Set(S.ui.fTeams);
   const teamId = String(S.teamList[0].id);
-  S.ui.fTeam = "";
+  S.ui.fTeams.clear();
+  S.ui.teamPickerOpen = true; // the menu's buttons only exist while it's open
   renderScout(panel("panel-scout"));
 
-  const sel = panel("panel-scout").querySelector("#sTeam");
-  sel.value = teamId;
-  sel.dispatchEvent(new window.Event("change", { bubbles: true }));
+  const opt = panel("panel-scout").querySelector(`#sTeamMenu [data-team="${teamId}"]`);
+  if (!opt) throw new Error("no team option rendered in the Player Finder team picker");
+  opt.click();
+  if (!S.ui.fTeams.has(teamId)) throw new Error("clicking a team didn't select it");
 
   renderPlanner(panel("panel-planner"));
-  const plSel = panel("panel-planner").querySelector("#plBrowseTeam");
-  const carried = plSel ? plSel.value : null;
+  const plBtn = panel("panel-planner").querySelector("#plTeamBtn");
+  const carried = plBtn && /\b1\b/.test(plBtn.textContent);
 
-  S.ui.fTeam = savedTeam;
-  if (carried !== teamId) throw new Error(`Planner browse showed team "${carried}", expected "${teamId}"`);
-  return `team ${teamId} set in Player Finder, same team pre-selected in the Planner`;
+  S.ui.fTeams = savedTeam;
+  S.ui.teamPickerOpen = false;
+  if (!carried) throw new Error(`Planner didn't pick up the shared team filter; button read "${plBtn?.textContent.trim()}"`);
+  return `team ${teamId} ticked in Player Finder, same filter live in the Planner`;
+});
+
+check("the team filter takes several clubs at once, not just one", () => {
+  // The whole point of making this multi-select: comparing two or three
+  // clubs is the actual question, and a single-select can't ask it.
+  const saved = new Set(S.ui.fTeams);
+  const [a, b] = S.teamList;
+  S.ui.fTeams = new Set([String(a.id), String(b.id)]);
+  renderScout(panel("panel-scout"));
+
+  const rows = [...panel("panel-scout").querySelectorAll("tbody tr")];
+  const shown = new Set(rows.map((r) => r.querySelector("td:nth-child(2)")?.textContent.trim()));
+  const expected = S.players.filter((p) => p.teamId === a.id || p.teamId === b.id).length;
+
+  S.ui.fTeams = saved;
+  if (shown.size !== 2) throw new Error(`expected players from exactly 2 clubs, saw ${[...shown].join(",")}`);
+  if (!rows.length || rows.length > expected) {
+    throw new Error(`row count ${rows.length} doesn't match the two-club pool of ${expected}`);
+  }
+  return `${rows.length} players across ${shown.size} clubs`;
 });
 
 check("price and minutes filters stay private to Player Finder, by design", () => {
@@ -4388,6 +4413,104 @@ check("every Analytics filter says what it is, and the bar reports the pool size
   S.ui.fPos = savedPos;
   if (!(mids > 0 && mids < all)) throw new Error(`count didn't track the filter: ${all} -> ${mids}`);
   return `labelled controls, no duplicate chips, count ${all} -> ${mids} on MID`;
+});
+
+/* ---------------- Explorer views ---------------- */
+check("the explorer draws the same metric four ways, not just as a scatter", () => {
+  const saved = S.ui.anExpView;
+  const seen = {};
+  for (const v of ["scatter", "ranked", "spread", "trend"]) {
+    S.ui.anExpView = v;
+    renderAnalytics(panel("panel-analytics"));
+    const box = panel("panel-analytics");
+    seen[v] = {
+      scatter: !!box.querySelector(".scatter-zoom"),
+      bars: box.querySelectorAll(".rbar").length,
+      svg: box.querySelectorAll(".chart-box-svg svg").length,
+      lines: box.querySelectorAll(".chart-box-svg polyline").length,
+    };
+  }
+  S.ui.anExpView = saved;
+
+  if (!seen.scatter.scatter) throw new Error("scatter view stopped drawing a scatter");
+  if (!seen.ranked.bars) throw new Error("ranked view drew no bars");
+  if (seen.ranked.scatter) throw new Error("ranked view is still drawing the scatter too");
+  if (!seen.spread.svg) throw new Error("spread view drew no distribution");
+  if (!seen.trend.lines) throw new Error("trend view drew no lines");
+  return `scatter, ${seen.ranked.bars} bars, a spread, and ${seen.trend.lines} trend lines`;
+});
+
+check("views that only use one metric don't show a dead second-axis picker", () => {
+  const saved = S.ui.anExpView;
+  S.ui.anExpView = "ranked";
+  renderAnalytics(panel("panel-analytics"));
+  const hasY = !!panel("panel-analytics").querySelector("#anExpY");
+
+  S.ui.anExpView = "trend";
+  renderAnalytics(panel("panel-analytics"));
+  const trendPicker = panel("panel-analytics").querySelector("#anExpTrend");
+
+  S.ui.anExpView = saved;
+  renderAnalytics(panel("panel-analytics"));
+  if (hasY) throw new Error("the Y axis picker is still rendered in a one-metric view");
+  if (!trendPicker) throw new Error("trend view has no per-gameweek metric picker");
+  // Only the stats WIN.data actually carries per gameweek belong here.
+  const opts = [...trendPicker.options].map((o) => o.value);
+  if (opts.includes("selected")) throw new Error("trend offers a season-only stat that would plot flat");
+  return `one-metric views hide the Y picker; trend offers ${opts.length} per-gameweek stats`;
+});
+
+check("colouring dots by an ordered quantity uses one stepped hue, not a rainbow", () => {
+  const savedView = S.ui.anExpView;
+  const savedColor = S.ui.anExpColor;
+  S.ui.anExpView = "scatter";
+
+  S.ui.anExpColor = "pos";
+  renderAnalytics(panel("panel-analytics"));
+  const byPos = [...panel("panel-analytics").querySelectorAll(".scatter-zoom circle")]
+    .slice(0, 8).map((c) => c.getAttribute("fill"));
+
+  S.ui.anExpColor = "price";
+  renderAnalytics(panel("panel-analytics"));
+  const byPrice = [...panel("panel-analytics").querySelectorAll(".scatter-zoom circle")]
+    .slice(0, 8).map((c) => c.getAttribute("fill"));
+
+  S.ui.anExpView = savedView;
+  S.ui.anExpColor = savedColor;
+
+  if (JSON.stringify(byPos) === JSON.stringify(byPrice)) {
+    throw new Error("changing the colour dimension didn't recolour anything");
+  }
+  // Price is a quantity, so every step has to be the same hue at a
+  // different strength - a second hue would invent categories.
+  const priceFills = byPrice.filter((f) => f && f !== "var(--muted-2)");
+  if (!priceFills.every((f) => f.includes("--gold-rgb"))) {
+    throw new Error(`price banding should be one stepped hue, got ${[...new Set(priceFills)].join(", ")}`);
+  }
+  return `position uses categorical hues, price uses ${new Set(priceFills).size} steps of one hue`;
+});
+
+check("the team filter reaches the audit table, not just the explorer", () => {
+  // Regression: the rule lived in three places, and the audit table kept
+  // its own copy - so picking two clubs narrowed the chart and the pool
+  // count while the table underneath still listed all 380 players.
+  const saved = new Set(S.ui.fTeams);
+  const [a, b] = S.teamList;
+  S.ui.fTeams = new Set([String(a.id), String(b.id)]);
+  renderAnalytics(panel("panel-analytics"));
+
+  const ids = [...panel("panel-analytics").querySelectorAll(".an-audit tbody tr [data-playerid]")]
+    .map((el) => +el.dataset.playerid);
+  // By id, never by name: the mock pool has duplicate player names.
+  const strays = ids.filter((id) => {
+    const pl = S.playerById[id];
+    return pl && pl.teamId !== a.id && pl.teamId !== b.id;
+  });
+
+  S.ui.fTeams = saved;
+  if (!ids.length) throw new Error("setup: audit table rendered no rows to check");
+  if (strays.length) throw new Error(`${strays.length} audit rows came from other clubs`);
+  return `${ids.length} audit rows, all from the two picked clubs`;
 });
 
 /* ---------------- Report ---------------- */

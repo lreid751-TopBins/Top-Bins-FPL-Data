@@ -1,12 +1,17 @@
 import { S, f1, f2, n, signed, difficultyOf, runDifficulty } from "../store.js";
 import { $, $$, esc, th, teamCrest, statCard } from "../ui.js";
-import { scatter, radar, lineChart, divergingBars, wireScatterZoom, POS_COLOR } from "../charts.js";
+import {
+  scatter, radar, lineChart, divergingBars, wireScatterZoom, POS_COLOR,
+  rankedBars, distribution, multiLine,
+} from "../charts.js";
 import { projectPlayerFixture } from "../projection.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { gwList } from "../reportCard.js";
 import { api } from "../api.js";
 import { aggregate as aggregateTeams } from "./teams.js";
-import { SEASON, windowSelect, positionSelect, wireIdentityFilters } from "../filters.js";
+import {
+  SEASON, windowSelect, positionSelect, teamFilter, teamAllows, wireIdentityFilters,
+} from "../filters.js";
 import { fmtRank, isManagerLoading, rankTrendPoints } from "./squad.js";
 import { goTo } from "./hub.js";
 
@@ -247,13 +252,87 @@ function squadIds() {
    bar would have been a second copy free to drift from the thing it
    claims to be counting. */
 function passesTriage(p) {
-  return (!S.ui.fPos || p.pos === S.ui.fPos) && p.selected < S.ui.anMaxOwn;
+  return (!S.ui.fPos || p.pos === S.ui.fPos) && teamAllows(p) && p.selected < S.ui.anMaxOwn;
 }
 
 /** The players the triage filters currently leave standing. */
 function triagePool() {
   return eligiblePlayers().filter(passesTriage);
 }
+
+/* ---------------- Explorer view modes ----------------
+   A scatter is one answer shape. These are the others, over the same
+   chosen metric(s) and the same filtered pool. */
+const EXPLORER_VIEWS = [
+  { v: "scatter", l: "Scatter" },
+  { v: "ranked", l: "Ranked" },
+  { v: "spread", l: "Spread" },
+  { v: "trend", l: "Trend" },
+];
+
+/* What a dot's colour means. Position is categorical, so it keeps its own
+   fixed hues. The other three are ordered quantities, so they get a single
+   hue stepped light-to-dark instead - a rainbow across a quantity reads as
+   categories that aren't there. Built on --gold-rgb so the ramp follows
+   whichever club theme is active rather than fighting it. */
+const COLOR_DIMS = [
+  { v: "pos", l: "Position" },
+  { v: "price", l: "Price" },
+  { v: "own", l: "Ownership" },
+  { v: "mins", l: "Minutes" },
+];
+const RAMP = [0.3, 0.46, 0.64, 0.82, 1];
+const rampColor = (i) => `rgba(var(--gold-rgb), ${RAMP[Math.max(0, Math.min(RAMP.length - 1, i))]})`;
+
+const COLOR_BANDS = {
+  price: { get: (p) => n(p.price), cuts: [5, 7, 9, 11], labels: ["under £5.0", "£5.0-6.9", "£7.0-8.9", "£9.0-10.9", "£11.0+"] },
+  own: { get: (p) => n(p.selected), cuts: [5, 15, 30, 50], labels: ["under 5%", "5-14%", "15-29%", "30-49%", "50%+"] },
+  mins: { get: (p) => n(p.xMin), cuts: [30, 60, 75, 85], labels: ["under 30'", "30-59'", "60-74'", "75-84'", "85'+"] },
+};
+
+function bandIndex(value, cuts) {
+  let i = 0;
+  while (i < cuts.length && value >= cuts[i]) i += 1;
+  return i;
+}
+
+/** The colour one player gets under the current colour dimension. */
+function dotColor(p, dim) {
+  if (dim !== "pos" && COLOR_BANDS[dim]) {
+    return rampColor(bandIndex(COLOR_BANDS[dim].get(p), COLOR_BANDS[dim].cuts));
+  }
+  return POS_COLOR[p.pos] || "var(--gold)";
+}
+
+function colorLegend(dim) {
+  const keys =
+    dim !== "pos" && COLOR_BANDS[dim]
+      ? COLOR_BANDS[dim].labels.map((l, i) => ({ c: rampColor(i), l }))
+      : POSITIONS_ORDER.map((pos) => ({ c: POS_COLOR[pos], l: pos }));
+  return keys
+    .map((k) => `<span class="an-h2h-dot" style="background:${k.c}"></span><span style="margin-right:12px">${esc(k.l)}</span>`)
+    .join("");
+}
+const POSITIONS_ORDER = ["GKP", "DEF", "MID", "FWD"];
+
+/* Per-gameweek metrics. Deliberately a short list, not the 34 in METRICS:
+   WIN.data only carries these six per gameweek, and offering a season-only
+   stat like ownership here would draw a flat line and look broken. xGI is
+   derived rather than fetched - the endpoint sends xg and xa separately. */
+const TREND_METRICS = [
+  { k: "xgi", l: "xGI", parts: ["xg", "xa"] },
+  { k: "xg", l: "xG", parts: ["xg"] },
+  { k: "xa", l: "xA", parts: ["xa"] },
+  { k: "gi", l: "Goals + assists", parts: ["goals", "assists"] },
+  { k: "goals", l: "Goals", parts: ["goals"] },
+  { k: "points", l: "Points", parts: ["points"] },
+  { k: "minutes", l: "Minutes", parts: ["minutes"] },
+];
+/* Capped at six lines. Past that a multi-line chart stops being readable
+   whatever the palette, and these are already distinct in both hue and
+   lightness so they survive being printed or read with CVD. */
+const TREND_COLORS = ["#c9a227", "#5fd3a2", "#74b8c9", "#ea8a6a", "#b48ead", "#ece4d2"];
+const TREND_MAX = 6;
 
 function explorerSection() {
   const xKey = METRIC_BY_KEY[S.ui.anExpX] ? S.ui.anExpX : "xgi";
@@ -266,10 +345,43 @@ function explorerSection() {
     <select id="anExpScope">
       ${EXPLORER_SCOPES.map((o) => `<option value="${o.v}" ${o.v === scope ? "selected" : ""}>${esc(o.l)}</option>`).join("")}
     </select></label>`;
+  const view = EXPLORER_VIEWS.some((o) => o.v === S.ui.anExpView) ? S.ui.anExpView : "scatter";
+  const colorDim = COLOR_DIMS.some((o) => o.v === S.ui.anExpColor) ? S.ui.anExpColor : "pos";
+  const trendKey = TREND_METRICS.some((m) => m.k === S.ui.anExpTrend) ? S.ui.anExpTrend : "xgi";
+
+  const viewSwitch = `<div class="seg an-exp-views" role="group" aria-label="Chart type">
+      ${EXPLORER_VIEWS.map(
+        (o) => `<button type="button" data-expview="${o.v}" ${o.v === view ? 'aria-pressed="true"' : ""}>${esc(o.l)}</button>`
+      ).join("")}
+    </div>`;
+
+  // Only the scatter needs two metrics. Ranked and Spread ask one question
+  // about one number, and Trend can only offer the per-gameweek stats, so
+  // showing a dead Y-axis picker in those views would be a control that
+  // does nothing - worse than no control.
+  const metricPickers =
+    view === "trend"
+      ? `<label class="an-picker"><span>Metric</span>
+          <select id="anExpTrend">
+            ${TREND_METRICS.map((m) => `<option value="${m.k}" ${m.k === trendKey ? "selected" : ""}>${esc(m.l)}</option>`).join("")}
+          </select></label>`
+      : view === "scatter"
+      ? `<label class="an-picker"><span>Y axis</span>${metricSelect("anExpY", yKey)}</label>
+         <label class="an-picker"><span>X axis</span>${metricSelect("anExpX", xKey)}</label>`
+      : `<label class="an-picker"><span>Metric</span>${metricSelect("anExpX", xKey)}</label>`;
+
+  const colorPicker =
+    view === "scatter" || view === "ranked"
+      ? `<label class="an-picker"><span>Colour</span>
+          <select id="anExpColor">
+            ${COLOR_DIMS.map((o) => `<option value="${o.v}" ${o.v === colorDim ? "selected" : ""}>${esc(o.l)}</option>`).join("")}
+          </select></label>`
+      : "";
+
   const controls = `<div class="an-exp-axes">
       ${scopeSelect}
-      <label class="an-picker"><span>Y axis</span>${metricSelect("anExpY", yKey)}</label>
-      <label class="an-picker"><span>X axis</span>${metricSelect("anExpX", xKey)}</label>
+      ${metricPickers}
+      ${colorPicker}
     </div>`;
 
   const caps = {
@@ -281,7 +393,7 @@ function explorerSection() {
   const header = `<h3>Explore any two stats</h3>
     <p class="cap">${esc(caps[scope])} Drag on the chart to zoom into a crowded patch.</p>`;
 
-  const shell = (inner) => `<div class="chart-box hero">${header}${controls}${inner}</div>`;
+  const shell = (inner) => `<div class="chart-box hero">${header}${viewSwitch}${controls}${inner}</div>`;
 
   const mine = squadIds();
   if ((scope === "squad" || scope === "squadVsAll") && !mine) {
@@ -338,7 +450,7 @@ function explorerSection() {
       y: yv,
       label: `${p.name} (${p.short}) — ${mx.l} ${xv.toFixed(mx.d)}, ${my.l} ${yv.toFixed(my.d)}`,
       short: p.name,
-      color: isMine ? POS_COLOR[p.pos] || "var(--gold)" : "var(--muted-2)",
+      color: isMine ? dotColor(p, colorDim) : "var(--muted-2)",
       // In squad-vs-everyone the background is context, not content: a big
       // weight offset keeps every one of your own players ahead of all 270
       // others in the labelling queue, so the names you came for are the
@@ -363,23 +475,97 @@ function explorerSection() {
     ? 10
     : Math.min(18, pool.length);
 
-  return `<div class="chart-box hero">
-    ${header}
-    <div class="seg an-exp-presets" role="group" aria-label="Preset views">${presets}</div>
-    ${controls}
-    ${scatter(points, {
+  const chartFmt = (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Math.max(mx.d, my.d) > 2 ? 2 : 1));
+  const named = (p) => (highlight ? highlight.has(p.id) : true);
+
+  let body;
+  let legend = "";
+
+  if (view === "ranked") {
+    // One metric, biggest first. The scatter's second axis is dead weight
+    // for this question, and a bar's length is a far more precise read of
+    // magnitude than a dot's position against a gridline.
+    const items = [...pool]
+      .sort((a, b) => n(b[xKey]) - n(a[xKey]))
+      .slice(0, 15)
+      .map((p) => ({
+        label: `${p.name} (${p.short})`,
+        value: n(p[xKey]),
+        color: named(p) ? dotColor(p, colorDim) : "var(--muted-2)",
+      }));
+    body = rankedBars(items, {
+      fmt: (v) => v.toFixed(mx.d),
+      empty: "Nothing to rank for this stat yet.",
+    });
+    legend = colorLegend(colorDim);
+  } else if (view === "spread") {
+    // Where a number sits in the league, which a scatter never shows. The
+    // pins are the players you asked about; the bars are everyone, so
+    // "good" stops being a guess.
+    const marked = highlight ? pool.filter((p) => highlight.has(p.id)) : pool;
+    const marks = [...marked]
+      .sort((a, b) => n(b[xKey]) - n(a[xKey]))
+      .slice(0, 8)
+      .map((p) => ({ value: n(p[xKey]), label: p.short ? `${p.name}` : p.name, color: dotColor(p, "pos") }));
+    body = distribution(pool.map((p) => n(p[xKey])), {
+      marks,
+      xLabel: mx.l,
+      fmt: (v) => v.toFixed(mx.d),
+    });
+  } else if (view === "trend") {
+    const tm = TREND_METRICS.find((m) => m.k === trendKey) || TREND_METRICS[0];
+    const gws = gwList(S.ui.anWindow);
+    if (!WIN.data) {
+      body = `<p class="hint">Loading gameweek data…</p>`;
+    } else {
+      const seriesFor = (p) =>
+        gws.map((gw) =>
+          tm.parts.reduce((sum, part) => sum + n(WIN.data[part]?.[p.id]?.[gw]), 0)
+        );
+      const ranked = [...pool]
+        .map((p) => ({ p, series: seriesFor(p) }))
+        .map((r) => ({ ...r, total: r.series.reduce((a, v) => a + v, 0) }))
+        .sort((a, b) => b.total - a.total)
+        .filter((r) => (highlight ? highlight.has(r.p.id) : true))
+        .slice(0, TREND_MAX);
+      body = multiLine(
+        ranked.map((r, i) => ({
+          label: `${r.p.name} (${r.p.short})`,
+          values: r.series,
+          color: TREND_COLORS[i % TREND_COLORS.length],
+        })),
+        {
+          xs: gws.map((g) => `GW${g}`),
+          yLabel: tm.l,
+          fmt: (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
+          empty: "Not enough gameweeks in this window to chart a trend.",
+        }
+      );
+    }
+  } else {
+    body = scatter(points, {
       xLabel: mx.l,
       yLabel: my.l,
-      fmt: (v) => (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(Math.max(mx.d, my.d) > 2 ? 2 : 1)),
+      fmt: chartFmt,
       labelTop,
       empty: "Nothing to plot for these two stats yet.",
-    })}
-    <div class="an-h2h-legend">
-      ${["GKP", "DEF", "MID", "FWD"]
-        .map((pos) => `<span class="an-h2h-dot" style="background:${POS_COLOR[pos]}"></span><span style="margin-right:12px">${pos}</span>`)
-        .join("")}
-      ${highlight ? `<span class="an-h2h-dot" style="background:var(--muted-2)"></span><span>Everyone else</span>` : ""}
-    </div>
+    });
+    legend = colorLegend(colorDim);
+  }
+
+  return `<div class="chart-box hero">
+    ${header}
+    ${viewSwitch}
+    ${view === "scatter" ? `<div class="seg an-exp-presets" role="group" aria-label="Preset views">${presets}</div>` : ""}
+    ${controls}
+    ${body}
+    ${
+      legend
+        ? `<div class="an-h2h-legend">${legend}${
+            highlight ? `<span class="an-h2h-dot" style="background:var(--muted-2)"></span><span>Everyone else</span>` : ""
+          }</div>`
+        : ""
+    }
   </div>`;
 }
 
@@ -459,8 +645,10 @@ function windowRows() {
 
   const rows = [];
   S.players.forEach((p) => {
-    if (S.ui.fPos && p.pos !== S.ui.fPos) return;
-    if (p.selected >= S.ui.anMaxOwn) return;
+    // Was a third hand-rolled copy of the triage rule, which is how the
+    // team filter ended up narrowing the explorer and the pool count while
+    // leaving this table at all 380 players.
+    if (!passesTriage(p)) return;
 
     let mins = 0, g = 0, a = 0, xg = 0, xa = 0, pts = 0;
     let minsFirst = 0, minsSecond = 0;
@@ -529,6 +717,10 @@ function triageFilterBar() {
         <span class="fb-field">
           <label for="anPos">Position</label>
           ${positionSelect("an")}
+        </span>
+        <span class="fb-field">
+          <label>Teams</label>
+          ${teamFilter("an")}
         </span>
         <span class="fb-field">
           <label for="anMaxOwn">Ownership</label>
@@ -1017,6 +1209,13 @@ function wire(root) {
       re();
     };
   });
+  $$("[data-expview]", root).forEach((b) => {
+    b.onclick = () => { S.ui.anExpView = b.dataset.expview; re(); };
+  });
+  const colorSel = $("#anExpColor", root);
+  if (colorSel) colorSel.addEventListener("change", () => { S.ui.anExpColor = colorSel.value; re(); });
+  const trendSel = $("#anExpTrend", root);
+  if (trendSel) trendSel.addEventListener("change", () => { S.ui.anExpTrend = trendSel.value; re(); });
 
   $$("[data-playerid]", root).forEach((elx) => {
     const go = (e) => { e.stopPropagation(); openPlayerDetail(+elx.dataset.playerid); };

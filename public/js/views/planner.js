@@ -13,6 +13,7 @@ import { divergingBars } from "../charts.js";
 import { openPlayerDetail } from "../playerDetail.js";
 import { projectPlayer } from "../projection.js";
 import { tickerRow } from "./fixtures.js";
+import { teamFilter, teamAllows, pickedTeamNames, wireIdentityFilters } from "../filters.js";
 import { kitTile, statBand } from "../playerKit.js";
 import { openRater } from "../teamRater.js";
 
@@ -593,7 +594,7 @@ function browseCandidates() {
       (query
         ? p.name.toLowerCase().includes(query) || p.fullName.toLowerCase().includes(query)
         : p.pos === PL.browsePos) &&
-      (!S.ui.fTeam || String(p.teamId) === String(S.ui.fTeam)) &&
+      teamAllows(p) &&
       (!PL.browseMinPrice || p.price >= PL.browseMinPrice) &&
       (PL.browseMaxPrice == null || p.price <= PL.browseMaxPrice) &&
       p.total_points >= PL.browseMinPoints &&
@@ -621,7 +622,7 @@ function addRow() {
   const topResult = searching ? sortedBrowseCandidates()[0] : null;
 
   const chips = [];
-  if (S.ui.fTeam) chips.push({ k: "team", l: `Team: ${esc(S.teams[S.ui.fTeam]?.short || "?")}` });
+  if (S.ui.fTeams.size) chips.push({ k: "team", l: `Teams: ${esc(pickedTeamNames().join(", "))}` });
   if (PL.browseMinPrice > 0 || PL.browseMaxPrice != null) chips.push({ k: "price", l: priceChipLabel() });
   if (PL.browseMinPoints > 0) chips.push({ k: "pts", l: `Min pts: ${PL.browseMinPoints}` });
   if (PL.browseMinDefcon90 > 0) chips.push({ k: "dc", l: `Min DC/90: ${f1(PL.browseMinDefcon90)}` });
@@ -657,15 +658,8 @@ function addRow() {
       </summary>
       <div class="body">
         <div class="a-field">
-          <label for="plBrowseTeam">Team</label>
-          <select id="plBrowseTeam" aria-label="Filter by team">
-            <option value="">All teams</option>
-            ${S.teamList
-              .slice()
-              .sort((a, b) => a.name.localeCompare(b.name))
-              .map((t) => `<option value="${t.id}" ${String(t.id) === String(S.ui.fTeam) ? "selected" : ""}>${esc(t.name)}</option>`)
-              .join("")}
-          </select>
+          <label>Team</label>
+          ${teamFilter("pl")}
         </div>
         <div class="a-field">
           <label for="plMinPrice">Price</label>
@@ -1106,11 +1100,9 @@ function wire(root, rerender) {
     };
   });
 
-  // Browse list filters
-  bind("#plBrowseTeam", "onchange", (e) => {
-    S.ui.fTeam = e.target.value;
-    rerender();
-  });
+  // Browse list filters. Teams are the shared multi-select popover now, so
+  // filters.js owns the handler rather than this view reading a select.
+  wireIdentityFilters(root, "pl", rerender);
   // onchange (fires on blur/Enter), not oninput - a rerender per keystroke
   // would rebuild the input out from under you mid-type, same reason the
   // search box has to work around it with focus restoration. A number
@@ -1149,7 +1141,7 @@ function wire(root, rerender) {
   $$("[data-chip-clear]", root).forEach((b) => {
     b.onclick = () => {
       const key = b.dataset.chipClear;
-      if (key === "team") S.ui.fTeam = "";
+      if (key === "team") S.ui.fTeams.clear();
       if (key === "price") { PL.browseMinPrice = 0; PL.browseMaxPrice = null; }
       if (key === "pts") PL.browseMinPoints = 0;
       if (key === "dc") PL.browseMinDefcon90 = 0;

@@ -320,6 +320,18 @@ input:focus, select:focus, button:focus-visible, a:focus-visible {
    at their defaults - once set, nothing on screen says which is which. */
 .fb-field { display: inline-flex; align-items: center; gap: 6px; }
 .fb-field > label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* Team picker: a checkbox list with crests. Capped in height because it is
+   always 20 clubs long - without this it runs off the bottom of the
+   viewport on a laptop and the last few teams are unreachable. */
+.fb-teams .fb-team-menu { min-width: 210px; max-height: 300px; overflow-y: auto; }
+.fb-team-n { display: inline-flex; align-items: center; gap: 7px; }
+.fb-team-n .team-crest { flex: none; }
+.fb-team-clear {
+  color: var(--muted) !important; border-bottom: 1px solid var(--line-soft);
+  position: sticky; top: 0; background: var(--panel); z-index: 1;
+}
+.fb-team-clear:hover { color: var(--gold) !important; }
 /* The star carries the state; the word is there for a cold read and goes
    first when space is tight. */
 .fb-star { display: inline-flex; align-items: center; gap: 5px; }
@@ -361,6 +373,30 @@ input[type="range"] { accent-color: var(--gold); padding: 0; }
 .sort-by { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
 .sort-by select { padding: 6px 8px; }
 .sort-by #sSortDir { padding: 6px 10px; font-size: 12px; }
+
+/* ---------------- Alternative chart views ----------------
+   The explorer can draw the same two metrics four ways; these are the
+   three that aren't the scatter. .chart-box-svg is a plain wrapper so an
+   SVG chart gets the same block behaviour as .scatter-zoom without
+   inheriting its drag-to-zoom affordances. */
+.chart-box-svg { width: 100%; }
+.chart-box-svg svg { width: 100%; height: auto; display: block; }
+
+.rbars { display: flex; flex-direction: column; gap: 5px; }
+.rbar { display: grid; grid-template-columns: minmax(0, 148px) 1fr 54px; gap: 10px; align-items: center; }
+.rbar-l {
+  font-size: 11.5px; color: var(--chalk);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rbar-track { background: var(--panel-2); border-radius: 4px; height: 14px; overflow: hidden; }
+.rbar-fill { display: block; height: 100%; border-radius: 4px; }
+.rbar-v { font-size: 11px; color: var(--gold); text-align: right; }
+
+/* One key per line on the trend chart, since a player name is long enough
+   that a wrapped inline legend loses track of which swatch owns which. */
+.ml-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
+.ml-key { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.ml-key i { width: 10px; height: 2.5px; border-radius: 2px; flex: none; }
 
 /* ---------------- Stat cards ---------------- */
 .cards {
@@ -1025,6 +1061,7 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   /* The Refine disclosure lays its numeric filters out in a row on desktop;
      at this width they get one per line instead of being squeezed. */
   .filterbar .a-filters .body { grid-auto-flow: row; grid-auto-columns: auto; }
+  .rbar { grid-template-columns: minmax(0, 96px) 1fr 46px; gap: 7px; }
   /* The thresholds popover anchors right-edge-to-button, which runs off the
      left of a 375px screen once the button sits mid-row. Dropping the
      button out of the positioning context lets the panel resolve against
