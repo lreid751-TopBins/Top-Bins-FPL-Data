@@ -382,13 +382,17 @@ input[type="range"] { accent-color: var(--gold); padding: 0; }
 .chart-box-svg { width: 100%; }
 .chart-box-svg svg { width: 100%; height: auto; display: block; }
 
+.cf-rbars {
+  background: var(--panel-2); border: 1px solid var(--line-soft);
+  border-radius: 6px; padding: 12px 14px;
+}
 .rbars { display: flex; flex-direction: column; gap: 5px; }
 .rbar { display: grid; grid-template-columns: minmax(0, 148px) 1fr 54px; gap: 10px; align-items: center; }
 .rbar-l {
   font-size: 11.5px; color: var(--chalk);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.rbar-track { background: var(--panel-2); border-radius: 4px; height: 14px; overflow: hidden; }
+.rbar-track { background: var(--panel); border-radius: 4px; height: 14px; overflow: hidden; }
 .rbar-fill { display: block; height: 100%; border-radius: 4px; }
 .rbar-v { font-size: 11px; color: var(--gold); text-align: right; }
 
@@ -744,13 +748,47 @@ tbody tr.picked td:first-child { box-shadow: inset 3px 0 0 var(--gold); }
   border-radius: 12px 12px 0 0; background: linear-gradient(90deg, var(--gold), var(--gold-2));
 }
 .chart-box svg { width: 100%; height: auto; display: block; overflow: visible; }
-.axis line { stroke: var(--line); stroke-width: 1; }
+/* ---------------- The plot frame ----------------
+   One visual language for every SVG chart, set here rather than five
+   times over in charts.js. The plot area is a defined canvas with its own
+   quiet surface - data sitting on a surface instead of floating on the
+   page is most of the difference between a chart that looks finished and
+   one that doesn't. */
+.cf { width: 100%; }
+.cf svg { width: 100%; height: auto; display: block; overflow: visible; }
+.cf-canvas { fill: var(--panel-2); stroke: var(--line-soft); stroke-width: 1; }
+.cf-empty {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 120px; background: var(--panel-2);
+  border: 1px solid var(--line-soft); border-radius: 8px; padding: 16px;
+}
+.cf-empty .hint { margin: 0; text-align: center; max-width: 42ch; }
+.cf-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; }
+.cf-key { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.cf-key i { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+/* Chart furniture is deliberately recessive: the data should be the only
+   thing with any weight on it. The old look drew a dashed grid in BOTH
+   directions plus a left and bottom spine, which boxed every chart in a
+   cross-hatched cage and competed with the dots for attention. Now: one
+   faint solid horizontal grid (vertical position is what a scatter is
+   read against), no spines, and tick text that recedes. */
+.axis line { stroke: var(--line-soft); stroke-width: 1; }
 .axis text { fill: var(--muted-2); font-size: 9px; font-family: "JetBrains Mono", monospace; }
-.gridline { stroke: var(--line-soft); stroke-width: 1; stroke-dasharray: 2 3; }
+.axis .axis-title { fill: var(--muted); font-size: 10px; font-family: "Archivo", sans-serif; }
+.gridline { stroke: var(--line-soft); stroke-width: 1; opacity: 0.75; }
 .paritys { stroke: var(--muted-2); stroke-width: 1; stroke-dasharray: 4 4; }
+/* The fitted line is a statement about the data, so it reads one step
+   stronger than the grid but still below the marks themselves. */
+.trendline { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 6 4; opacity: 0.8; }
+.chart-note { fill: var(--muted-2); font-size: 8.5px; font-family: "JetBrains Mono", monospace; }
+
 .pt { cursor: pointer; }
-.pt circle { transition: r 0.12s ease; }
-.pt:hover circle { r: 6.5; }
+/* A ring in the panel colour, not a hairline: where dots overlap - and in
+   a 380-player pool they always do - this is what keeps each one legible
+   as a separate mark instead of a blob. */
+.pt circle { transition: r 0.12s ease, fill-opacity 0.12s ease; stroke: var(--panel); stroke-width: 2; }
+.pt:hover circle { r: 7; fill-opacity: 1; }
 .pt-lab { fill: var(--chalk); font-size: 9.5px; font-family: "Archivo", sans-serif; pointer-events: none; }
 
 /* Styled scatter-point tooltip: a sibling of .pt within the same .pt-wrap

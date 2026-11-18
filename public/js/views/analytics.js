@@ -385,7 +385,7 @@ function explorerSection() {
     </div>`;
 
   const caps = {
-    all: "Every player past the minutes bar, plotted on whichever two numbers you want. Season to date, coloured by position.",
+    all: "Every player past the minutes bar, plotted on whichever two numbers you want. The dashed line is what each x-value typically returns, so the names are whoever is furthest from it.",
     squad: "Just your 15, so every one of them is named. Season to date, coloured by position.",
     watch: "Only the players you've starred in Player Finder.",
     squadVsAll: "The whole pool in grey with your own squad picked out on top - where your players actually sit in the distribution, not just how they rank.",
@@ -548,6 +548,11 @@ function explorerSection() {
       yLabel: my.l,
       fmt: chartFmt,
       labelTop,
+      // The explorer picks its own axes, so it can't assume a parity line
+      // means anything - a fitted line is the general version of that, and
+      // it turns the labels into "who is doing more than their x explains"
+      // rather than "who is biggest".
+      trendline: true,
       empty: "Nothing to plot for these two stats yet.",
     });
     legend = colorLegend(colorDim);

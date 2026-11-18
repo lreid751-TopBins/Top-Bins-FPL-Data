@@ -4426,8 +4426,8 @@ check("the explorer draws the same metric four ways, not just as a scatter", () 
     seen[v] = {
       scatter: !!box.querySelector(".scatter-zoom"),
       bars: box.querySelectorAll(".rbar").length,
-      svg: box.querySelectorAll(".chart-box-svg svg").length,
-      lines: box.querySelectorAll(".chart-box-svg polyline").length,
+      svg: box.querySelectorAll(".cf svg").length,
+      lines: box.querySelectorAll(".cf polyline").length,
     };
   }
   S.ui.anExpView = saved;

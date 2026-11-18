@@ -1,8 +1,5 @@
 import { esc } from "./ui.js";
 
-const W = 680;
-const H = 380;
-const PAD = { t: 16, r: 18, b: 42, l: 52 };
 
 function niceTicks(min, max, count = 5) {
   if (!Number.isFinite(min) || !Number.isFinite(max) || min === max) {
@@ -22,24 +19,157 @@ function niceTicks(min, max, count = 5) {
  * points: [{ x, y, label, color, id }]
  * opts:   { xLabel, yLabel, parity, quadrant, fmt, labelTop, empty }
  */
+/* =========================================================
+   The plot frame
+
+   Every SVG chart here used to build its own picture: four different
+   canvas heights, four padding objects, three separate tick call sites
+   and seven hand-written empty states. That is why they read as charts
+   from different eras rather than one family - restyling any single one
+   could never fix it.
+
+   This owns everything that is not the marks themselves: canvas size,
+   scales, ticks, grid, axis titles, the legend, the empty state. A chart
+   type is now a function that places marks inside a frame it is handed,
+   so "what do our charts look like" is one decision made in one place.
+   ========================================================= */
+const FRAME = { W: 560, H: 300, PAD: { t: 18, r: 16, b: 44, l: 48 } };
+
+/** One empty state for every chart, so a chart with no data still looks
+ *  like it belongs rather than collapsing to bare text. */
+function emptyFrame(message) {
+  return `<div class="cf cf-empty"><p class="hint">${esc(message)}</p></div>`;
+}
+
+/**
+ * Builds a chart. `marks(ctx)` receives the scales and geometry and
+ * returns the SVG for the data itself; everything around it is this
+ * function's business.
+ *
+ *   x / y   { min, max, label, fmt, ticks?, pad? }
+ *   grid    "y" (default), "xy", or "none"
+ *   under   SVG drawn beneath the marks (tints, reference lines);
+ *           a string, or a function of the same ctx marks receives
+ *   over    SVG drawn above them (annotations)
+ *   legend  [{ color, label }]
+ */
+export function plotFrame({
+  x,
+  y,
+  marks,
+  grid = "y",
+  under = "",
+  over = "",
+  legend = [],
+  ariaLabel = "",
+  wrapClass = "",
+  wrapAttrs = "",
+  footer = "",
+  height = FRAME.H,
+  width = FRAME.W,
+} = {}) {
+  const W = width;
+  const H = height;
+  const PAD = FRAME.PAD;
+
+  const span = (ax) => {
+    const pad = ax.pad ?? 0.08;
+    const raw = ax.max - ax.min;
+    const grow = raw * pad || 0.5;
+    return { min: ax.min - grow, max: ax.max + grow };
+  };
+  const sx = x.pad === 0 ? { min: x.min, max: x.max } : span(x);
+  const sy = y.pad === 0 ? { min: y.min, max: y.max } : span(y);
+
+  const px = (v) => PAD.l + ((v - sx.min) / (sx.max - sx.min || 1)) * (W - PAD.l - PAD.r);
+  const py = (v) => H - PAD.b - ((v - sy.min) / (sy.max - sy.min || 1)) * (H - PAD.t - PAD.b);
+
+  const xTicks = x.ticks ?? niceTicks(sx.min, sx.max);
+  const yTicks = y.ticks ?? niceTicks(sy.min, sy.max);
+  const xFmt = x.fmt ?? ((v) => String(v));
+  const yFmt = y.fmt ?? ((v) => String(v));
+
+  // The plot area gets its own quiet surface, so the data sits on a
+  // defined canvas instead of floating on the page - the single biggest
+  // reason the old charts read as unfinished next to a modern one.
+  const canvas = `<rect class="cf-canvas" x="${PAD.l}" y="${PAD.t}"
+    width="${W - PAD.l - PAD.r}" height="${H - PAD.t - PAD.b}" rx="6"/>`;
+
+  const gridSvg =
+    grid === "none"
+      ? ""
+      : [
+          ...yTicks.map((v) => `<line class="gridline" x1="${PAD.l}" y1="${py(v).toFixed(1)}" x2="${W - PAD.r}" y2="${py(v).toFixed(1)}"/>`),
+          ...(grid === "xy"
+            ? xTicks.map((v) => `<line class="gridline" x1="${px(v).toFixed(1)}" y1="${PAD.t}" x2="${px(v).toFixed(1)}" y2="${H - PAD.b}"/>`)
+            : []),
+        ].join("");
+
+  // No spines. The canvas edge already states where the plot area is.
+  const axisSvg = `<g class="axis">
+    ${xTicks.map((v) => `<text x="${px(v).toFixed(1)}" y="${H - PAD.b + 15}" text-anchor="middle">${esc(xFmt(v))}</text>`).join("")}
+    ${yTicks.map((v) => `<text x="${PAD.l - 8}" y="${(py(v) + 3).toFixed(1)}" text-anchor="end">${esc(yFmt(v))}</text>`).join("")}
+    ${x.label ? `<text class="axis-title" x="${(W + PAD.l) / 2}" y="${H - 8}" text-anchor="middle">${esc(x.label)}</text>` : ""}
+    ${y.label ? `<text class="axis-title" transform="translate(14,${(H - PAD.b + PAD.t) / 2}) rotate(-90)" text-anchor="middle">${esc(y.label)}</text>` : ""}
+  </g>`;
+
+  const ctx = { px, py, W, H, PAD, xTicks, yTicks, xMin: sx.min, xMax: sx.max, yMin: sy.min, yMax: sy.max };
+
+  const legendSvg = legend.length
+    ? `<div class="cf-legend">${legend
+        .map((k) => `<span class="cf-key"><i style="background:${k.color}"></i>${esc(k.label)}</span>`)
+        .join("")}</div>`
+    : "";
+
+  return `<div class="cf ${wrapClass}" ${wrapAttrs}>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(ariaLabel)}">
+      ${canvas}${gridSvg}${typeof under === "function" ? under(ctx) : under}${axisSvg}${marks ? marks(ctx) : ""}${typeof over === "function" ? over(ctx) : over}
+    </svg>
+    ${legendSvg}${footer}
+  </div>`;
+}
+
+/** Middle value of a list - the typical case, unmoved by one freak
+ *  outlier the way a mean or a range midpoint both are. */
+function medianOf(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/** Ordinary least squares through the points, or null when x doesn't vary
+ *  (every player on the same value - a vertical line isn't a fit). */
+function fitLine(points) {
+  const n = points.length;
+  if (n < 3) return null;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const p of points) { sx += p.x; sy += p.y; sxx += p.x * p.x; sxy += p.x * p.y; }
+  const denom = n * sxx - sx * sx;
+  if (!denom) return null;
+  const slope = (n * sxy - sx * sy) / denom;
+  return { slope, intercept: (sy - slope * sx) / n };
+}
+
 export function scatter(points, opts = {}) {
   const {
     xLabel = "",
     yLabel = "",
     parity = false,
     quadrant = false,
+    // Draws the line of best fit and, more usefully, re-ranks the labels
+    // by distance FROM it - the names become whoever is doing something
+    // their own x-value doesn't explain, which is the question behind
+    // "who's due a goal".
+    trendline = false,
     fmt = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
     labelTop = 8,
-    // Callers without a minutes filter of their own (the Analytics tab's
-    // calibration chart, which sets its own eligibility bar internally)
-    // need their own message here - the default assumes a filter exists
-    // to lower, which isn't true everywhere this gets called.
+    // Callers without a minutes filter of their own need their own
+    // message - the default assumes a filter exists to lower.
     empty = "Not enough minutes played yet to plot anything. Lower the minutes filter.",
   } = opts;
 
-  if (!points.length) {
-    return `<p class="hint">${esc(empty)}</p>`;
-  }
+  if (!points.length) return emptyFrame(empty);
 
   const xs = points.map((p) => p.x);
   const ys = points.map((p) => p.y);
@@ -55,159 +185,161 @@ export function scatter(points, opts = {}) {
     xMin = yMin = lo;
     xMax = yMax = hi;
   }
-
+  // Padded here rather than by the frame, because parity has to square the
+  // two domains first - so the frame is handed final bounds (pad: 0).
   const padX = (xMax - xMin) * 0.08 || 0.5;
   const padY = (yMax - yMin) * 0.08 || 0.5;
   xMin -= padX; xMax += padX; yMin -= padY; yMax += padY;
 
-  const px = (v) => PAD.l + ((v - xMin) / (xMax - xMin)) * (W - PAD.l - PAD.r);
-  const py = (v) => H - PAD.b - ((v - yMin) / (yMax - yMin)) * (H - PAD.t - PAD.b);
+  const fit = trendline ? fitLine(points) : null;
+  const residual = (p) => (fit ? p.y - (fit.slope * p.x + fit.intercept) : 0);
 
-  const xt = niceTicks(xMin, xMax);
-  const yt = niceTicks(yMin, yMax);
+  // The split is the MEDIAN of the plotted data, not the midpoint of the
+  // axis range. The range midpoint is set by the two most extreme players
+  // on the chart, so one freak outlier used to drag the dividing line
+  // across the plot and quietly redefine which corner "the buy zone" was.
+  const midX = medianOf(xs);
+  const midY = medianOf(ys);
 
-  const grid = [
-    ...yt.map((v) => `<line class="gridline" x1="${PAD.l}" y1="${py(v)}" x2="${W - PAD.r}" y2="${py(v)}"/>`),
-    ...xt.map((v) => `<line class="gridline" x1="${px(v)}" y1="${PAD.t}" x2="${px(v)}" y2="${H - PAD.b}"/>`),
-  ].join("");
+  const W = 680;
+  const H = 380;
 
-  const axes = `
-    <g class="axis">
-      <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}"/>
-      <line x1="${PAD.l}" y1="${PAD.t}" x2="${PAD.l}" y2="${H - PAD.b}"/>
-      ${xt.map((v) => `<text x="${px(v)}" y="${H - PAD.b + 15}" text-anchor="middle">${fmt(v)}</text>`).join("")}
-      ${yt.map((v) => `<text x="${PAD.l - 8}" y="${py(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join("")}
-      <text x="${(W + PAD.l) / 2}" y="${H - 6}" text-anchor="middle" style="font-size:10px">${esc(xLabel)}</text>
-      <text transform="translate(13,${(H - PAD.b + PAD.t) / 2}) rotate(-90)" text-anchor="middle" style="font-size:10px">${esc(yLabel)}</text>
-    </g>`;
-
-  const parityLine = parity
-    ? `<line class="paritys" x1="${px(xMin)}" y1="${py(xMin)}" x2="${px(xMax)}" y2="${py(xMax)}"/>
-       <text x="${W - PAD.r - 4}" y="${py(xMax) + 14}" text-anchor="end" style="fill:var(--muted-2);font-size:9px;font-family:'JetBrains Mono',monospace">as expected</text>`
-    : "";
-
-  // Same quiet-tint idea as quadTint below, for the parity case: x and y
-  // share one domain under parity:true, so px(xMin)/py(xMin) and
-  // px(xMax)/py(xMax) always land exactly on the plot rectangle's
-  // bottom-left and top-right corners - the parity line always runs
-  // corner-to-corner, whatever the chart's aspect ratio, so the two
-  // triangles it splits the rectangle into are just the rectangle's own
-  // corners, no need to re-derive them from px()/py().
-  const parityTint = parity
-    ? `<polygon points="${PAD.l},${PAD.t} ${W - PAD.r},${PAD.t} ${PAD.l},${H - PAD.b}" fill="var(--pos)" fill-opacity="0.05"/>
-       <polygon points="${W - PAD.r},${PAD.t} ${W - PAD.r},${H - PAD.b} ${PAD.l},${H - PAD.b}" fill="var(--neg)" fill-opacity="0.05"/>`
-    : "";
-
-  const midX = (xMin + xMax) / 2;
-  const midY = (yMin + yMax) / 2;
-  const quad = quadrant
-    ? `<line class="paritys" x1="${px(midX)}" y1="${PAD.t}" x2="${px(midX)}" y2="${H - PAD.b}"/>
-       <line class="paritys" x1="${PAD.l}" y1="${py(midY)}" x2="${W - PAD.r}" y2="${py(midY)}"/>`
-    : "";
-
-  // A quiet background tint for the two unambiguous corners - every current
-  // caller of quadrant:true orients its axes so top-right is "good on both"
-  // and bottom-left is "bad on both" (the other two corners are a mixed bag,
-  // so they stay untinted). Drawn first so grid/axes/dots sit on top of it.
-  const quadTint = quadrant
-    ? `<rect x="${px(midX)}" y="${PAD.t}" width="${W - PAD.r - px(midX)}" height="${py(midY) - PAD.t}" fill="var(--pos)" fill-opacity="0.07"/>
-       <rect x="${PAD.l}" y="${py(midY)}" width="${px(midX) - PAD.l}" height="${H - PAD.b - py(midY)}" fill="var(--neg)" fill-opacity="0.07"/>`
-    : "";
-
-  // Label only the most interesting points so the chart stays readable.
-  const ranked = [...points].sort((a, b) => (b.weight ?? 0) - (a.weight ?? 0)).slice(0, labelTop);
-  const labelled = new Set(ranked.map((p) => p.id));
+  return plotFrame({
+    width: W,
+    height: H,
+    x: { min: xMin, max: xMax, label: xLabel, fmt, pad: 0 },
+    y: { min: yMin, max: yMax, label: yLabel, fmt, pad: 0 },
+    ariaLabel: `${yLabel} against ${xLabel}`,
+    wrapClass: "scatter-zoom",
+    wrapAttrs: `data-home-vb="0 0 ${W} ${H}"`,
+    footer: `<button type="button" class="scatter-zoom-reset" hidden>Reset zoom</button>
+      <p class="scatter-zoom-hint">Drag on the chart to zoom into a crowded area · double-tap to reset</p>`,
+    under: ({ px, py, PAD }) => {
+      // Quiet corner tints for the two unambiguous quadrants. Every caller
+      // of quadrant:true orients its axes so top-right is "good on both".
+      const quadTint = quadrant
+        ? `<rect x="${px(midX)}" y="${PAD.t}" width="${W - PAD.r - px(midX)}" height="${py(midY) - PAD.t}" fill="var(--pos)" fill-opacity="0.07"/>
+           <rect x="${PAD.l}" y="${py(midY)}" width="${px(midX) - PAD.l}" height="${H - PAD.b - py(midY)}" fill="var(--neg)" fill-opacity="0.07"/>`
+        : "";
+      // Under parity the two domains are identical, so the line always runs
+      // corner to corner and the triangles are just the canvas corners.
+      const parityTint = parity
+        ? `<polygon points="${PAD.l},${PAD.t} ${W - PAD.r},${PAD.t} ${PAD.l},${H - PAD.b}" fill="var(--pos)" fill-opacity="0.05"/>
+           <polygon points="${W - PAD.r},${PAD.t} ${W - PAD.r},${H - PAD.b} ${PAD.l},${H - PAD.b}" fill="var(--neg)" fill-opacity="0.05"/>`
+        : "";
+      const quad = quadrant
+        ? `<line class="paritys" x1="${px(midX)}" y1="${PAD.t}" x2="${px(midX)}" y2="${H - PAD.b}"/>
+           <line class="paritys" x1="${PAD.l}" y1="${py(midY)}" x2="${W - PAD.r}" y2="${py(midY)}"/>
+           <text class="chart-note" x="${px(midX) + 4}" y="${PAD.t + 10}">median ${esc(fmt(midX))}</text>
+           <text class="chart-note" x="${W - PAD.r}" y="${py(midY) - 4}" text-anchor="end">median ${esc(fmt(midY))}</text>`
+        : "";
+      const parityLine = parity
+        ? `<line class="paritys" x1="${px(xMin)}" y1="${py(xMin)}" x2="${px(xMax)}" y2="${py(xMax)}"/>
+           <text class="chart-note" x="${W - PAD.r - 4}" y="${py(xMax) + 14}" text-anchor="end">as expected</text>`
+        : "";
+      const fitSvg = fit
+        ? (() => {
+            const cy = (v) => Math.max(PAD.t, Math.min(H - PAD.b, py(v)));
+            const y2 = fit.slope * xMax + fit.intercept;
+            return `<line class="trendline" x1="${px(xMin)}" y1="${cy(fit.slope * xMin + fit.intercept)}" x2="${px(xMax)}" y2="${cy(y2)}"/>
+              <text class="chart-note" x="${W - PAD.r}" y="${cy(y2) - 5}" text-anchor="end">line of best fit</text>`;
+          })()
+        : "";
+      return `${quadTint}${parityTint}${quad}${parityLine}${fitSvg}`;
+    },
+    marks: ({ px, py, PAD }) => {
+      // Label only the most interesting points. With a fit, "interesting"
+      // means furthest from what the line predicts rather than furthest
+      // from the middle.
+      const ranked = [...points]
+        .sort((a, b) =>
+          fit
+            ? Math.abs(residual(b)) + (b.weight ?? 0) / 1e6 - (Math.abs(residual(a)) + (a.weight ?? 0) / 1e6)
+            : (b.weight ?? 0) - (a.weight ?? 0)
+        )
+        .slice(0, labelTop);
+      const labelled = new Set(ranked.map((p) => p.id));
 
   // Real player data clusters - several of the highest-weight points often
-  // sit within a few pixels of each other, and a fixed cx+8 offset for
-  // every label just stacks their text on top of itself. Placed greedily
-  // in weight order (most important label claims its spot first) against
-  // a short list of candidate offsets around the point, picking the first
-  // one that doesn't overlap a label already placed; characters-times-a-
-  // constant stands in for real text measurement, same approximation the
-  // tooltip box below already uses.
-  const placedLabels = [];
-  const labelPos = new Map();
-  ranked.forEach((p) => {
-    const cx = px(p.x);
-    const cy = py(p.y);
-    const text = p.short || p.label;
-    const lw = text.length * 6.1 + 6;
-    const lh = 13;
-    const candidates = [
-      { x: cx + 8, y: cy + 3.5 }, // right (the old fixed spot, tried first)
-      { x: cx + 8, y: cy - 9 }, // right, raised
-      { x: cx + 8, y: cy + 16 }, // right, lowered
-      { x: cx - lw - 8, y: cy + 3.5 }, // left
-      { x: cx - lw - 8, y: cy - 9 }, // left, raised
-      { x: cx - lw - 8, y: cy + 16 }, // left, lowered
-      { x: cx - lw / 2, y: cy - 13 }, // above, centred
-      { x: cx - lw / 2, y: cy + 19 }, // below, centred
-      { x: cx + 8, y: cy - 22 }, // right, further out
-      { x: cx + 8, y: cy + 29 },
-      { x: cx - lw - 8, y: cy - 22 }, // left, further out
-      { x: cx - lw - 8, y: cy + 29 },
-    ];
-    const clamp = (c) => ({ x: Math.max(2, Math.min(W - lw - 2, c.x)), y: Math.max(PAD.t + lh, Math.min(H - PAD.b, c.y)) });
-    const boxOf = (c) => ({ x0: c.x, y0: c.y - lh + 3, x1: c.x + lw, y1: c.y + 3 });
-    const fits = (c) => {
-      const box = boxOf(clamp(c));
-      return !placedLabels.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
-    };
-    // No fallback to an overlapping position: in a tight cluster several
-    // labels used to exhaust every candidate and pile onto candidates[0],
-    // which is how three of ten ended up overlapping in the explorer. A
-    // dot with no label still has its hover tooltip and reads cleanly; two
-    // names printed over each other read as neither. Clamp before testing
-    // too, or a label pushed back inside the bounds can land on one that
-    // was already checked in its unclamped position.
-    const chosen = candidates.find(fits);
-    if (!chosen) return;
-    const placed = clamp(chosen);
-    placedLabels.push(boxOf(placed));
-    labelPos.set(p.id, placed);
+      // sit within a few pixels of each other, and a fixed cx+8 offset for
+      // every label just stacks their text on top of itself. Placed greedily
+      // in weight order (most important label claims its spot first) against
+      // a short list of candidate offsets around the point, picking the first
+      // one that doesn't overlap a label already placed; characters-times-a-
+      // constant stands in for real text measurement, same approximation the
+      // tooltip box below already uses.
+      const placedLabels = [];
+      const labelPos = new Map();
+      ranked.forEach((p) => {
+        const cx = px(p.x);
+        const cy = py(p.y);
+        const text = p.short || p.label;
+        const lw = text.length * 6.1 + 6;
+        const lh = 13;
+        const candidates = [
+          { x: cx + 8, y: cy + 3.5 }, // right (the old fixed spot, tried first)
+          { x: cx + 8, y: cy - 9 }, // right, raised
+          { x: cx + 8, y: cy + 16 }, // right, lowered
+          { x: cx - lw - 8, y: cy + 3.5 }, // left
+          { x: cx - lw - 8, y: cy - 9 }, // left, raised
+          { x: cx - lw - 8, y: cy + 16 }, // left, lowered
+          { x: cx - lw / 2, y: cy - 13 }, // above, centred
+          { x: cx - lw / 2, y: cy + 19 }, // below, centred
+          { x: cx + 8, y: cy - 22 }, // right, further out
+          { x: cx + 8, y: cy + 29 },
+          { x: cx - lw - 8, y: cy - 22 }, // left, further out
+          { x: cx - lw - 8, y: cy + 29 },
+        ];
+        const clamp = (c) => ({ x: Math.max(2, Math.min(W - lw - 2, c.x)), y: Math.max(PAD.t + lh, Math.min(H - PAD.b, c.y)) });
+        const boxOf = (c) => ({ x0: c.x, y0: c.y - lh + 3, x1: c.x + lw, y1: c.y + 3 });
+        const fits = (c) => {
+          const box = boxOf(clamp(c));
+          return !placedLabels.some((b) => box.x0 < b.x1 && box.x1 > b.x0 && box.y0 < b.y1 && box.y1 > b.y0);
+        };
+        // No fallback to an overlapping position: in a tight cluster several
+        // labels used to exhaust every candidate and pile onto candidates[0],
+        // which is how three of ten ended up overlapping in the explorer. A
+        // dot with no label still has its hover tooltip and reads cleanly; two
+        // names printed over each other read as neither. Clamp before testing
+        // too, or a label pushed back inside the bounds can land on one that
+        // was already checked in its unclamped position.
+        const chosen = candidates.find(fits);
+        if (!chosen) return;
+        const placed = clamp(chosen);
+        placedLabels.push(boxOf(placed));
+        labelPos.set(p.id, placed);
+      });
+
+      return points
+        .map((p) => {
+          const cx = px(p.x);
+          const cy = py(p.y);
+          // labelled is the shortlist; labelPos is where one actually fit.
+          const show = labelled.has(p.id);
+          const lp = labelPos.get(p.id);
+          // A styled tooltip revealed by the general sibling combinator -
+          // no JS wiring. <title> stays for touch/assistive tech.
+          const tw = Math.min(230, 16 + p.label.length * 5.3);
+          const th = 22;
+          const tx = Math.max(4, Math.min(W - tw - 4, cx - tw / 2));
+          const above = cy - 34 >= PAD.t;
+          const ty = above ? cy - 34 : cy + 12;
+          return `<g class="pt-wrap">
+            <g class="pt">
+              <circle cx="${cx}" cy="${cy}" r="${show ? 5.5 : 4.2}" fill="${p.color || "var(--gold)"}"
+                fill-opacity="${show ? 1 : 0.7}"/>
+              <title>${esc(p.label)}</title>
+              ${show && lp ? `<text class="pt-lab" x="${lp.x}" y="${lp.y}">${esc(p.short || p.label)}</text>` : ""}
+            </g>
+            <g class="tip">
+              <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5"/>
+              <text x="${tx + tw / 2}" y="${ty + 14.5}" text-anchor="middle">${esc(p.label)}</text>
+            </g>
+          </g>`;
+        })
+        .join("");
+    },
   });
-
-  const dots = points
-    .map((p) => {
-      const cx = px(p.x);
-      const cy = py(p.y);
-      // labelled is the shortlist; labelPos is where one actually fit. A
-      // point can be on the shortlist and still go unlabelled if the
-      // placer couldn't find clean space for it.
-      const show = labelled.has(p.id);
-      const lp = labelPos.get(p.id);
-      // A real styled tooltip, not just the browser's native <title> (which
-      // is slow to appear and unstyleable) - a CSS-only reveal via the
-      // general sibling combinator, so no JS wiring is needed here. <title>
-      // stays too, as a fallback for touch/assistive tech that won't hover.
-      const tw = Math.min(230, 16 + p.label.length * 5.3);
-      const th = 22;
-      const tx = Math.max(4, Math.min(W - tw - 4, cx - tw / 2));
-      const above = cy - 34 >= PAD.t;
-      const ty = above ? cy - 34 : cy + 12;
-      return `<g class="pt-wrap">
-        <g class="pt">
-          <circle cx="${cx}" cy="${cy}" r="${show ? 5 : 3.5}" fill="${p.color || "var(--gold)"}"
-            fill-opacity="${show ? 0.95 : 0.55}" stroke="var(--pitch)" stroke-width="1"/>
-          <title>${esc(p.label)}</title>
-          ${show && lp ? `<text class="pt-lab" x="${lp.x}" y="${lp.y}">${esc(p.short || p.label)}</text>` : ""}
-        </g>
-        <g class="tip">
-          <rect x="${tx}" y="${ty}" width="${tw}" height="${th}" rx="5"/>
-          <text x="${tx + tw / 2}" y="${ty + 14.5}" text-anchor="middle">${esc(p.label)}</text>
-        </g>
-      </g>`;
-    })
-    .join("");
-
-  return `<div class="scatter-zoom" data-home-vb="0 0 ${W} ${H}">
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel)} against ${esc(xLabel)}">
-      ${quadTint}${parityTint}${grid}${quad}${parityLine}${axes}${dots}
-    </svg>
-    <button type="button" class="scatter-zoom-reset" hidden>Reset zoom</button>
-    <p class="scatter-zoom-hint">Drag on the chart to zoom into a crowded area · double-tap to reset</p>
-  </div>`;
 }
 
 /**
@@ -288,50 +420,25 @@ export function wireScatterZoom(root) {
  */
 export function lineChart(points, opts = {}) {
   const { color = "var(--gold)", fmt = (v) => v.toFixed(2) } = opts;
-  if (!points.length) return `<p class="hint">Not enough recent gameweeks to plot.</p>`;
+  if (!points.length) return emptyFrame("Not enough recent gameweeks to plot.");
 
-  const W = 560, H = 200;
-  const PAD = { t: 14, r: 14, b: 26, l: 34 };
   const ys = points.map((p) => p.y);
-  const yMin = Math.min(0, ...ys);
-  const rawMax = Math.max(...ys) || 1;
-  const yMax = rawMax + (rawMax - yMin) * 0.15 || rawMax + 0.2;
-
-  const px = (i) =>
-    PAD.l + (points.length <= 1 ? (W - PAD.l - PAD.r) / 2 : (i / (points.length - 1)) * (W - PAD.l - PAD.r));
-  const py = (v) => H - PAD.b - ((v - yMin) / (yMax - yMin || 1)) * (H - PAD.t - PAD.b);
-
-  const yt = niceTicks(yMin, yMax, 4);
-  const grid = yt.map((v) => `<line class="gridline" x1="${PAD.l}" y1="${py(v)}" x2="${W - PAD.r}" y2="${py(v)}"/>`).join("");
-
-  const linePts = points.map((p, i) => `${px(i)},${py(p.y)}`).join(" ");
-  const areaPts = `${px(0)},${py(yMin)} ${linePts} ${px(points.length - 1)},${py(yMin)}`;
-  const gid = "lc" + Math.random().toString(36).slice(2, 8);
-
-  const dots = points
-    .map((p, i) => {
-      const last = i === points.length - 1;
-      return `<g class="pt"><circle cx="${px(i)}" cy="${py(p.y)}" r="${last ? 5 : 3}" fill="${last ? color : "var(--stand)"}" stroke="${color}" stroke-width="${last ? 0 : 2}"/><title>${esc(p.x)}: ${fmt(p.y)}</title></g>`;
-    })
-    .join("");
-
-  const axis = `<g class="axis">
-    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}"/>
-    ${yt.map((v) => `<text x="${PAD.l - 6}" y="${py(v) + 3}" text-anchor="end">${fmt(v)}</text>`).join("")}
-    ${points.map((p, i) => `<text x="${px(i)}" y="${H - 8}" text-anchor="middle">${esc(p.x)}</text>`).join("")}
-  </g>`;
-
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Trend over recent gameweeks">
-    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="${color}" stop-opacity="0.32"/>
-      <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
-    </linearGradient></defs>
-    ${grid}
-    <polygon points="${areaPts}" fill="url(#${gid})"/>
-    <polyline points="${linePts}" fill="none" stroke="${color}" stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>
-    ${dots}
-    ${axis}
-  </svg>`;
+  return plotFrame({
+    x: { min: 0, max: points.length - 1, pad: 0, ticks: points.map((_, i) => i), fmt: (i) => points[i]?.x ?? "" },
+    y: { min: Math.min(0, ...ys), max: Math.max(...ys) || 1, fmt },
+    height: 230,
+    ariaLabel: "Trend by gameweek",
+    marks: ({ px, py }) => {
+      const line = points.map((p, i) => `${px(i).toFixed(1)},${py(p.y).toFixed(1)}`).join(" ");
+      const dots = points
+        .map(
+          (p, i) =>
+            `<g class="pt"><circle cx="${px(i).toFixed(1)}" cy="${py(p.y).toFixed(1)}" r="3.6" fill="${color}"/><title>${esc(String(p.x))}: ${esc(fmt(p.y))}</title></g>`
+        )
+        .join("");
+      return `<polyline points="${line}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+    },
+  });
 }
 
 /**
@@ -453,7 +560,12 @@ export function rankedBars(items, opts = {}) {
   if (!items.length) return `<p class="hint">${esc(empty)}</p>`;
 
   const max = Math.max(...items.map((i) => Math.abs(i.value))) || 1;
-  return `<div class="rbars">${items
+  // Stays HTML rather than moving into plotFrame: this chart prints the
+  // exact figure at the end of every row, which is a more precise read
+  // than measuring a bar against an axis, and CSS handles long player
+  // names with an ellipsis far more gracefully than SVG text would. It
+  // wears the frame's canvas and type so it still reads as one family.
+  return `<div class="cf cf-rbars"><div class="rbars">${items
     .map(
       (i) => `<div class="rbar">
         <div class="rbar-l" title="${esc(i.label)}">${esc(i.label)}</div>
@@ -463,7 +575,7 @@ export function rankedBars(items, opts = {}) {
         <div class="rbar-v mono">${esc(fmt(i.value))}</div>
       </div>`
     )
-    .join("")}</div>`;
+    .join("")}</div></div>`;
 }
 
 /** The league's spread on one metric, with chosen players pinned onto it.
@@ -471,81 +583,74 @@ export function rankedBars(items, opts = {}) {
  *  people you care about sit in that shape. */
 export function distribution(values, opts = {}) {
   const {
-    marks = [],            // [{ value, label, color }]
+    marks: pins = [],
     buckets = 24,
     xLabel = "",
     fmt = (v) => (Math.abs(v) >= 10 ? v.toFixed(0) : v.toFixed(2)),
     empty = "Not enough players match these filters to show a spread.",
   } = opts;
-  if (values.length < 2) return `<p class="hint">${esc(empty)}</p>`;
+  if (values.length < 2) return emptyFrame(empty);
 
-  const W = 560, H = 220;
-  const PAD = { t: 14, r: 14, b: 42, l: 34 };
   const lo = Math.min(...values);
   const hi = Math.max(...values);
-  const span = hi - lo || 1;
-  const step = span / buckets;
-
+  const sp = hi - lo || 1;
+  const step = sp / buckets;
   const counts = new Array(buckets).fill(0);
   for (const v of values) {
-    // The maximum value would land in bucket[buckets], one past the end.
-    const idx = Math.min(buckets - 1, Math.floor((v - lo) / step));
-    counts[idx] += 1;
+    // The maximum value would otherwise land one bucket past the end.
+    counts[Math.min(buckets - 1, Math.floor((v - lo) / step))] += 1;
   }
   const peak = Math.max(...counts) || 1;
 
-  const px = (v) => PAD.l + ((v - lo) / span) * (W - PAD.l - PAD.r);
-  const barW = (W - PAD.l - PAD.r) / buckets;
-
-  const bars = counts
-    .map((c, i) => {
-      const h = (c / peak) * (H - PAD.t - PAD.b);
-      const x = PAD.l + i * barW;
-      // 1px of breathing room so adjacent buckets read as separate bars.
-      return `<rect x="${x.toFixed(1)}" y="${(H - PAD.b - h).toFixed(1)}" width="${Math.max(1, barW - 1).toFixed(1)}"
-        height="${h.toFixed(1)}" fill="var(--line)" rx="1"><title>${c} player${c === 1 ? "" : "s"}</title></rect>`;
-    })
-    .join("");
-
-  // Quartiles give the shape a readable spine without a y axis nobody
-  // needs - "how many players" is context here, not the answer.
   const sorted = [...values].sort((a, b) => a - b);
   const at = (q) => sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))];
-  const median = at(0.5);
   const guides = [
     { v: at(0.25), l: "25th" },
-    { v: median, l: "median" },
+    { v: at(0.5), l: "median" },
     { v: at(0.75), l: "75th" },
-  ]
-    .map(
-      (g) => `<line x1="${px(g.v).toFixed(1)}" y1="${PAD.t}" x2="${px(g.v).toFixed(1)}" y2="${H - PAD.b}"
-        stroke="var(--muted-2)" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
-        <text x="${px(g.v).toFixed(1)}" y="${PAD.t - 3}" fill="var(--muted-2)" font-size="8" text-anchor="middle">${g.l}</text>`
-    )
-    .join("");
+  ];
 
-  const pins = marks
-    .map((m, i) => {
-      const x = px(Math.max(lo, Math.min(hi, m.value)));
-      // Stagger the flags so two nearby players don't print on top of
-      // each other - same drop-rather-than-overlap spirit as the scatter.
-      const y = PAD.t + 10 + (i % 4) * 13;
-      return `<g>
-        <line x1="${x.toFixed(1)}" y1="${y}" x2="${x.toFixed(1)}" y2="${H - PAD.b}" stroke="${m.color || "var(--gold)"}" stroke-width="1.5"/>
-        <circle cx="${x.toFixed(1)}" cy="${H - PAD.b}" r="3.5" fill="${m.color || "var(--gold)"}"/>
-        <text x="${x.toFixed(1)}" y="${y - 2}" fill="${m.color || "var(--gold)"}" font-size="9" text-anchor="middle">${esc(m.label)}</text>
-        <title>${esc(m.label)} - ${esc(fmt(m.value))}</title>
-      </g>`;
-    })
-    .join("");
-
-  return `<div class="chart-box-svg"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Distribution${xLabel ? " of " + esc(xLabel) : ""}">
-    ${bars}${guides}${pins}
-    <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="var(--line)"/>
-    <text x="${PAD.l}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="9">${esc(fmt(lo))}</text>
-    <text x="${W - PAD.r}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="9" text-anchor="end">${esc(fmt(hi))}</text>
-    ${xLabel ? `<text x="${W / 2}" y="${H - 6}" fill="var(--muted)" font-size="10" text-anchor="middle">${esc(xLabel)}</text>` : ""}
-  </svg></div>`;
+  return plotFrame({
+    // The bars ARE the y axis here - "how many players" is context, not
+    // the answer - so the count scale carries no ticks of its own.
+    x: { min: lo, max: hi, label: xLabel, fmt, pad: 0 },
+    y: { min: 0, max: peak, ticks: [], pad: 0 },
+    grid: "none",
+    ariaLabel: `Distribution${xLabel ? " of " + xLabel : ""}`,
+    marks: ({ px, py, PAD, H, W }) => {
+      const barW = (W - PAD.l - PAD.r) / buckets;
+      const bars = counts
+        .map((c, i) => {
+          const h = Math.max(0, H - PAD.b - py(c));
+          const bx = PAD.l + i * barW;
+          // 1px gap so neighbouring buckets stay separate marks.
+          return `<rect class="cf-bucket" x="${bx.toFixed(1)}" y="${py(c).toFixed(1)}"
+            width="${Math.max(1, barW - 1).toFixed(1)}" height="${h.toFixed(1)}" rx="1.5"><title>${c} player${c === 1 ? "" : "s"}</title></rect>`;
+        })
+        .join("");
+      const guideSvg = guides
+        .map(
+          (g) => `<line class="paritys" x1="${px(g.v).toFixed(1)}" y1="${PAD.t}" x2="${px(g.v).toFixed(1)}" y2="${H - PAD.b}"/>
+            <text class="chart-note" x="${px(g.v).toFixed(1)}" y="${PAD.t - 4}" text-anchor="middle">${g.l}</text>`
+        )
+        .join("");
+      const pinSvg = pins
+        .map((m, i) => {
+          const mx = px(Math.max(lo, Math.min(hi, m.value)));
+          // Staggered so two nearby players don't print over each other.
+          const ty = PAD.t + 12 + (i % 4) * 13;
+          const col = m.color || "var(--gold)";
+          return `<g class="cf-pin">
+            <line x1="${mx.toFixed(1)}" y1="${ty}" x2="${mx.toFixed(1)}" y2="${H - PAD.b}" stroke="${col}" stroke-width="1.5"/>
+            <circle cx="${mx.toFixed(1)}" cy="${H - PAD.b}" r="4" fill="${col}" stroke="var(--panel-2)" stroke-width="2"/>
+            <text x="${mx.toFixed(1)}" y="${ty - 3}" fill="${col}" font-size="9" text-anchor="middle">${esc(m.label)}</text>
+            <title>${esc(m.label)} - ${esc(fmt(m.value))}</title>
+          </g>`;
+        })
+        .join("");
+      return `${bars}${guideSvg}${pinSvg}`;
+    },
+  });
 }
 
 /** Several named series over the same x steps - one line per player.
@@ -559,61 +664,34 @@ export function multiLine(series, opts = {}) {
     yLabel = "",
     empty = "Not enough gameweeks in this window to chart a trend.",
   } = opts;
-  if (!series.length || xs.length < 2) return `<p class="hint">${esc(empty)}</p>`;
-
-  const W = 560, H = 230;
-  const PAD = { t: 14, r: 14, b: 34, l: 38 };
+  if (!series.length || xs.length < 2) return emptyFrame(empty);
   const all = series.flatMap((s) => s.values).filter((v) => Number.isFinite(v));
-  if (!all.length) return `<p class="hint">${esc(empty)}</p>`;
-  const yMin = Math.min(0, ...all);
-  const yMax = Math.max(...all) || 1;
-  const spanY = yMax - yMin || 1;
+  if (!all.length) return emptyFrame(empty);
 
-  const px = (i) => PAD.l + (i / (xs.length - 1)) * (W - PAD.l - PAD.r);
-  const py = (v) => H - PAD.b - ((v - yMin) / spanY) * (H - PAD.t - PAD.b);
-
-  const gridY = [0, 0.5, 1]
-    .map((f) => {
-      const v = yMin + spanY * f;
-      return `<line x1="${PAD.l}" y1="${py(v).toFixed(1)}" x2="${W - PAD.r}" y2="${py(v).toFixed(1)}" stroke="var(--line)" stroke-width="1" opacity="0.5"/>
-        <text x="${PAD.l - 4}" y="${(py(v) + 3).toFixed(1)}" fill="var(--muted-2)" font-size="8" text-anchor="end">${esc(fmt(v))}</text>`;
-    })
-    .join("");
-
-  const lines = series
-    .map((s) => {
-      const pts = s.values
-        .map((v, i) => (Number.isFinite(v) ? `${px(i).toFixed(1)},${py(v).toFixed(1)}` : null))
-        .filter(Boolean)
-        .join(" ");
-      if (!pts) return "";
-      const dots = s.values
-        .map((v, i) =>
-          Number.isFinite(v)
-            ? `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="2.6" fill="${s.color}"><title>${esc(s.label)} ${esc(String(xs[i]))}: ${esc(fmt(v))}</title></circle>`
-            : ""
-        )
-        .join("");
-      return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
-    })
-    .join("");
-
-  const xTicks = xs
-    .map((x, i) => `<text x="${px(i).toFixed(1)}" y="${H - PAD.b + 14}" fill="var(--muted-2)" font-size="8.5" text-anchor="middle">${esc(String(x))}</text>`)
-    .join("");
-
-  const legend = series
-    .map(
-      (s) => `<span class="ml-key"><i style="background:${s.color}"></i>${esc(s.label)}</span>`
-    )
-    .join("");
-
-  return `<div class="chart-box-svg">
-    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(yLabel || "Trend")} by gameweek">
-      ${gridY}${lines}
-      <line x1="${PAD.l}" y1="${H - PAD.b}" x2="${W - PAD.r}" y2="${H - PAD.b}" stroke="var(--line)"/>
-      ${xTicks}
-    </svg>
-    <div class="ml-legend">${legend}</div>
-  </div>`;
+  // Gameweeks are evenly spaced labels, not a numeric scale, so x is an
+  // index and its ticks are the labels themselves.
+  return plotFrame({
+    x: { min: 0, max: xs.length - 1, pad: 0, ticks: xs.map((_, i) => i), fmt: (i) => xs[i] ?? "" },
+    y: { min: Math.min(0, ...all), max: Math.max(...all) || 1, label: yLabel, fmt },
+    ariaLabel: `${yLabel || "Trend"} by gameweek`,
+    legend: series.map((sr) => ({ color: sr.color, label: sr.label })),
+    marks: ({ px, py }) =>
+      series
+        .map((sr) => {
+          const pts = sr.values
+            .map((v, i) => (Number.isFinite(v) ? `${px(i).toFixed(1)},${py(v).toFixed(1)}` : null))
+            .filter(Boolean)
+            .join(" ");
+          if (!pts) return "";
+          const dots = sr.values
+            .map((v, i) =>
+              Number.isFinite(v)
+                ? `<g class="pt"><circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}" r="3.4" fill="${sr.color}"/><title>${esc(sr.label)} ${esc(String(xs[i]))}: ${esc(fmt(v))}</title></g>`
+                : ""
+            )
+            .join("");
+          return `<polyline points="${pts}" fill="none" stroke="${sr.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+        })
+        .join(""),
+  });
 }
